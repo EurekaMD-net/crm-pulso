@@ -77,7 +77,7 @@ export function createCrmSchema(db: Database.Database): void {
       account_id TEXT NOT NULL REFERENCES crm_accounts(id),
       owner_id TEXT NOT NULL REFERENCES crm_people(id),
       name TEXT NOT NULL,
-      stage TEXT NOT NULL DEFAULT 'prospecting',
+      stage TEXT NOT NULL DEFAULT 'prospecting' CHECK(stage IN ('prospecting', 'qualification', 'proposal', 'negotiation', 'closed_won', 'closed_lost')),
       amount REAL,
       currency TEXT DEFAULT 'MXN',
       close_date TEXT,
@@ -173,7 +173,7 @@ export function createCrmSchema(db: Database.Database): void {
       title TEXT NOT NULL,
       description TEXT,
       due_date TEXT,
-      priority TEXT DEFAULT 'medium',
+      priority TEXT DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high')),
       status TEXT DEFAULT 'pending',
       created_at TEXT NOT NULL,
       completed_at TEXT

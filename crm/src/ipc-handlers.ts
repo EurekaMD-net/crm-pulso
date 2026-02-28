@@ -27,14 +27,9 @@ function validateDate(value: unknown): string | null {
   return typeof value === 'string' && ISO_DATE_RE.test(value) ? value : null;
 }
 
-function validatePositiveNumber(value: unknown): number | null {
+function validateNumber(value: unknown, min: number, max = Infinity): number | null {
   const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? n : null;
-}
-
-function validateProbability(value: unknown): number | null {
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null;
+  return Number.isFinite(n) && n >= min && n <= max ? n : null;
 }
 
 export async function processCrmIpc(
@@ -97,17 +92,18 @@ export async function processCrmIpc(
       const updates: string[] = [];
       const values: unknown[] = [];
 
-      const stage = data.stage ? validateEnum(data.stage, VALID_STAGES, '') : '';
-      if (stage) { updates.push('stage = ?'); values.push(stage); }
+      // For UPDATE fields: null means "absent or invalid — skip this column"
+      const stage = typeof data.stage === 'string' && VALID_STAGES.has(data.stage) ? data.stage : null;
+      if (stage !== null) { updates.push('stage = ?'); values.push(stage); }
 
-      const amount = validatePositiveNumber(data.amount);
-      if (data.amount !== undefined && amount !== null) { updates.push('amount = ?'); values.push(amount); }
+      const amount = validateNumber(data.amount, 0);
+      if (amount !== null) { updates.push('amount = ?'); values.push(amount); }
 
-      const probability = validateProbability(data.probability);
-      if (data.probability !== undefined && probability !== null) { updates.push('probability = ?'); values.push(probability); }
+      const probability = validateNumber(data.probability, 0, 100);
+      if (probability !== null) { updates.push('probability = ?'); values.push(probability); }
 
       const closeDate = validateDate(data.close_date);
-      if (data.close_date !== undefined && closeDate !== null) { updates.push('close_date = ?'); values.push(closeDate); }
+      if (closeDate !== null) { updates.push('close_date = ?'); values.push(closeDate); }
 
       if (data.notes) { updates.push('notes = ?'); values.push(data.notes); }
 
