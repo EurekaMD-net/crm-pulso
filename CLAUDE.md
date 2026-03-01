@@ -56,6 +56,21 @@ systemctl --user stop agentic-crm
 systemctl --user restart agentic-crm
 ```
 
+## Git Operations
+
+**Pre-flight checks (run before any git push, merge, or upstream sync):**
+- Run `git status` and `git branch` to confirm the working state and active branch
+- Run `git remote -v` to confirm the correct remote before pushing
+
+**Pushing:**
+- Always confirm the current branch matches the intended remote branch before running `git push`
+- After pushing, verify by running `git log origin/<branch> --oneline -3` and confirm the commits match
+- Explicitly echo the branch name that was pushed to in the completion summary
+
+**Upstream sync (NanoClaw engine):**
+- Always confirm active branch and clean working tree before running `git subtree pull`
+- After merging, verify the merge commit appears on the correct branch before pushing
+
 ## Architecture
 
 `engine/` is a **git subtree** of [NanoClaw](https://github.com/qwibitai/nanoclaw). DO NOT modify engine files beyond the 5 documented hook points above. All CRM logic lives in `crm/`.
