@@ -16,19 +16,22 @@ const {
   getSubtree,
   hasAccessTo,
   getPersonByGroupFolder,
+  getTeamIds,
+  getFullTeamIds,
+  getRole,
+  getManager,
+  getDirector,
   _resetStatementCache,
 } = await import('../src/hierarchy.js');
-
-const NOW = '2024-01-01T00:00:00.000Z';
 
 /**
  * Test hierarchy:
  *   vp1 (VP)
  *     └── dir1 (Director)
- *           ├── mgr1 (Manager)
+ *           ├── ger1 (Gerente)
  *           │     ├── ae1 (AE, group_folder='ae1')
  *           │     └── ae2 (AE, group_folder='ae2')
- *           └── mgr2 (Manager)
+ *           └── ger2 (Gerente)
  *                 └── ae3 (AE, group_folder='ae3')
  *   ae4 (AE, no manager, group_folder='ae4') — orphan
  *   ae_inactive (AE, inactive, group_folder='ae_gone')
@@ -40,30 +43,30 @@ function setupHierarchy() {
   _resetStatementCache();
 
   const insert = testDb.prepare(`
-    INSERT INTO crm_people (id, name, role, manager_id, group_folder, active, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO persona (id, nombre, rol, reporta_a, whatsapp_group_folder, activo)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
 
-  insert.run('vp1', 'VP Person', 'vp', null, 'vp1', 1, NOW);
-  insert.run('dir1', 'Director Person', 'director', 'vp1', 'dir1', 1, NOW);
-  insert.run('mgr1', 'Manager One', 'manager', 'dir1', 'mgr1', 1, NOW);
-  insert.run('mgr2', 'Manager Two', 'manager', 'dir1', 'mgr2', 1, NOW);
-  insert.run('ae1', 'AE One', 'ae', 'mgr1', 'ae1', 1, NOW);
-  insert.run('ae2', 'AE Two', 'ae', 'mgr1', 'ae2', 1, NOW);
-  insert.run('ae3', 'AE Three', 'ae', 'mgr2', 'ae3', 1, NOW);
-  insert.run('ae4', 'AE Orphan', 'ae', null, 'ae4', 1, NOW);
-  insert.run('ae_inactive', 'AE Gone', 'ae', 'mgr1', 'ae_gone', 0, NOW);
+  insert.run('vp1', 'Roberto Vega', 'vp', null, 'vp1', 1);
+  insert.run('dir1', 'Ana Martínez', 'director', 'vp1', 'dir1', 1);
+  insert.run('ger1', 'Miguel Ríos', 'gerente', 'dir1', 'ger1', 1);
+  insert.run('ger2', 'Laura Sánchez', 'gerente', 'dir1', 'ger2', 1);
+  insert.run('ae1', 'María López', 'ae', 'ger1', 'ae1', 1);
+  insert.run('ae2', 'Carlos Hernández', 'ae', 'ger1', 'ae2', 1);
+  insert.run('ae3', 'José García', 'ae', 'ger2', 'ae3', 1);
+  insert.run('ae4', 'AE Orphan', 'ae', null, 'ae4', 1);
+  insert.run('ae_inactive', 'AE Gone', 'ae', 'ger1', 'ae_gone', 0);
 }
 
 beforeEach(setupHierarchy);
 
 describe('isManagerOf', () => {
   it('returns true for direct report', () => {
-    expect(isManagerOf('mgr1', 'ae1')).toBe(true);
+    expect(isManagerOf('ger1', 'ae1')).toBe(true);
   });
 
   it('returns false for non-report', () => {
-    expect(isManagerOf('mgr1', 'ae3')).toBe(false);
+    expect(isManagerOf('ger1', 'ae3')).toBe(false);
   });
 });
 
@@ -73,7 +76,11 @@ describe('isDirectorOf', () => {
   });
 
   it('returns true for direct report of director', () => {
-    expect(isDirectorOf('dir1', 'mgr1')).toBe(true);
+    expect(isDirectorOf('dir1', 'ger1')).toBe(true);
+  });
+
+  it('returns false for orphan outside subtree', () => {
+    expect(isDirectorOf('dir1', 'ae4')).toBe(false);
   });
 });
 
@@ -89,9 +96,30 @@ describe('isVp', () => {
 
 describe('getDirectReports', () => {
   it('returns immediate children only', () => {
-    const reports = getDirectReports('mgr1');
+    const reports = getDirectReports('ger1');
     const ids = reports.map((r) => r.id).sort();
     expect(ids).toEqual(['ae1', 'ae2']);
+  });
+
+  it('excludes inactive members', () => {
+    // ae_inactive reports to ger1 but is inactive
+    const reports = getDirectReports('ger1');
+    const ids = reports.map((r) => r.id);
+    expect(ids).not.toContain('ae_inactive');
+  });
+});
+
+describe('getTeamIds', () => {
+  it('returns IDs of direct reports', () => {
+    const ids = getTeamIds('ger1').sort();
+    expect(ids).toEqual(['ae1', 'ae2']);
+  });
+});
+
+describe('getFullTeamIds', () => {
+  it('returns all descendant IDs recursively', () => {
+    const ids = getFullTeamIds('dir1').sort();
+    expect(ids).toEqual(['ae1', 'ae2', 'ae3', 'ger1', 'ger2']);
   });
 });
 
@@ -99,12 +127,49 @@ describe('getSubtree', () => {
   it('returns full recursive tree', () => {
     const tree = getSubtree('dir1');
     const ids = tree.map((r) => r.id).sort();
-    expect(ids).toEqual(['ae1', 'ae2', 'ae3', 'mgr1', 'mgr2']);
+    expect(ids).toEqual(['ae1', 'ae2', 'ae3', 'ger1', 'ger2']);
   });
 
   it('returns empty for leaf node', () => {
-    const tree = getSubtree('ae1');
-    expect(tree).toEqual([]);
+    expect(getSubtree('ae1')).toEqual([]);
+  });
+});
+
+describe('getRole', () => {
+  it('returns correct role', () => {
+    expect(getRole('ae1')).toBe('ae');
+    expect(getRole('ger1')).toBe('gerente');
+    expect(getRole('dir1')).toBe('director');
+    expect(getRole('vp1')).toBe('vp');
+  });
+
+  it('returns null for unknown ID', () => {
+    expect(getRole('nonexistent')).toBeNull();
+  });
+});
+
+describe('getManager', () => {
+  it('returns manager ID', () => {
+    expect(getManager('ae1')).toBe('ger1');
+    expect(getManager('ger1')).toBe('dir1');
+  });
+
+  it('returns null for root', () => {
+    expect(getManager('vp1')).toBeNull();
+  });
+});
+
+describe('getDirector', () => {
+  it('returns director for AE (2 levels up)', () => {
+    expect(getDirector('ae1')).toBe('dir1');
+  });
+
+  it('returns director for gerente (1 level up)', () => {
+    expect(getDirector('ger1')).toBe('dir1');
+  });
+
+  it('returns self for director', () => {
+    expect(getDirector('dir1')).toBe('dir1');
   });
 });
 
@@ -117,8 +182,12 @@ describe('hasAccessTo', () => {
     expect(hasAccessTo('ae1', 'ae2')).toBe(false);
   });
 
-  it('allows manager -> direct report', () => {
-    expect(hasAccessTo('mgr1', 'ae1')).toBe(true);
+  it('allows gerente -> direct report', () => {
+    expect(hasAccessTo('ger1', 'ae1')).toBe(true);
+  });
+
+  it('blocks gerente -> non-report', () => {
+    expect(hasAccessTo('ger1', 'ae3')).toBe(false);
   });
 
   it('allows director -> 2-level report', () => {
@@ -135,27 +204,21 @@ describe('hasAccessTo', () => {
 });
 
 describe('getPersonByGroupFolder', () => {
+  it('finds active person', () => {
+    const p = getPersonByGroupFolder('ae1');
+    expect(p).toBeDefined();
+    expect(p!.nombre).toBe('María López');
+  });
+
   it('returns undefined for inactive person', () => {
     expect(getPersonByGroupFolder('ae_gone')).toBeUndefined();
   });
 });
 
-describe('hasAccessTo — Person overload', () => {
-  it('accepts a Person object directly', () => {
-    const person = getPersonByGroupFolder('mgr1')!;
+describe('hasAccessTo — Persona overload', () => {
+  it('accepts a Persona object directly', () => {
+    const person = getPersonByGroupFolder('ger1')!;
     expect(person).toBeDefined();
     expect(hasAccessTo(person, 'ae1')).toBe(true);
-  });
-
-  it('blocks manager access to a non-direct-report', () => {
-    // mgr1 manages ae1 and ae2, not ae3 (managed by mgr2)
-    expect(hasAccessTo('mgr1', 'ae3')).toBe(false);
-  });
-});
-
-describe('isDirectorOf — cross-subtree', () => {
-  it('returns false for a person in a different subtree', () => {
-    // dir1 has mgr1 and mgr2 beneath. ae4 is an orphan.
-    expect(isDirectorOf('dir1', 'ae4')).toBe(false);
   });
 });

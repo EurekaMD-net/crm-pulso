@@ -1,229 +1,249 @@
 /**
- * CRM Schema Definitions
+ * CRM Schema Definitions — Domain-specific for media ad sales
  *
- * 11 CRM tables + 2 RAG tables. All created in the same SQLite database
- * used by the NanoClaw engine (via getDatabase() export).
+ * 12 tables. All created in the same SQLite database used by the NanoClaw
+ * engine (via getDatabase() export).
  *
  * Tables:
- *   - crm_people: Sales team members with hierarchy
- *   - crm_accounts: Client accounts (advertisers)
- *   - crm_contacts: People at client accounts
- *   - crm_opportunities: Active deals / renewal pipeline
- *   - crm_interactions: Logged client interactions (calls, meetings, emails)
- *   - crm_quotas: Monthly/quarterly sales quotas per AE
- *   - crm_events: Industry events, conferences, deadlines
- *   - crm_media_types: Available media products/formats
- *   - crm_proposals: Proposals sent to clients
- *   - crm_tasks_crm: CRM-specific follow-up tasks (distinct from engine scheduled_tasks)
- *   - crm_activity_log: Audit trail of all CRM mutations
- *   - crm_documents: Document metadata for RAG (Phase 7)
- *   - crm_embeddings: Vector embeddings for semantic search (Phase 7)
+ *   - persona: Sales team org chart (ae, gerente, director, vp)
+ *   - cuenta: Client accounts (advertisers / agencies)
+ *   - contacto: People at client accounts
+ *   - contrato: Annual upfront contracts
+ *   - descarga: Weekly discharge tracking (52-week plan vs actual)
+ *   - propuesta: Proposals (the central CRM object)
+ *   - actividad: Logged client interactions
+ *   - cuota: Weekly sales quotas
+ *   - inventario: Media inventory / rate card
+ *   - alerta_log: Alert deduplication log
+ *   - email_log: Sent/draft email tracking
+ *   - evento_calendario: Calendar event tracking
  */
 
 import type Database from 'better-sqlite3';
 
+export const CRM_TABLES = [
+  'persona', 'cuenta', 'contacto', 'contrato', 'descarga',
+  'propuesta', 'actividad', 'cuota', 'inventario',
+  'alerta_log', 'email_log', 'evento_calendario',
+] as const;
+
+export type CrmTableName = typeof CRM_TABLES[number];
+
 export function createCrmSchema(db: Database.Database): void {
   db.exec(`
-    -- Sales team hierarchy
-    CREATE TABLE IF NOT EXISTS crm_people (
+    -- 1. PERSONA (org chart)
+    CREATE TABLE IF NOT EXISTS persona (
       id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('ae', 'manager', 'director', 'vp')),
-      phone TEXT,
+      nombre TEXT NOT NULL,
+      rol TEXT NOT NULL CHECK(rol IN ('ae','gerente','director','vp')),
+      reporta_a TEXT REFERENCES persona(id),
+      whatsapp_group_folder TEXT,
       email TEXT,
-      manager_id TEXT REFERENCES crm_people(id),
-      group_folder TEXT,
-      group_jid TEXT,
-      team_group_jid TEXT,
-      active INTEGER DEFAULT 1,
-      created_at TEXT NOT NULL
+      google_calendar_id TEXT,
+      telefono TEXT,
+      activo INTEGER DEFAULT 1
     );
-    CREATE INDEX IF NOT EXISTS idx_crm_people_manager ON crm_people(manager_id);
-    CREATE INDEX IF NOT EXISTS idx_crm_people_role ON crm_people(role);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_people_group_folder ON crm_people(group_folder) WHERE group_folder IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_persona_rol ON persona(rol);
+    CREATE INDEX IF NOT EXISTS idx_persona_reporta ON persona(reporta_a);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_persona_group_folder
+      ON persona(whatsapp_group_folder) WHERE whatsapp_group_folder IS NOT NULL;
 
-    -- Client accounts (advertisers)
-    CREATE TABLE IF NOT EXISTS crm_accounts (
+    -- 2. CUENTA (Account)
+    CREATE TABLE IF NOT EXISTS cuenta (
       id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      industry TEXT,
-      segment TEXT,
-      region TEXT,
-      owner_id TEXT REFERENCES crm_people(id),
-      annual_revenue REAL,
-      status TEXT DEFAULT 'active' CHECK(status IN ('active', 'inactive', 'prospect', 'churned')),
-      notes TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      nombre TEXT NOT NULL,
+      tipo TEXT NOT NULL CHECK(tipo IN ('directo','agencia')),
+      vertical TEXT,
+      holding_agencia TEXT,
+      agencia_medios TEXT,
+      ae_id TEXT REFERENCES persona(id),
+      gerente_id TEXT REFERENCES persona(id),
+      director_id TEXT REFERENCES persona(id),
+      años_relacion INTEGER DEFAULT 0,
+      es_fundador INTEGER DEFAULT 0,
+      notas TEXT,
+      fecha_creacion TEXT DEFAULT (datetime('now'))
     );
-    CREATE INDEX IF NOT EXISTS idx_crm_accounts_owner ON crm_accounts(owner_id);
+    CREATE INDEX IF NOT EXISTS idx_cuenta_ae ON cuenta(ae_id);
+    CREATE INDEX IF NOT EXISTS idx_cuenta_gerente ON cuenta(gerente_id);
 
-    -- Contacts at client accounts
-    CREATE TABLE IF NOT EXISTS crm_contacts (
+    -- 3. CONTACTO
+    CREATE TABLE IF NOT EXISTS contacto (
       id TEXT PRIMARY KEY,
-      account_id TEXT NOT NULL REFERENCES crm_accounts(id),
-      name TEXT NOT NULL,
-      title TEXT,
+      nombre TEXT NOT NULL,
+      cuenta_id TEXT REFERENCES cuenta(id),
+      es_agencia INTEGER DEFAULT 0,
+      rol TEXT CHECK(rol IN ('comprador','planeador','decisor','operativo')),
+      seniority TEXT CHECK(seniority IN ('junior','senior','director')),
+      telefono TEXT,
       email TEXT,
-      phone TEXT,
-      is_decision_maker INTEGER DEFAULT 0,
-      notes TEXT,
-      created_at TEXT NOT NULL
+      notas TEXT
     );
-    CREATE INDEX IF NOT EXISTS idx_crm_contacts_account ON crm_contacts(account_id);
+    CREATE INDEX IF NOT EXISTS idx_contacto_cuenta ON contacto(cuenta_id);
 
-    -- Opportunities (deals / renewals)
-    CREATE TABLE IF NOT EXISTS crm_opportunities (
+    -- 4. CONTRATO (Annual upfront)
+    CREATE TABLE IF NOT EXISTS contrato (
       id TEXT PRIMARY KEY,
-      account_id TEXT NOT NULL REFERENCES crm_accounts(id),
-      owner_id TEXT NOT NULL REFERENCES crm_people(id),
-      name TEXT NOT NULL,
-      stage TEXT NOT NULL DEFAULT 'prospecting' CHECK(stage IN ('prospecting', 'qualification', 'proposal', 'negotiation', 'closed_won', 'closed_lost')),
-      amount REAL,
-      currency TEXT DEFAULT 'MXN',
-      close_date TEXT,
-      probability INTEGER,
-      media_type TEXT,
-      campaign_start TEXT,
-      campaign_end TEXT,
-      notes TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      cuenta_id TEXT NOT NULL REFERENCES cuenta(id),
+      año INTEGER NOT NULL,
+      monto_comprometido REAL NOT NULL,
+      fecha_cierre TEXT,
+      desglose_medios TEXT,
+      plan_descarga_52sem TEXT,
+      notas_cierre TEXT,
+      estatus TEXT DEFAULT 'negociando'
+        CHECK(estatus IN ('negociando','firmado','en_ejecucion','cerrado'))
     );
-    CREATE INDEX IF NOT EXISTS idx_crm_opps_owner ON crm_opportunities(owner_id);
-    CREATE INDEX IF NOT EXISTS idx_crm_opps_account ON crm_opportunities(account_id);
-    CREATE INDEX IF NOT EXISTS idx_crm_opps_stage ON crm_opportunities(stage);
-    CREATE INDEX IF NOT EXISTS idx_crm_opps_owner_stage ON crm_opportunities(owner_id, stage);
-    CREATE INDEX IF NOT EXISTS idx_crm_opps_account_stage ON crm_opportunities(account_id, stage);
+    CREATE INDEX IF NOT EXISTS idx_contrato_cuenta ON contrato(cuenta_id);
+    CREATE INDEX IF NOT EXISTS idx_contrato_año ON contrato(año);
 
-    -- Logged client interactions
-    CREATE TABLE IF NOT EXISTS crm_interactions (
+    -- 5. DESCARGA (Weekly discharge tracking)
+    CREATE TABLE IF NOT EXISTS descarga (
       id TEXT PRIMARY KEY,
-      account_id TEXT REFERENCES crm_accounts(id),
-      contact_id TEXT REFERENCES crm_contacts(id),
-      opportunity_id TEXT REFERENCES crm_opportunities(id),
-      person_id TEXT NOT NULL REFERENCES crm_people(id),
-      type TEXT NOT NULL CHECK(type IN ('call', 'meeting', 'email', 'whatsapp', 'event', 'other')),
-      summary TEXT NOT NULL,
-      outcome TEXT,
-      follow_up_date TEXT,
-      follow_up_action TEXT,
-      logged_at TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      contrato_id TEXT REFERENCES contrato(id),
+      cuenta_id TEXT REFERENCES cuenta(id),
+      semana INTEGER NOT NULL CHECK(semana BETWEEN 1 AND 52),
+      año INTEGER NOT NULL,
+      planificado REAL DEFAULT 0,
+      facturado REAL DEFAULT 0,
+      gap REAL GENERATED ALWAYS AS (planificado - facturado) STORED,
+      gap_acumulado REAL DEFAULT 0,
+      por_medio TEXT,
+      notas_ae TEXT,
+      UNIQUE(cuenta_id, semana, año)
     );
-    CREATE INDEX IF NOT EXISTS idx_crm_interactions_person ON crm_interactions(person_id);
-    CREATE INDEX IF NOT EXISTS idx_crm_interactions_account ON crm_interactions(account_id);
-    CREATE INDEX IF NOT EXISTS idx_crm_interactions_logged ON crm_interactions(logged_at);
-    CREATE INDEX IF NOT EXISTS idx_crm_interactions_person_logged ON crm_interactions(person_id, logged_at);
-    CREATE INDEX IF NOT EXISTS idx_crm_interactions_account_logged ON crm_interactions(account_id, logged_at);
+    CREATE INDEX IF NOT EXISTS idx_descarga_cuenta_semana ON descarga(cuenta_id, semana, año);
+    CREATE INDEX IF NOT EXISTS idx_descarga_contrato ON descarga(contrato_id);
 
-    -- Sales quotas
-    CREATE TABLE IF NOT EXISTS crm_quotas (
+    -- 6. PROPUESTA (The central CRM object)
+    CREATE TABLE IF NOT EXISTS propuesta (
       id TEXT PRIMARY KEY,
-      person_id TEXT NOT NULL REFERENCES crm_people(id),
-      period_type TEXT NOT NULL CHECK(period_type IN ('monthly', 'quarterly', 'annual')),
-      period_start TEXT NOT NULL,
-      period_end TEXT NOT NULL,
-      target_amount REAL NOT NULL,
-      currency TEXT DEFAULT 'MXN',
-      created_at TEXT NOT NULL
+      cuenta_id TEXT REFERENCES cuenta(id),
+      ae_id TEXT REFERENCES persona(id),
+      titulo TEXT NOT NULL,
+      valor_estimado REAL,
+      medios TEXT,
+      tipo_oportunidad TEXT CHECK(tipo_oportunidad IN (
+        'estacional','lanzamiento','reforzamiento','evento_especial','tentpole','prospeccion'
+      )),
+      gancho_temporal TEXT,
+      fecha_vuelo_inicio TEXT,
+      fecha_vuelo_fin TEXT,
+      enviada_a TEXT CHECK(enviada_a IN ('cliente','agencia','ambos')),
+      contactos_involucrados TEXT,
+      etapa TEXT DEFAULT 'en_preparacion' CHECK(etapa IN (
+        'en_preparacion','enviada','en_discusion','en_negociacion',
+        'confirmada_verbal','orden_recibida','en_ejecucion',
+        'completada','perdida','cancelada'
+      )),
+      fecha_creacion TEXT DEFAULT (datetime('now')),
+      fecha_envio TEXT,
+      fecha_ultima_actividad TEXT DEFAULT (datetime('now')),
+      fecha_cierre_esperado TEXT,
+      dias_sin_actividad INTEGER DEFAULT 0,
+      razon_perdida TEXT,
+      es_mega INTEGER GENERATED ALWAYS AS (
+        CASE WHEN valor_estimado > 15000000 THEN 1 ELSE 0 END
+      ) STORED,
+      notas TEXT
     );
-    CREATE INDEX IF NOT EXISTS idx_crm_quotas_person ON crm_quotas(person_id);
-    CREATE INDEX IF NOT EXISTS idx_crm_quotas_person_period ON crm_quotas(person_id, period_start);
+    CREATE INDEX IF NOT EXISTS idx_propuesta_ae ON propuesta(ae_id);
+    CREATE INDEX IF NOT EXISTS idx_propuesta_cuenta ON propuesta(cuenta_id);
+    CREATE INDEX IF NOT EXISTS idx_propuesta_etapa ON propuesta(etapa);
 
-    -- Industry events
-    CREATE TABLE IF NOT EXISTS crm_events (
+    -- 7. ACTIVIDAD
+    CREATE TABLE IF NOT EXISTS actividad (
       id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      type TEXT,
-      date_start TEXT NOT NULL,
-      date_end TEXT,
-      location TEXT,
-      description TEXT,
-      relevant_accounts TEXT,
-      created_at TEXT NOT NULL
+      ae_id TEXT REFERENCES persona(id),
+      cuenta_id TEXT REFERENCES cuenta(id),
+      propuesta_id TEXT REFERENCES propuesta(id),
+      contrato_id TEXT REFERENCES contrato(id),
+      tipo TEXT CHECK(tipo IN (
+        'llamada','whatsapp','comida','email','reunion','visita','envio_propuesta','otro'
+      )),
+      resumen TEXT NOT NULL,
+      sentimiento TEXT CHECK(sentimiento IN ('positivo','neutral','negativo','urgente')),
+      siguiente_accion TEXT,
+      fecha_siguiente_accion TEXT,
+      fecha TEXT DEFAULT (datetime('now'))
     );
+    CREATE INDEX IF NOT EXISTS idx_actividad_ae ON actividad(ae_id);
+    CREATE INDEX IF NOT EXISTS idx_actividad_propuesta ON actividad(propuesta_id);
+    CREATE INDEX IF NOT EXISTS idx_actividad_fecha ON actividad(fecha);
 
-    -- Media products/formats
-    CREATE TABLE IF NOT EXISTS crm_media_types (
+    -- 8. CUOTA (Weekly quotas)
+    CREATE TABLE IF NOT EXISTS cuota (
       id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      category TEXT,
-      description TEXT,
-      base_price REAL,
-      currency TEXT DEFAULT 'MXN',
-      active INTEGER DEFAULT 1
+      persona_id TEXT REFERENCES persona(id),
+      rol TEXT NOT NULL CHECK(rol IN ('ae','gerente','director')),
+      año INTEGER NOT NULL,
+      semana INTEGER NOT NULL CHECK(semana BETWEEN 1 AND 52),
+      meta_total REAL,
+      meta_por_medio TEXT,
+      logro REAL DEFAULT 0,
+      porcentaje REAL GENERATED ALWAYS AS (
+        CASE WHEN meta_total > 0 THEN (logro / meta_total) * 100 ELSE 0 END
+      ) STORED,
+      UNIQUE(persona_id, año, semana)
     );
+    CREATE INDEX IF NOT EXISTS idx_cuota_persona_semana ON cuota(persona_id, año, semana);
 
-    -- Proposals
-    CREATE TABLE IF NOT EXISTS crm_proposals (
+    -- 9. INVENTARIO
+    CREATE TABLE IF NOT EXISTS inventario (
       id TEXT PRIMARY KEY,
-      opportunity_id TEXT NOT NULL REFERENCES crm_opportunities(id),
-      version INTEGER DEFAULT 1,
-      status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'sent', 'accepted', 'rejected', 'expired')),
-      total_amount REAL,
-      currency TEXT DEFAULT 'MXN',
-      sent_at TEXT,
-      notes TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      medio TEXT NOT NULL CHECK(medio IN ('tv_abierta','ctv','radio','digital')),
+      propiedad TEXT NOT NULL,
+      formato TEXT,
+      unidad_venta TEXT,
+      precio_referencia REAL,
+      precio_piso REAL,
+      cpm_referencia REAL,
+      disponibilidad TEXT
     );
-    CREATE INDEX IF NOT EXISTS idx_crm_proposals_opp ON crm_proposals(opportunity_id);
 
-    -- CRM follow-up tasks
-    CREATE TABLE IF NOT EXISTS crm_tasks_crm (
+    -- 10. ALERTA_LOG (prevent duplicate alerts)
+    CREATE TABLE IF NOT EXISTS alerta_log (
       id TEXT PRIMARY KEY,
-      person_id TEXT NOT NULL REFERENCES crm_people(id),
-      account_id TEXT REFERENCES crm_accounts(id),
-      opportunity_id TEXT REFERENCES crm_opportunities(id),
-      title TEXT NOT NULL,
-      description TEXT,
-      due_date TEXT,
-      priority TEXT DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high')),
-      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'in_progress', 'completed', 'cancelled')),
-      created_at TEXT NOT NULL,
-      completed_at TEXT
+      alerta_tipo TEXT NOT NULL,
+      entidad_id TEXT NOT NULL,
+      grupo_destino TEXT NOT NULL,
+      fecha_envio TEXT DEFAULT (datetime('now')),
+      fecha_envio_date TEXT GENERATED ALWAYS AS (date(fecha_envio)) STORED
     );
-    CREATE INDEX IF NOT EXISTS idx_crm_tasks_person ON crm_tasks_crm(person_id);
-    CREATE INDEX IF NOT EXISTS idx_crm_tasks_due ON crm_tasks_crm(due_date);
-    CREATE INDEX IF NOT EXISTS idx_crm_tasks_person_status ON crm_tasks_crm(person_id, status);
-    CREATE INDEX IF NOT EXISTS idx_crm_tasks_person_status_due ON crm_tasks_crm(person_id, status, due_date);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_alerta_dedup
+      ON alerta_log(alerta_tipo, entidad_id, grupo_destino, fecha_envio_date);
 
-    -- Audit trail
-    CREATE TABLE IF NOT EXISTS crm_activity_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      person_id TEXT REFERENCES crm_people(id),
-      group_folder TEXT,
-      action TEXT NOT NULL,
-      entity_type TEXT NOT NULL,
-      entity_id TEXT,
-      details TEXT,
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_crm_activity_log_person ON crm_activity_log(person_id);
-    CREATE INDEX IF NOT EXISTS idx_crm_activity_log_created ON crm_activity_log(created_at);
-
-    -- Document metadata for RAG (Phase 7)
-    CREATE TABLE IF NOT EXISTS crm_documents (
+    -- 11. EMAIL_LOG (track sent emails)
+    CREATE TABLE IF NOT EXISTS email_log (
       id TEXT PRIMARY KEY,
-      source TEXT NOT NULL,
-      title TEXT NOT NULL,
-      doc_type TEXT,
-      content_hash TEXT,
-      chunk_count INTEGER DEFAULT 0,
-      last_synced TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      persona_id TEXT REFERENCES persona(id),
+      destinatario TEXT NOT NULL,
+      asunto TEXT NOT NULL,
+      cuerpo TEXT,
+      tipo TEXT NOT NULL CHECK(tipo IN ('seguimiento','briefing','alerta','propuesta')),
+      propuesta_id TEXT REFERENCES propuesta(id),
+      cuenta_id TEXT REFERENCES cuenta(id),
+      enviado INTEGER DEFAULT 0,
+      fecha_programado TEXT,
+      fecha_enviado TEXT,
+      error TEXT
     );
+    CREATE INDEX IF NOT EXISTS idx_email_log_persona ON email_log(persona_id);
 
-    -- Vector embeddings for semantic search (Phase 7)
-    CREATE TABLE IF NOT EXISTS crm_embeddings (
+    -- 12. EVENTO_CALENDARIO (track created calendar events)
+    CREATE TABLE IF NOT EXISTS evento_calendario (
       id TEXT PRIMARY KEY,
-      document_id TEXT NOT NULL REFERENCES crm_documents(id),
-      chunk_index INTEGER NOT NULL,
-      content TEXT NOT NULL,
-      embedding BLOB,
-      created_at TEXT NOT NULL
+      persona_id TEXT REFERENCES persona(id),
+      google_event_id TEXT,
+      titulo TEXT NOT NULL,
+      descripcion TEXT,
+      fecha_inicio TEXT NOT NULL,
+      fecha_fin TEXT,
+      tipo TEXT CHECK(tipo IN ('seguimiento','reunion','tentpole','deadline','briefing')),
+      propuesta_id TEXT REFERENCES propuesta(id),
+      cuenta_id TEXT REFERENCES cuenta(id),
+      creado_por TEXT DEFAULT 'agente' CHECK(creado_por IN ('agente','usuario','sistema'))
     );
-    CREATE INDEX IF NOT EXISTS idx_crm_embeddings_doc ON crm_embeddings(document_id);
+    CREATE INDEX IF NOT EXISTS idx_evento_persona ON evento_calendario(persona_id);
   `);
 }

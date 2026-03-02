@@ -1,25 +1,16 @@
 /**
  * CRM IPC Handlers Tests
  *
- * Tests focus on security-critical behaviour:
- *   - Access-control enforcement (AE cannot mutate another AE's data)
- *   - Server-side timestamp (agents must not backdate interaction records)
- *   - Input validation (invalid enums, numbers, and dates are silently rejected)
- *
- * Setup: getDatabase() is mocked so the tests run against an in-memory SQLite
- * database, without needing engine dependencies (pino, baileys, etc.) installed.
+ * Tests for the new domain-specific IPC types:
+ *   - crm_registrar_actividad
+ *   - crm_actualizar_propuesta (with access control)
+ *   - crm_crear_propuesta
  */
 
 import Database from 'better-sqlite3';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCrmSchema } from '../src/schema.js';
 import type { IpcDeps } from '../../engine/src/ipc.js';
-
-// ─── Lightweight database mock ────────────────────────────────────────────────
-// Vitest loads engine/src/db.ts (and all its transitive deps) when the
-// ipc-handlers module is imported. We intercept getDatabase() to return an
-// in-memory SQLite DB so that none of the real engine deps (pino, baileys…)
-// need to be installed in this workspace.
 
 let testDb: InstanceType<typeof Database>;
 
@@ -34,505 +25,269 @@ vi.mock('../../engine/src/logger.js', () => ({
   logger: noopLogger,
 }));
 
-// Import ipc-handlers AFTER the mock is registered
 const { processCrmIpc, _resetStatementCache } = await import('../src/ipc-handlers.js');
-
-// hierarchy module also caches statements — import its reset too
 const { _resetStatementCache: _resetHierarchyCache } = await import('../src/hierarchy.js');
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-// Minimal stub — processCrmIpc never calls deps directly for the tested cases
 const fakeDeps: IpcDeps = {
   sendMessage: async () => {},
   registeredGroups: () => ({}),
   registerGroup: () => {},
 };
 
-const NOW = new Date().toISOString();
-
 function setupDb() {
   testDb = new Database(':memory:');
+  testDb.pragma('foreign_keys = ON');
   createCrmSchema(testDb);
   _resetStatementCache();
   _resetHierarchyCache();
 
-  // Insert two AEs in separate groups
-  testDb.prepare(`
-    INSERT INTO crm_people (id, name, role, group_folder, active, created_at)
-    VALUES ('ae1', 'Alice AE', 'ae', 'ae1', 1, ?)
-  `).run(NOW);
+  // AE1 and AE2 in separate groups
+  testDb.prepare(`INSERT INTO persona (id, nombre, rol, whatsapp_group_folder, activo) VALUES ('ae1', 'María', 'ae', 'ae1', 1)`).run();
+  testDb.prepare(`INSERT INTO persona (id, nombre, rol, whatsapp_group_folder, activo) VALUES ('ae2', 'Carlos', 'ae', 'ae2', 1)`).run();
 
-  testDb.prepare(`
-    INSERT INTO crm_people (id, name, role, group_folder, active, created_at)
-    VALUES ('ae2', 'Bob AE', 'ae', 'ae2', 1, ?)
-  `).run(NOW);
+  // Gerente manages ae1
+  testDb.prepare(`INSERT INTO persona (id, nombre, rol, whatsapp_group_folder, reporta_a, activo) VALUES ('ger1', 'Miguel', 'gerente', 'ger1', null, 1)`).run();
+  testDb.prepare(`UPDATE persona SET reporta_a = 'ger1' WHERE id = 'ae1'`).run();
 
-  // Insert a manager who manages ae1
-  testDb.prepare(`
-    INSERT INTO crm_people (id, name, role, group_folder, active, created_at)
-    VALUES ('mgr1', 'Carol Manager', 'manager', 'mgr1', 1, ?)
-  `).run(NOW);
-  testDb.prepare(`UPDATE crm_people SET manager_id = 'mgr1' WHERE id = 'ae1'`).run();
+  // Cuenta owned by ae1
+  testDb.prepare(`INSERT INTO cuenta (id, nombre, tipo, ae_id) VALUES ('c1', 'Coca-Cola', 'directo', 'ae1')`).run();
 
-  // Insert an account owned by ae1
-  testDb.prepare(`
-    INSERT INTO crm_accounts (id, name, owner_id, created_at, updated_at)
-    VALUES ('acc1', 'Acme Corp', 'ae1', ?, ?)
-  `).run(NOW, NOW);
-
-  // Insert an opportunity owned by ae1
-  testDb.prepare(`
-    INSERT INTO crm_opportunities (id, account_id, owner_id, name, stage, created_at, updated_at)
-    VALUES ('opp1', 'acc1', 'ae1', 'Q1 Campaign', 'prospecting', ?, ?)
-  `).run(NOW, NOW);
+  // Propuesta owned by ae1
+  testDb.prepare(`INSERT INTO propuesta (id, cuenta_id, ae_id, titulo, valor_estimado, etapa) VALUES ('prop1', 'c1', 'ae1', 'Campaña Verano', 5000000, 'enviada')`).run();
 }
 
-// ─── crm_update_opportunity ──────────────────────────────────────────────────
+// --- crm_registrar_actividad ---
 
-describe('crm_update_opportunity — access control', () => {
+describe('crm_registrar_actividad', () => {
   beforeEach(setupDb);
 
-  it('blocks an AE from updating another AE\'s opportunity', async () => {
+  it('creates an actividad for a valid persona', async () => {
     await processCrmIpc(
-      { type: 'crm_update_opportunity', opportunity_id: 'opp1', stage: 'proposal' },
-      'ae2',   // ae2 does not own opp1
-      false,
-      fakeDeps,
+      { type: 'crm_registrar_actividad', cuenta_id: 'c1', tipo: 'llamada', resumen: 'Llamé al cliente sobre propuesta', sentimiento: 'positivo' },
+      'ae1', false, fakeDeps,
     );
 
-    const row = testDb
-      .prepare('SELECT stage FROM crm_opportunities WHERE id = ?')
-      .get('opp1') as { stage: string };
-
-    expect(row.stage).toBe('prospecting'); // unchanged
+    const row = testDb.prepare('SELECT * FROM actividad WHERE ae_id = ?').get('ae1') as any;
+    expect(row).toBeDefined();
+    expect(row.resumen).toBe('Llamé al cliente sobre propuesta');
+    expect(row.sentimiento).toBe('positivo');
+    expect(row.tipo).toBe('llamada');
   });
 
-  it('allows an AE to update their own opportunity', async () => {
+  it('falls back to "otro" for unknown tipo', async () => {
     await processCrmIpc(
-      { type: 'crm_update_opportunity', opportunity_id: 'opp1', stage: 'proposal' },
-      'ae1',   // ae1 owns opp1
-      false,
-      fakeDeps,
+      { type: 'crm_registrar_actividad', tipo: 'smoke_signal', resumen: 'Test' },
+      'ae1', false, fakeDeps,
     );
 
-    const row = testDb
-      .prepare('SELECT stage FROM crm_opportunities WHERE id = ?')
-      .get('opp1') as { stage: string };
-
-    expect(row.stage).toBe('proposal');
+    const row = testDb.prepare('SELECT tipo FROM actividad ORDER BY fecha DESC LIMIT 1').get() as any;
+    expect(row.tipo).toBe('otro');
   });
 
-  it('allows a manager to update a direct report\'s opportunity', async () => {
+  it('falls back to "neutral" for invalid sentimiento', async () => {
     await processCrmIpc(
-      { type: 'crm_update_opportunity', opportunity_id: 'opp1', stage: 'negotiation' },
-      'mgr1',  // mgr1 manages ae1 who owns opp1
-      true,
-      fakeDeps,
+      { type: 'crm_registrar_actividad', tipo: 'llamada', resumen: 'Test', sentimiento: 'happy' },
+      'ae1', false, fakeDeps,
     );
 
-    const row = testDb
-      .prepare('SELECT stage FROM crm_opportunities WHERE id = ?')
-      .get('opp1') as { stage: string };
-
-    expect(row.stage).toBe('negotiation');
+    const row = testDb.prepare('SELECT sentimiento FROM actividad ORDER BY fecha DESC LIMIT 1').get() as any;
+    expect(row.sentimiento).toBe('neutral');
   });
-});
 
-// ─── crm_update_opportunity — input validation ───────────────────────────────
+  it('updates propuesta.fecha_ultima_actividad when linked', async () => {
+    const before = testDb.prepare('SELECT fecha_ultima_actividad FROM propuesta WHERE id = ?').get('prop1') as any;
 
-describe('crm_update_opportunity — input validation', () => {
-  beforeEach(setupDb);
-
-  it('ignores an invalid stage value', async () => {
     await processCrmIpc(
-      { type: 'crm_update_opportunity', opportunity_id: 'opp1', stage: 'flying_saucer' },
-      'ae1',
-      false,
-      fakeDeps,
+      { type: 'crm_registrar_actividad', propuesta_id: 'prop1', tipo: 'reunion', resumen: 'Revisión de propuesta' },
+      'ae1', false, fakeDeps,
     );
 
-    const row = testDb
-      .prepare('SELECT stage FROM crm_opportunities WHERE id = ?')
-      .get('opp1') as { stage: string };
-
-    expect(row.stage).toBe('prospecting'); // unchanged
+    const after = testDb.prepare('SELECT fecha_ultima_actividad, dias_sin_actividad FROM propuesta WHERE id = ?').get('prop1') as any;
+    expect(after.dias_sin_actividad).toBe(0);
+    expect(after.fecha_ultima_actividad >= before.fecha_ultima_actividad).toBe(true);
   });
 
-  it('ignores a negative amount', async () => {
-    await processCrmIpc(
-      { type: 'crm_update_opportunity', opportunity_id: 'opp1', amount: -5000 },
-      'ae1',
-      false,
-      fakeDeps,
+  it('returns true silently for unknown group', async () => {
+    const result = await processCrmIpc(
+      { type: 'crm_registrar_actividad', tipo: 'llamada', resumen: 'Ghost' },
+      'nonexistent', false, fakeDeps,
     );
-
-    const row = testDb
-      .prepare('SELECT amount FROM crm_opportunities WHERE id = ?')
-      .get('opp1') as { amount: number | null };
-
-    expect(row.amount).toBeNull();
+    expect(result).toBe(true);
+    expect(testDb.prepare('SELECT COUNT(*) as c FROM actividad').get() as any).toEqual({ c: 0 });
   });
 
-  it('ignores a probability above 100', async () => {
-    await processCrmIpc(
-      { type: 'crm_update_opportunity', opportunity_id: 'opp1', probability: 150 },
-      'ae1',
-      false,
-      fakeDeps,
-    );
-
-    const row = testDb
-      .prepare('SELECT probability FROM crm_opportunities WHERE id = ?')
-      .get('opp1') as { probability: number | null };
-
-    expect(row.probability).toBeNull();
-  });
-
-  it('ignores an invalid close_date format', async () => {
-    await processCrmIpc(
-      { type: 'crm_update_opportunity', opportunity_id: 'opp1', close_date: 'next-friday' },
-      'ae1',
-      false,
-      fakeDeps,
-    );
-
-    const row = testDb
-      .prepare('SELECT close_date FROM crm_opportunities WHERE id = ?')
-      .get('opp1') as { close_date: string | null };
-
-    expect(row.close_date).toBeNull();
-  });
-});
-
-// ─── crm_log_interaction ─────────────────────────────────────────────────────
-
-describe('crm_log_interaction — timestamp integrity', () => {
-  beforeEach(setupDb);
-
-  it('uses server-side time and ignores a user-supplied logged_at', async () => {
-    const backdatedTimestamp = '2020-01-01T00:00:00.000Z';
-
+  it('uses server-side timestamp', async () => {
     const before = new Date().toISOString();
     await processCrmIpc(
-      {
-        type: 'crm_log_interaction',
-        interaction_type: 'call',
-        summary: 'Test call',
-        logged_at: backdatedTimestamp, // should be ignored
-      },
-      'ae1',
-      false,
-      fakeDeps,
+      { type: 'crm_registrar_actividad', tipo: 'llamada', resumen: 'Test', fecha: '2020-01-01' },
+      'ae1', false, fakeDeps,
     );
     const after = new Date().toISOString();
 
-    const row = testDb
-      .prepare('SELECT logged_at FROM crm_interactions ORDER BY created_at DESC LIMIT 1')
-      .get() as { logged_at: string };
-
-    expect(row.logged_at).not.toBe(backdatedTimestamp);
-    expect(row.logged_at >= before).toBe(true);
-    expect(row.logged_at <= after).toBe(true);
+    const row = testDb.prepare('SELECT fecha FROM actividad ORDER BY fecha DESC LIMIT 1').get() as any;
+    expect(row.fecha >= before).toBe(true);
+    expect(row.fecha <= after).toBe(true);
   });
 });
 
-describe('crm_log_interaction — input validation', () => {
+// --- crm_actualizar_propuesta ---
+
+describe('crm_actualizar_propuesta — access control', () => {
   beforeEach(setupDb);
 
-  it('falls back to "other" for an unknown interaction_type', async () => {
+  it('blocks AE from updating another AE\'s propuesta', async () => {
     await processCrmIpc(
-      { type: 'crm_log_interaction', interaction_type: 'smoke_signal', summary: 'Tried smoke' },
-      'ae1',
-      false,
-      fakeDeps,
+      { type: 'crm_actualizar_propuesta', propuesta_id: 'prop1', etapa: 'en_negociacion' },
+      'ae2', false, fakeDeps,
     );
 
-    const row = testDb
-      .prepare('SELECT type FROM crm_interactions ORDER BY created_at DESC LIMIT 1')
-      .get() as { type: string };
-
-    expect(row.type).toBe('other');
+    const row = testDb.prepare('SELECT etapa FROM propuesta WHERE id = ?').get('prop1') as any;
+    expect(row.etapa).toBe('enviada'); // unchanged
   });
 
-  it('stores a valid interaction_type unchanged', async () => {
+  it('allows AE to update own propuesta', async () => {
     await processCrmIpc(
-      { type: 'crm_log_interaction', interaction_type: 'meeting', summary: 'Lunch meeting' },
-      'ae1',
-      false,
-      fakeDeps,
+      { type: 'crm_actualizar_propuesta', propuesta_id: 'prop1', etapa: 'en_negociacion' },
+      'ae1', false, fakeDeps,
     );
 
-    const row = testDb
-      .prepare('SELECT type FROM crm_interactions ORDER BY created_at DESC LIMIT 1')
-      .get() as { type: string };
-
-    expect(row.type).toBe('meeting');
+    const row = testDb.prepare('SELECT etapa FROM propuesta WHERE id = ?').get('prop1') as any;
+    expect(row.etapa).toBe('en_negociacion');
   });
 
-  it('stores null for an invalid follow_up_date', async () => {
+  it('allows gerente to update report\'s propuesta', async () => {
     await processCrmIpc(
-      {
-        type: 'crm_log_interaction',
-        interaction_type: 'call',
-        summary: 'Quick call',
-        follow_up_date: 'next-week',
-      },
-      'ae1',
-      false,
-      fakeDeps,
+      { type: 'crm_actualizar_propuesta', propuesta_id: 'prop1', etapa: 'confirmada_verbal' },
+      'ger1', true, fakeDeps,
     );
 
-    const row = testDb
-      .prepare('SELECT follow_up_date FROM crm_interactions ORDER BY created_at DESC LIMIT 1')
-      .get() as { follow_up_date: string | null };
-
-    expect(row.follow_up_date).toBeNull();
+    const row = testDb.prepare('SELECT etapa FROM propuesta WHERE id = ?').get('prop1') as any;
+    expect(row.etapa).toBe('confirmada_verbal');
   });
 });
 
-// ─── unknown type ─────────────────────────────────────────────────────────────
+describe('crm_actualizar_propuesta — validation', () => {
+  beforeEach(setupDb);
+
+  it('ignores invalid etapa', async () => {
+    await processCrmIpc(
+      { type: 'crm_actualizar_propuesta', propuesta_id: 'prop1', etapa: 'flying' },
+      'ae1', false, fakeDeps,
+    );
+
+    const row = testDb.prepare('SELECT etapa FROM propuesta WHERE id = ?').get('prop1') as any;
+    expect(row.etapa).toBe('enviada'); // unchanged
+  });
+
+  it('ignores negative valor_estimado', async () => {
+    await processCrmIpc(
+      { type: 'crm_actualizar_propuesta', propuesta_id: 'prop1', valor_estimado: -1000 },
+      'ae1', false, fakeDeps,
+    );
+
+    const row = testDb.prepare('SELECT valor_estimado FROM propuesta WHERE id = ?').get('prop1') as any;
+    expect(row.valor_estimado).toBe(5000000); // unchanged
+  });
+
+  it('skips update when all fields invalid', async () => {
+    await processCrmIpc(
+      { type: 'crm_actualizar_propuesta', propuesta_id: 'prop1', etapa: 'invalid' },
+      'ae1', false, fakeDeps,
+    );
+
+    const row = testDb.prepare('SELECT etapa FROM propuesta WHERE id = ?').get('prop1') as any;
+    expect(row.etapa).toBe('enviada');
+  });
+
+  it('handles missing propuesta_id', async () => {
+    const result = await processCrmIpc(
+      { type: 'crm_actualizar_propuesta', etapa: 'completada' },
+      'ae1', false, fakeDeps,
+    );
+    expect(result).toBe(true);
+  });
+
+  it('handles nonexistent propuesta_id', async () => {
+    const result = await processCrmIpc(
+      { type: 'crm_actualizar_propuesta', propuesta_id: 'ghost', etapa: 'completada' },
+      'ae1', false, fakeDeps,
+    );
+    expect(result).toBe(true);
+  });
+});
+
+// --- crm_crear_propuesta ---
+
+describe('crm_crear_propuesta', () => {
+  beforeEach(setupDb);
+
+  it('creates a propuesta for valid persona', async () => {
+    await processCrmIpc(
+      { type: 'crm_crear_propuesta', cuenta_id: 'c1', titulo: 'Campaña Navidad', valor_estimado: 8000000, tipo_oportunidad: 'estacional' },
+      'ae1', false, fakeDeps,
+    );
+
+    const row = testDb.prepare("SELECT * FROM propuesta WHERE titulo = 'Campaña Navidad'").get() as any;
+    expect(row).toBeDefined();
+    expect(row.ae_id).toBe('ae1');
+    expect(row.valor_estimado).toBe(8000000);
+    expect(row.etapa).toBe('en_preparacion');
+  });
+
+  it('returns true silently for unknown group', async () => {
+    const result = await processCrmIpc(
+      { type: 'crm_crear_propuesta', titulo: 'Ghost' },
+      'nonexistent', false, fakeDeps,
+    );
+    expect(result).toBe(true);
+  });
+});
+
+// --- Unknown types ---
 
 describe('unknown IPC types', () => {
   beforeEach(setupDb);
 
-  it('returns false for unrecognised CRM types', async () => {
+  it('returns false for unrecognised types', async () => {
     const result = await processCrmIpc(
       { type: 'crm_does_not_exist' },
-      'ae1',
-      false,
-      fakeDeps,
+      'ae1', false, fakeDeps,
     );
     expect(result).toBe(false);
   });
 });
 
-// ─── Audit log ────────────────────────────────────────────────────────────────
+// --- Input safety ---
 
-describe('audit logging', () => {
+describe('input safety', () => {
   beforeEach(setupDb);
 
-  it('writes audit log on interaction create', async () => {
+  it('truncates oversized resumen', async () => {
+    const longResumen = 'x'.repeat(20_000);
     await processCrmIpc(
-      { type: 'crm_log_interaction', interaction_type: 'call', summary: 'Audit test' },
-      'ae1',
-      false,
-      fakeDeps,
+      { type: 'crm_registrar_actividad', tipo: 'llamada', resumen: longResumen },
+      'ae1', false, fakeDeps,
     );
 
-    const log = testDb
-      .prepare("SELECT * FROM crm_activity_log WHERE entity_type = 'interaction'")
-      .get() as any;
-
-    expect(log).toBeDefined();
-    expect(log.action).toBe('create');
-    expect(log.person_id).toBe('ae1');
+    const row = testDb.prepare('SELECT resumen FROM actividad ORDER BY fecha DESC LIMIT 1').get() as any;
+    expect(row.resumen.length).toBe(10_000);
   });
 
-  it('writes audit log on opportunity update', async () => {
+  it('handles non-string resumen', async () => {
     await processCrmIpc(
-      { type: 'crm_update_opportunity', opportunity_id: 'opp1', stage: 'proposal' },
-      'ae1',
-      false,
-      fakeDeps,
+      { type: 'crm_registrar_actividad', tipo: 'llamada', resumen: 42 },
+      'ae1', false, fakeDeps,
     );
 
-    const log = testDb
-      .prepare("SELECT * FROM crm_activity_log WHERE entity_type = 'opportunity'")
-      .get() as any;
-
-    expect(log).toBeDefined();
-    expect(log.action).toBe('update');
-    expect(log.entity_id).toBe('opp1');
+    const row = testDb.prepare('SELECT resumen FROM actividad ORDER BY fecha DESC LIMIT 1').get() as any;
+    expect(row.resumen).toBe('');
   });
 
-  it('writes audit log on task create', async () => {
-    await processCrmIpc(
-      { type: 'crm_create_task', title: 'Audit task' },
-      'ae1',
-      false,
-      fakeDeps,
-    );
-
-    const log = testDb
-      .prepare("SELECT * FROM crm_activity_log WHERE entity_type = 'task'")
-      .get() as any;
-
-    expect(log).toBeDefined();
-    expect(log.action).toBe('create');
-    expect(log.person_id).toBe('ae1');
-  });
-});
-
-// ─── crm_create_task ──────────────────────────────────────────────────────────
-
-describe('crm_create_task', () => {
-  beforeEach(setupDb);
-
-  it('creates task for valid person', async () => {
-    await processCrmIpc(
-      { type: 'crm_create_task', title: 'Follow up with client', priority: 'high' },
-      'ae1',
-      false,
-      fakeDeps,
-    );
-
-    const task = testDb
-      .prepare("SELECT * FROM crm_tasks_crm WHERE person_id = 'ae1'")
-      .get() as any;
-
-    expect(task).toBeDefined();
-    expect(task.title).toBe('Follow up with client');
-    expect(task.priority).toBe('high');
-    expect(task.status).toBe('pending');
-  });
-
-  it('returns true silently when person not found', async () => {
+  it('handles non-string propuesta_id', async () => {
     const result = await processCrmIpc(
-      { type: 'crm_create_task', title: 'Ghost task' },
-      'nonexistent',
-      false,
-      fakeDeps,
+      { type: 'crm_actualizar_propuesta', propuesta_id: 42, etapa: 'completada' },
+      'ae1', false, fakeDeps,
     );
-
     expect(result).toBe(true);
-
-    const count = testDb
-      .prepare('SELECT COUNT(*) as c FROM crm_tasks_crm')
-      .get() as any;
-    expect(count.c).toBe(0);
-  });
-});
-
-// ─── Input safety ─────────────────────────────────────────────────────────────
-
-describe('input type safety', () => {
-  beforeEach(setupDb);
-
-  it('rejects non-string notes in opportunity update', async () => {
-    await processCrmIpc(
-      { type: 'crm_update_opportunity', opportunity_id: 'opp1', notes: 12345 },
-      'ae1',
-      false,
-      fakeDeps,
-    );
-
-    const row = testDb
-      .prepare('SELECT notes FROM crm_opportunities WHERE id = ?')
-      .get('opp1') as { notes: string | null };
-
-    expect(row.notes).toBeNull(); // non-string notes not applied
-  });
-
-  it('handles non-string summary safely in interaction log', async () => {
-    await processCrmIpc(
-      { type: 'crm_log_interaction', interaction_type: 'call', summary: 42 },
-      'ae1',
-      false,
-      fakeDeps,
-    );
-
-    const row = testDb
-      .prepare('SELECT summary FROM crm_interactions ORDER BY created_at DESC LIMIT 1')
-      .get() as { summary: string };
-
-    // asString(42) returns undefined, falls back to ''
-    expect(row.summary).toBe('');
-  });
-
-  it('handles non-string opportunity_id without crashing', async () => {
-    const result = await processCrmIpc(
-      { type: 'crm_update_opportunity', opportunity_id: 42, stage: 'proposal' },
-      'ae1',
-      false,
-      fakeDeps,
-    );
-
-    expect(result).toBe(true);
-
-    // Opportunity unchanged
-    const row = testDb
-      .prepare('SELECT stage FROM crm_opportunities WHERE id = ?')
-      .get('opp1') as { stage: string };
-    expect(row.stage).toBe('prospecting');
-  });
-
-  it('truncates oversized summary to max length', async () => {
-    const longSummary = 'x'.repeat(20_000);
-    await processCrmIpc(
-      { type: 'crm_log_interaction', interaction_type: 'call', summary: longSummary },
-      'ae1',
-      false,
-      fakeDeps,
-    );
-
-    const row = testDb
-      .prepare('SELECT summary FROM crm_interactions ORDER BY created_at DESC LIMIT 1')
-      .get() as { summary: string };
-
-    expect(row.summary.length).toBe(10_000);
-  });
-});
-
-// ─── crm_update_opportunity — edge cases ──────────────────────────────────────
-
-describe('crm_update_opportunity — edge cases', () => {
-  beforeEach(setupDb);
-
-  it('skips update when no valid fields are provided', async () => {
-    await processCrmIpc(
-      { type: 'crm_update_opportunity', opportunity_id: 'opp1', stage: 'invalid' },
-      'ae1',
-      false,
-      fakeDeps,
-    );
-
-    // No audit log entry for the non-update
-    const log = testDb
-      .prepare("SELECT * FROM crm_activity_log WHERE entity_type = 'opportunity' AND action = 'update'")
-      .get();
-    expect(log).toBeUndefined();
-  });
-
-  it('writes access_denied audit log on blocked update', async () => {
-    await processCrmIpc(
-      { type: 'crm_update_opportunity', opportunity_id: 'opp1', stage: 'proposal' },
-      'ae2',
-      false,
-      fakeDeps,
-    );
-
-    const log = testDb
-      .prepare("SELECT * FROM crm_activity_log WHERE action = 'access_denied'")
-      .get() as any;
-
-    expect(log).toBeDefined();
-    expect(log.entity_type).toBe('opportunity');
-    expect(log.entity_id).toBe('opp1');
-    expect(log.person_id).toBe('ae2');
-  });
-
-  it('allows a director to update a subtree AE\'s opportunity', async () => {
-    // Add director above mgr1
-    testDb.prepare(`
-      INSERT INTO crm_people (id, name, role, group_folder, active, created_at)
-      VALUES ('dir1', 'Dan Director', 'director', 'dir1', 1, ?)
-    `).run(NOW);
-    testDb.prepare(`UPDATE crm_people SET manager_id = 'dir1' WHERE id = 'mgr1'`).run();
-    _resetStatementCache();
-    _resetHierarchyCache();
-
-    await processCrmIpc(
-      { type: 'crm_update_opportunity', opportunity_id: 'opp1', stage: 'closed_won' },
-      'dir1',
-      true,
-      fakeDeps,
-    );
-
-    const row = testDb
-      .prepare('SELECT stage FROM crm_opportunities WHERE id = ?')
-      .get('opp1') as { stage: string };
-
-    expect(row.stage).toBe('closed_won');
   });
 });

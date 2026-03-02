@@ -7,9 +7,7 @@
 
 import { getDatabase } from '../../engine/src/db.js';
 import { logger } from './logger.js';
-import { createCrmSchema } from './schema.js';
-
-const EXPECTED_CRM_TABLES = 13;
+import { createCrmSchema, CRM_TABLES } from './schema.js';
 
 export function bootstrapCrm(): void {
   const db = getDatabase();
@@ -23,15 +21,18 @@ export function bootstrapCrm(): void {
 
     createCrmSchema(db);
 
-    const tables = db
-      .prepare("SELECT COUNT(*) AS c FROM sqlite_master WHERE type='table' AND name LIKE 'crm_%'")
-      .get() as { c: number };
+    // Verify all expected tables exist
+    const existing = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+      .all() as { name: string }[];
+    const existingNames = new Set(existing.map(r => r.name));
+    const missing = CRM_TABLES.filter(t => !existingNames.has(t));
 
-    if (tables.c < EXPECTED_CRM_TABLES) {
-      logger.warn({ expected: EXPECTED_CRM_TABLES, actual: tables.c }, 'CRM table count mismatch');
+    if (missing.length > 0) {
+      logger.warn({ missing }, 'CRM tables missing after bootstrap');
     }
 
-    logger.info({ tables: tables.c }, 'CRM schema initialized');
+    logger.info({ tables: CRM_TABLES.length - missing.length }, 'CRM schema initialized');
   } catch (err) {
     logger.error({ err }, 'CRM bootstrap failed');
     throw err;

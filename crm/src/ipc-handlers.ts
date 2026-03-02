@@ -3,6 +3,8 @@
  *
  * Handles CRM-specific IPC task types delegated from engine/src/ipc.ts.
  * The engine calls processCrmIpc() for any IPC type it doesn't recognize.
+ *
+ * Tables referenced: actividad, propuesta, cuenta, persona
  */
 
 import { getDatabase } from '../../engine/src/db.js';
@@ -12,9 +14,15 @@ import type { IpcDeps } from '../../engine/src/ipc.js';
 
 // --- Input validation helpers ---
 
-const VALID_INTERACTION_TYPES = new Set(['call', 'meeting', 'email', 'whatsapp', 'event', 'other']);
-const VALID_STAGES = new Set(['prospecting', 'qualification', 'proposal', 'negotiation', 'closed_won', 'closed_lost']);
-const VALID_PRIORITIES = new Set(['low', 'medium', 'high']);
+const VALID_ACTIVIDAD_TIPOS = new Set([
+  'llamada', 'whatsapp', 'comida', 'email', 'reunion', 'visita', 'envio_propuesta', 'otro',
+]);
+const VALID_SENTIMIENTOS = new Set(['positivo', 'neutral', 'negativo', 'urgente']);
+const VALID_ETAPAS = new Set([
+  'en_preparacion', 'enviada', 'en_discusion', 'en_negociacion',
+  'confirmada_verbal', 'orden_recibida', 'en_ejecucion',
+  'completada', 'perdida', 'cancelada',
+]);
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T[\d:.Z+-]+)?$/;
 
 function validateEnum(value: unknown, allowed: Set<string>, fallback: string): string {
@@ -32,7 +40,6 @@ function validateNumber(value: unknown, min: number, max = Infinity): number | n
 
 const MAX_TEXT_LENGTH = 10_000;
 
-/** Type-checked string extraction with length limit. Returns undefined if value is not a string. */
 function asString(value: unknown, maxLength = MAX_TEXT_LENGTH): string | undefined {
   if (typeof value !== 'string') return undefined;
   return value.length > maxLength ? value.slice(0, maxLength) : value;
@@ -50,30 +57,29 @@ function stmts() {
 function buildStatements() {
   const db = getDatabase();
   return {
-    auditLog: db.prepare(`
-      INSERT INTO crm_activity_log (person_id, group_folder, action, entity_type, entity_id, details, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+    insertActividad: db.prepare(`
+      INSERT INTO actividad (id, ae_id, cuenta_id, propuesta_id, contrato_id, tipo, resumen, sentimiento, siguiente_accion, fecha_siguiente_accion, fecha)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
-    insertInteraction: db.prepare(`
-      INSERT INTO crm_interactions (id, account_id, contact_id, opportunity_id, person_id, type, summary, outcome, follow_up_date, follow_up_action, logged_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `),
-    getOppOwner: db.prepare(
-      'SELECT owner_id FROM crm_opportunities WHERE id = ?',
-    ),
-    updateOpp: db.prepare(`
-      UPDATE crm_opportunities SET
-        stage = COALESCE(?, stage),
-        amount = COALESCE(?, amount),
-        probability = COALESCE(?, probability),
-        close_date = COALESCE(?, close_date),
-        notes = COALESCE(?, notes),
-        updated_at = ?
+    updatePropuestaActividad: db.prepare(`
+      UPDATE propuesta SET fecha_ultima_actividad = ?, dias_sin_actividad = 0
       WHERE id = ?
     `),
-    insertTask: db.prepare(`
-      INSERT INTO crm_tasks_crm (id, person_id, account_id, opportunity_id, title, description, due_date, priority, status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+    getPropuestaAe: db.prepare(
+      'SELECT ae_id FROM propuesta WHERE id = ?',
+    ),
+    updatePropuesta: db.prepare(`
+      UPDATE propuesta SET
+        etapa = COALESCE(?, etapa),
+        valor_estimado = COALESCE(?, valor_estimado),
+        notas = COALESCE(?, notas),
+        razon_perdida = COALESCE(?, razon_perdida),
+        fecha_ultima_actividad = ?
+      WHERE id = ?
+    `),
+    insertPropuesta: db.prepare(`
+      INSERT INTO propuesta (id, cuenta_id, ae_id, titulo, valor_estimado, medios, tipo_oportunidad, gancho_temporal, fecha_vuelo_inicio, fecha_vuelo_fin, etapa, fecha_creacion, fecha_ultima_actividad)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'en_preparacion', ?, ?)
     `),
   };
 }
@@ -83,19 +89,6 @@ export function _resetStatementCache(): void {
   _stmts = null;
 }
 
-/** Write an entry to the crm_activity_log audit trail. */
-function auditLog(
-  personId: string,
-  groupFolder: string | null,
-  action: string,
-  entityType: string,
-  entityId: string,
-  details?: string,
-): void {
-  stmts().auditLog.run(personId, groupFolder, action, entityType, entityId, details ?? null, new Date().toISOString());
-}
-
-/** Classify and log IPC errors with appropriate severity. */
 function handleIpcError(err: unknown, sourceGroup: string, type: unknown): true {
   const code = (err as any)?.code;
   if (code === 'SQLITE_BUSY' || code === 'SQLITE_LOCKED') {
@@ -117,88 +110,85 @@ export async function processCrmIpc(
   const db = getDatabase();
 
   switch (data.type) {
-    case 'crm_log_interaction': {
+    case 'crm_registrar_actividad': {
       try {
         const person = getPersonByGroupFolder(sourceGroup);
         if (!person) {
-          logger.warn({ sourceGroup }, 'Unknown person for group');
+          logger.warn({ sourceGroup }, 'Unknown persona for group');
           return true;
         }
 
-        const id = `int-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const id = `act-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const now = new Date().toISOString();
+        const propuestaId = asString(data.propuesta_id) ?? null;
 
-        stmts().insertInteraction.run(
+        stmts().insertActividad.run(
           id,
-          asString(data.account_id) ?? null,
-          asString(data.contact_id) ?? null,
-          asString(data.opportunity_id) ?? null,
           person.id,
-          validateEnum(data.interaction_type, VALID_INTERACTION_TYPES, 'other'),
-          asString(data.summary) ?? '',
-          asString(data.outcome) ?? null,
-          validateDate(data.follow_up_date),
-          asString(data.follow_up_action) ?? null,
-          now, // always use server-side timestamp — agents must not backdate records
+          asString(data.cuenta_id) ?? null,
+          propuestaId,
+          asString(data.contrato_id) ?? null,
+          validateEnum(data.tipo, VALID_ACTIVIDAD_TIPOS, 'otro'),
+          asString(data.resumen) ?? '',
+          validateEnum(data.sentimiento, VALID_SENTIMIENTOS, 'neutral'),
+          asString(data.siguiente_accion) ?? null,
+          validateDate(data.fecha_siguiente_accion),
           now,
         );
 
-        auditLog(person.id, sourceGroup, 'create', 'interaction', id);
-        logger.info({ id, person: person.name }, 'Interaction logged');
+        // Update propuesta.fecha_ultima_actividad if linked
+        if (propuestaId) {
+          stmts().updatePropuestaActividad.run(now, propuestaId);
+        }
+
+        logger.info({ id, persona: person.nombre }, 'Actividad registered');
         return true;
       } catch (err) {
         return handleIpcError(err, sourceGroup, data.type);
       }
     }
 
-    case 'crm_update_opportunity': {
+    case 'crm_actualizar_propuesta': {
       try {
         const person = getPersonByGroupFolder(sourceGroup);
         if (!person) {
-          logger.warn({ sourceGroup }, 'Unknown person for group');
+          logger.warn({ sourceGroup }, 'Unknown persona for group');
           return true;
         }
 
-        const oppId = asString(data.opportunity_id);
-        if (!oppId) {
-          logger.warn({ sourceGroup }, 'Missing opportunity_id in crm_update_opportunity');
+        const propuestaId = asString(data.propuesta_id);
+        if (!propuestaId) {
+          logger.warn({ sourceGroup }, 'Missing propuesta_id in crm_actualizar_propuesta');
           return true;
         }
 
-        // Fetch opportunity to verify ownership before applying any changes
-        const opp = stmts().getOppOwner.get(oppId) as { owner_id: string } | undefined;
-        if (!opp) {
-          logger.warn({ oppId, sourceGroup }, 'Opportunity not found');
+        const prop = stmts().getPropuestaAe.get(propuestaId) as { ae_id: string } | undefined;
+        if (!prop) {
+          logger.warn({ propuestaId, sourceGroup }, 'Propuesta not found');
           return true;
         }
-        if (!hasAccessTo(person, opp.owner_id)) {
-          auditLog(person.id, sourceGroup, 'access_denied', 'opportunity', oppId,
-            JSON.stringify({ attempted_action: 'update', owner: opp.owner_id }));
-          logger.warn({ sourceGroup, oppId }, 'Access denied: cannot update opportunity');
+        if (!hasAccessTo(person, prop.ae_id)) {
+          logger.warn({ sourceGroup, propuestaId }, 'Access denied: cannot update propuesta');
           return true;
         }
 
-        // Validate fields — null means "absent or invalid, keep current value" via COALESCE
-        const stage = typeof data.stage === 'string' && VALID_STAGES.has(data.stage) ? data.stage : null;
-        const amount = validateNumber(data.amount, 0);
-        const probability = validateNumber(data.probability, 0, 100);
-        const closeDate = validateDate(data.close_date);
-        const notes = asString(data.notes);
+        const etapa = typeof data.etapa === 'string' && VALID_ETAPAS.has(data.etapa) ? data.etapa : null;
+        const valor = validateNumber(data.valor_estimado, 0);
+        const notas = asString(data.notas);
+        const razon = asString(data.razon_perdida);
+        const now = new Date().toISOString();
 
-        // Skip if no valid fields provided
-        if (stage === null && amount === null && probability === null && closeDate === null && notes === undefined) {
+        if (etapa === null && valor === null && notas === undefined && razon === undefined) {
           return true;
         }
 
         const updateFn = db.transaction(() => {
-          stmts().updateOpp.run(
-            stage, amount, probability, closeDate, notes ?? null,
-            new Date().toISOString(), oppId,
+          stmts().updatePropuesta.run(
+            etapa, valor, notas ?? null, razon ?? null, now, propuestaId,
           );
-          auditLog(person.id, sourceGroup, 'update', 'opportunity', oppId, JSON.stringify({ stage, amount, probability }));
         });
         updateFn();
-        logger.info({ oppId, person: person.name }, 'Opportunity updated');
+        logger.info({ propuestaId, persona: person.nombre }, 'Propuesta updated');
 
         return true;
       } catch (err) {
@@ -206,31 +196,33 @@ export async function processCrmIpc(
       }
     }
 
-    case 'crm_create_task': {
+    case 'crm_crear_propuesta': {
       try {
         const person = getPersonByGroupFolder(sourceGroup);
         if (!person) {
-          logger.warn({ sourceGroup }, 'Unknown person for group');
+          logger.warn({ sourceGroup }, 'Unknown persona for group');
           return true;
         }
 
-        const id = `crmt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const id = `prop-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const now = new Date().toISOString();
 
-        stmts().insertTask.run(
+        stmts().insertPropuesta.run(
           id,
+          asString(data.cuenta_id) ?? null,
           person.id,
-          asString(data.account_id) ?? null,
-          asString(data.opportunity_id) ?? null,
-          asString(data.title) ?? 'Follow up',
-          asString(data.description) ?? null,
-          validateDate(data.due_date),
-          validateEnum(data.priority, VALID_PRIORITIES, 'medium'),
+          asString(data.titulo) ?? 'Nueva propuesta',
+          validateNumber(data.valor_estimado, 0),
+          asString(data.medios) ?? null,
+          asString(data.tipo_oportunidad) ?? null,
+          asString(data.gancho_temporal) ?? null,
+          validateDate(data.fecha_vuelo_inicio),
+          validateDate(data.fecha_vuelo_fin),
+          now,
           now,
         );
 
-        auditLog(person.id, sourceGroup, 'create', 'task', id);
-        logger.info({ id, person: person.name }, 'CRM task created');
+        logger.info({ id, persona: person.nombre }, 'Propuesta created');
         return true;
       } catch (err) {
         return handleIpcError(err, sourceGroup, data.type);
@@ -238,6 +230,6 @@ export async function processCrmIpc(
     }
 
     default:
-      return false; // Not a CRM IPC type
+      return false;
   }
 }

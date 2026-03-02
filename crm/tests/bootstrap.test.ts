@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { CRM_TABLES } from '../src/schema.js';
 
 let testDb: InstanceType<typeof Database>;
 
@@ -29,13 +30,23 @@ describe('bootstrapCrm', () => {
     expect(() => bootstrapCrm()).not.toThrow();
   });
 
-  it('creates all 13 CRM tables', () => {
+  it('creates all 12 CRM tables', () => {
     bootstrapCrm();
 
     const tables = testDb
-      .prepare("SELECT COUNT(*) AS c FROM sqlite_master WHERE type='table' AND name LIKE 'crm_%'")
-      .get() as { c: number };
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`)
+      .all()
+      .map((r: any) => r.name);
 
-    expect(tables.c).toBe(13);
+    for (const t of CRM_TABLES) {
+      expect(tables).toContain(t);
+    }
+  });
+
+  it('attempts to set WAL journal mode', () => {
+    bootstrapCrm();
+    const mode = testDb.pragma('journal_mode', { simple: true });
+    // In-memory DBs stay 'memory'; on-disk would be 'wal'
+    expect(['wal', 'memory']).toContain(mode);
   });
 });
