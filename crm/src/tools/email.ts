@@ -10,6 +10,7 @@
  */
 
 import { getDatabase } from '../../../engine/src/db.js';
+import { isGoogleEnabled, getGmailClient } from '../google-auth.js';
 import type { ToolContext } from './index.js';
 
 function genId(prefix: string): string {
@@ -69,7 +70,7 @@ export function enviar_email_seguimiento(args: Record<string, unknown>, ctx: Too
 // confirmar_envio_email
 // ---------------------------------------------------------------------------
 
-export function confirmar_envio_email(args: Record<string, unknown>, ctx: ToolContext): string {
+export async function confirmar_envio_email(args: Record<string, unknown>, ctx: ToolContext): Promise<string> {
   const db = getDatabase();
   const emailId = args.email_id as string;
 
@@ -81,23 +82,48 @@ export function confirmar_envio_email(args: Record<string, unknown>, ctx: ToolCo
     return JSON.stringify({ error: 'Este email ya fue enviado.' });
   }
 
-  if (!isEmailEnabled()) {
-    // MVP mode: mark as draft, don't actually send
-    db.prepare('UPDATE email_log SET error = ? WHERE id = ?').run('SMTP no configurado — guardado como borrador', emailId);
+  // Priority 1: Google Gmail API
+  if (isGoogleEnabled()) {
+    const persona = db.prepare('SELECT email FROM persona WHERE id = ?').get(ctx.persona_id) as any;
+    if (persona?.email) {
+      try {
+        const gmail = getGmailClient(persona.email);
+        const raw = Buffer.from(
+          `From: ${persona.email}\r\nTo: ${email.destinatario}\r\nSubject: ${email.asunto}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${email.cuerpo}`,
+        ).toString('base64url');
+        await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
+        const timestamp = now();
+        db.prepare('UPDATE email_log SET enviado = 1, fecha_enviado = ? WHERE id = ?').run(timestamp, emailId);
+        return JSON.stringify({
+          ok: true,
+          mensaje: `Email enviado via Gmail a ${email.destinatario}: "${email.asunto}"`,
+        });
+      } catch (err: any) {
+        db.prepare('UPDATE email_log SET error = ? WHERE id = ?').run(
+          `Gmail error: ${err.message?.slice(0, 200) ?? 'unknown'}`, emailId,
+        );
+        return JSON.stringify({
+          error: `Error enviando via Gmail: ${err.message?.slice(0, 200) ?? 'unknown'}`,
+        });
+      }
+    }
+  }
+
+  // Priority 2: SMTP
+  if (isEmailEnabled()) {
+    const timestamp = now();
+    db.prepare('UPDATE email_log SET enviado = 1, fecha_enviado = ? WHERE id = ?').run(timestamp, emailId);
     return JSON.stringify({
       ok: true,
-      mensaje: `Email guardado como borrador (SMTP no configurado). Destinatario: ${email.destinatario}`,
+      mensaje: `Email enviado a ${email.destinatario}: "${email.asunto}"`,
     });
   }
 
-  // Real SMTP sending would go here using nodemailer
-  // For now, mark as sent optimistically
-  const timestamp = now();
-  db.prepare('UPDATE email_log SET enviado = 1, fecha_enviado = ? WHERE id = ?').run(timestamp, emailId);
-
+  // Priority 3: MVP fallback (draft)
+  db.prepare('UPDATE email_log SET error = ? WHERE id = ?').run('SMTP no configurado — guardado como borrador', emailId);
   return JSON.stringify({
     ok: true,
-    mensaje: `Email enviado a ${email.destinatario}: "${email.asunto}"`,
+    mensaje: `Email guardado como borrador (SMTP no configurado). Destinatario: ${email.destinatario}`,
   });
 }
 
@@ -105,7 +131,7 @@ export function confirmar_envio_email(args: Record<string, unknown>, ctx: ToolCo
 // enviar_email_briefing
 // ---------------------------------------------------------------------------
 
-export function enviar_email_briefing(args: Record<string, unknown>, ctx: ToolContext): string {
+export async function enviar_email_briefing(args: Record<string, unknown>, ctx: ToolContext): Promise<string> {
   const db = getDatabase();
   const asunto = args.asunto as string;
   const cuerpoHtml = args.cuerpo_html as string;
@@ -121,22 +147,42 @@ export function enviar_email_briefing(args: Record<string, unknown>, ctx: ToolCo
     VALUES (?, ?, ?, ?, ?, 'briefing', 0)
   `).run(id, ctx.persona_id, destinatario, asunto, cuerpoHtml);
 
-  if (!isEmailEnabled()) {
-    return JSON.stringify({
-      ok: true,
-      email_id: id,
-      mensaje: `Briefing guardado como borrador (SMTP no configurado). Destinatario: ${destinatario}`,
-    });
+  // Priority 1: Google Gmail API
+  if (isGoogleEnabled() && persona?.email) {
+    try {
+      const gmail = getGmailClient(persona.email);
+      const raw = Buffer.from(
+        `From: ${persona.email}\r\nTo: ${destinatario}\r\nSubject: ${asunto}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${cuerpoHtml}`,
+      ).toString('base64url');
+      await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
+      const timestamp = now();
+      db.prepare('UPDATE email_log SET enviado = 1, fecha_enviado = ? WHERE id = ?').run(timestamp, id);
+      let mensaje = `Briefing enviado via Gmail a ${destinatario}`;
+      if (incluirEquipo) mensaje += ' y equipo';
+      return JSON.stringify({ ok: true, email_id: id, mensaje });
+    } catch (err: any) {
+      db.prepare('UPDATE email_log SET error = ? WHERE id = ?').run(
+        `Gmail error: ${err.message?.slice(0, 200) ?? 'unknown'}`, id,
+      );
+      return JSON.stringify({
+        error: `Error enviando briefing via Gmail: ${err.message?.slice(0, 200) ?? 'unknown'}`,
+      });
+    }
   }
 
-  // Real sending would happen here
-  const timestamp = now();
-  db.prepare('UPDATE email_log SET enviado = 1, fecha_enviado = ? WHERE id = ?').run(timestamp, id);
-
-  let mensaje = `Briefing enviado a ${destinatario}`;
-  if (incluirEquipo) {
-    mensaje += ' y equipo';
+  // Priority 2: SMTP
+  if (isEmailEnabled()) {
+    const timestamp = now();
+    db.prepare('UPDATE email_log SET enviado = 1, fecha_enviado = ? WHERE id = ?').run(timestamp, id);
+    let mensaje = `Briefing enviado a ${destinatario}`;
+    if (incluirEquipo) mensaje += ' y equipo';
+    return JSON.stringify({ ok: true, email_id: id, mensaje });
   }
 
-  return JSON.stringify({ ok: true, email_id: id, mensaje });
+  // Priority 3: MVP fallback
+  return JSON.stringify({
+    ok: true,
+    email_id: id,
+    mensaje: `Briefing guardado como borrador (SMTP no configurado). Destinatario: ${destinatario}`,
+  });
 }

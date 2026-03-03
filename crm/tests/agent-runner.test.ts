@@ -184,17 +184,17 @@ describe('role-based tool filtering', () => {
 // ---------------------------------------------------------------------------
 
 describe('tool execution routing', () => {
-  it('returns error for unknown tool', () => {
+  it('returns error for unknown tool', async () => {
     const ctx = buildToolContext('ae-001')!;
-    const result = executeTool('nonexistent_tool', {}, ctx);
+    const result = await executeTool('nonexistent_tool', {}, ctx);
     const parsed = JSON.parse(result);
     expect(parsed.error).toContain('desconocida');
   });
 
-  it('routes registrar_actividad through executeTool', () => {
+  it('routes registrar_actividad through executeTool', async () => {
     testDb.prepare(`INSERT INTO cuenta (id, nombre, tipo, ae_id) VALUES ('c1', 'Coca-Cola', 'directo', 'ae-001')`).run();
     const ctx = buildToolContext('ae-001')!;
-    const result = executeTool('registrar_actividad', {
+    const result = await executeTool('registrar_actividad', {
       cuenta_nombre: 'Coca-Cola',
       tipo: 'llamada',
       resumen: 'Llamada de seguimiento',

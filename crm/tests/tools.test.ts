@@ -34,7 +34,7 @@ function setupDb() {
   // Org chart
   testDb.prepare(`INSERT INTO persona (id, nombre, rol, reporta_a, whatsapp_group_folder, activo) VALUES ('vp1', 'Roberto', 'vp', null, 'vp1', 1)`).run();
   testDb.prepare(`INSERT INTO persona (id, nombre, rol, reporta_a, whatsapp_group_folder, activo) VALUES ('ger1', 'Miguel', 'gerente', 'vp1', 'ger1', 1)`).run();
-  testDb.prepare(`INSERT INTO persona (id, nombre, rol, reporta_a, whatsapp_group_folder, activo) VALUES ('ae1', 'María', 'ae', 'ger1', 'ae1', 1)`).run();
+  testDb.prepare(`INSERT INTO persona (id, nombre, rol, reporta_a, whatsapp_group_folder, activo) VALUES ('ae1', 'Maria', 'ae', 'ger1', 'ae1', 1)`).run();
   testDb.prepare(`INSERT INTO persona (id, nombre, rol, reporta_a, whatsapp_group_folder, activo) VALUES ('ae2', 'Carlos', 'ae', 'ger1', 'ae2', 1)`).run();
 
   // Accounts
@@ -45,8 +45,8 @@ function setupDb() {
   testDb.prepare(`INSERT INTO contacto (id, nombre, cuenta_id, rol, email) VALUES ('con1', 'Dir Marketing', 'c1', 'decisor', 'mktg@cocacola.com')`).run();
 
   // Propuestas
-  testDb.prepare(`INSERT INTO propuesta (id, cuenta_id, ae_id, titulo, valor_estimado, etapa, dias_sin_actividad) VALUES ('p1', 'c1', 'ae1', 'Campaña Verano', 5000000, 'enviada', 10)`).run();
-  testDb.prepare(`INSERT INTO propuesta (id, cuenta_id, ae_id, titulo, valor_estimado, etapa, dias_sin_actividad) VALUES ('p2', 'c2', 'ae2', 'Campaña Navidad', 8000000, 'en_negociacion', 3)`).run();
+  testDb.prepare(`INSERT INTO propuesta (id, cuenta_id, ae_id, titulo, valor_estimado, etapa, dias_sin_actividad) VALUES ('p1', 'c1', 'ae1', 'Campana Verano', 5000000, 'enviada', 10)`).run();
+  testDb.prepare(`INSERT INTO propuesta (id, cuenta_id, ae_id, titulo, valor_estimado, etapa, dias_sin_actividad) VALUES ('p2', 'c2', 'ae2', 'Campana Navidad', 8000000, 'en_negociacion', 3)`).run();
 
   // Inventario
   testDb.prepare(`INSERT INTO inventario (id, medio, propiedad, formato, precio_referencia, precio_piso) VALUES ('inv1', 'tv_abierta', 'Canal Uno', 'spot_30s', 85000, 60000)`).run();
@@ -119,12 +119,12 @@ describe('buildToolContext', () => {
 // ---------------------------------------------------------------------------
 
 describe('registrar_actividad', () => {
-  it('registers an activity for a known account', () => {
+  it('registers an activity for a known account', async () => {
     const ctx = buildToolContext('ae1')!;
-    const result = JSON.parse(executeTool('registrar_actividad', {
+    const result = JSON.parse(await executeTool('registrar_actividad', {
       cuenta_nombre: 'Coca-Cola',
       tipo: 'llamada',
-      resumen: 'Llamé al cliente sobre la campaña',
+      resumen: 'Llame al cliente sobre la campana',
       sentimiento: 'positivo',
     }, ctx));
 
@@ -133,26 +133,26 @@ describe('registrar_actividad', () => {
 
     const row = testDb.prepare('SELECT * FROM actividad WHERE id = ?').get(result.id) as any;
     expect(row.ae_id).toBe('ae1');
-    expect(row.resumen).toContain('campaña');
+    expect(row.resumen).toContain('campana');
   });
 
-  it('returns error for unknown account', () => {
+  it('returns error for unknown account', async () => {
     const ctx = buildToolContext('ae1')!;
-    const result = JSON.parse(executeTool('registrar_actividad', {
+    const result = JSON.parse(await executeTool('registrar_actividad', {
       cuenta_nombre: 'NoExiste',
       tipo: 'llamada',
       resumen: 'Test',
     }, ctx));
 
-    expect(result.error).toContain('No encontré');
+    expect(result.error).toContain('No encontr');
   });
 
-  it('updates propuesta timestamp when linked', () => {
+  it('updates propuesta timestamp when linked', async () => {
     const ctx = buildToolContext('ae1')!;
-    executeTool('registrar_actividad', {
+    await executeTool('registrar_actividad', {
       cuenta_nombre: 'Coca',
       tipo: 'reunion',
-      resumen: 'Revisión propuesta',
+      resumen: 'Revision propuesta',
       propuesta_titulo: 'Verano',
     }, ctx);
 
@@ -162,17 +162,17 @@ describe('registrar_actividad', () => {
 });
 
 describe('crear_propuesta', () => {
-  it('creates a new propuesta', () => {
+  it('creates a new propuesta', async () => {
     const ctx = buildToolContext('ae1')!;
-    const result = JSON.parse(executeTool('crear_propuesta', {
+    const result = JSON.parse(await executeTool('crear_propuesta', {
       cuenta_nombre: 'Coca-Cola',
-      titulo: 'Campaña Navidad 2026',
+      titulo: 'Campana Navidad 2026',
       valor_estimado: 12000000,
       tipo_oportunidad: 'tentpole',
     }, ctx));
 
     expect(result.ok).toBe(true);
-    const row = testDb.prepare("SELECT * FROM propuesta WHERE titulo = 'Campaña Navidad 2026'").get() as any;
+    const row = testDb.prepare("SELECT * FROM propuesta WHERE titulo = 'Campana Navidad 2026'").get() as any;
     expect(row).toBeDefined();
     expect(row.etapa).toBe('en_preparacion');
     expect(row.valor_estimado).toBe(12000000);
@@ -180,9 +180,9 @@ describe('crear_propuesta', () => {
 });
 
 describe('actualizar_propuesta', () => {
-  it('updates stage with access', () => {
+  it('updates stage with access', async () => {
     const ctx = buildToolContext('ae1')!;
-    const result = JSON.parse(executeTool('actualizar_propuesta', {
+    const result = JSON.parse(await executeTool('actualizar_propuesta', {
       propuesta_titulo: 'Verano',
       etapa: 'en_discusion',
     }, ctx));
@@ -192,9 +192,9 @@ describe('actualizar_propuesta', () => {
     expect(row.etapa).toBe('en_discusion');
   });
 
-  it('blocks cross-AE update', () => {
+  it('blocks cross-AE update', async () => {
     const ctx = buildToolContext('ae2')!;
-    const result = JSON.parse(executeTool('actualizar_propuesta', {
+    const result = JSON.parse(await executeTool('actualizar_propuesta', {
       propuesta_titulo: 'Verano',
       etapa: 'completada',
     }, ctx));
@@ -202,9 +202,9 @@ describe('actualizar_propuesta', () => {
     expect(result.error).toContain('No tienes acceso');
   });
 
-  it('allows gerente to update team propuesta', () => {
+  it('allows gerente to update team propuesta', async () => {
     const ctx = buildToolContext('ger1')!;
-    const result = JSON.parse(executeTool('actualizar_propuesta', {
+    const result = JSON.parse(await executeTool('actualizar_propuesta', {
       propuesta_titulo: 'Verano',
       etapa: 'en_negociacion',
     }, ctx));
@@ -212,9 +212,9 @@ describe('actualizar_propuesta', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('requires razon for perdida', () => {
+  it('requires razon for perdida', async () => {
     const ctx = buildToolContext('ae1')!;
-    const result = JSON.parse(executeTool('actualizar_propuesta', {
+    const result = JSON.parse(await executeTool('actualizar_propuesta', {
       propuesta_titulo: 'Verano',
       etapa: 'perdida',
     }, ctx));
@@ -224,9 +224,9 @@ describe('actualizar_propuesta', () => {
 });
 
 describe('cerrar_propuesta', () => {
-  it('closes a propuesta as completada', () => {
+  it('closes a propuesta as completada', async () => {
     const ctx = buildToolContext('ae1')!;
-    const result = JSON.parse(executeTool('cerrar_propuesta', {
+    const result = JSON.parse(await executeTool('cerrar_propuesta', {
       propuesta_titulo: 'Verano',
       resultado: 'completada',
     }, ctx));
@@ -242,67 +242,67 @@ describe('cerrar_propuesta', () => {
 // ---------------------------------------------------------------------------
 
 describe('consultar_pipeline', () => {
-  it('returns propuestas scoped to AE', () => {
+  it('returns propuestas scoped to AE', async () => {
     const ctx = buildToolContext('ae1')!;
-    const result = JSON.parse(executeTool('consultar_pipeline', {}, ctx));
+    const result = JSON.parse(await executeTool('consultar_pipeline', {}, ctx));
 
     expect(result.propuestas.length).toBe(1);
-    expect(result.propuestas[0].titulo).toBe('Campaña Verano');
+    expect(result.propuestas[0].titulo).toBe('Campana Verano');
   });
 
-  it('returns all propuestas for VP', () => {
+  it('returns all propuestas for VP', async () => {
     const ctx = buildToolContext('vp1')!;
-    const result = JSON.parse(executeTool('consultar_pipeline', {}, ctx));
+    const result = JSON.parse(await executeTool('consultar_pipeline', {}, ctx));
 
     expect(result.propuestas.length).toBe(2);
   });
 
-  it('filters by etapa', () => {
+  it('filters by etapa', async () => {
     const ctx = buildToolContext('vp1')!;
-    const result = JSON.parse(executeTool('consultar_pipeline', { etapa: 'enviada' }, ctx));
+    const result = JSON.parse(await executeTool('consultar_pipeline', { etapa: 'enviada' }, ctx));
 
     expect(result.propuestas.length).toBe(1);
     expect(result.propuestas[0].etapa).toBe('enviada');
   });
 
-  it('filters stalled propuestas', () => {
+  it('filters stalled propuestas', async () => {
     const ctx = buildToolContext('vp1')!;
-    const result = JSON.parse(executeTool('consultar_pipeline', { solo_estancadas: true }, ctx));
+    const result = JSON.parse(await executeTool('consultar_pipeline', { solo_estancadas: true }, ctx));
 
     expect(result.propuestas.every((p: any) => p.dias_sin_actividad >= 7)).toBe(true);
   });
 });
 
 describe('consultar_cuenta', () => {
-  it('returns full account detail', () => {
+  it('returns full account detail', async () => {
     const ctx = buildToolContext('ae1')!;
-    const result = JSON.parse(executeTool('consultar_cuenta', { cuenta_nombre: 'Coca-Cola' }, ctx));
+    const result = JSON.parse(await executeTool('consultar_cuenta', { cuenta_nombre: 'Coca-Cola' }, ctx));
 
     expect(result.cuenta.nombre).toBe('Coca-Cola');
     expect(result.contactos.length).toBe(1);
     expect(result.propuestas_activas.length).toBe(1);
   });
 
-  it('returns error for unknown account', () => {
+  it('returns error for unknown account', async () => {
     const ctx = buildToolContext('ae1')!;
-    const result = JSON.parse(executeTool('consultar_cuenta', { cuenta_nombre: 'NoExiste' }, ctx));
+    const result = JSON.parse(await executeTool('consultar_cuenta', { cuenta_nombre: 'NoExiste' }, ctx));
 
-    expect(result.error).toContain('No encontré');
+    expect(result.error).toContain('No encontr');
   });
 });
 
 describe('consultar_inventario', () => {
-  it('returns all inventory', () => {
+  it('returns all inventory', async () => {
     const ctx = buildToolContext('ae1')!;
-    const result = JSON.parse(executeTool('consultar_inventario', {}, ctx));
+    const result = JSON.parse(await executeTool('consultar_inventario', {}, ctx));
 
     expect(result.productos.length).toBe(1);
     expect(result.productos[0].precio_referencia).toBe(85000);
   });
 
-  it('filters by medio', () => {
+  it('filters by medio', async () => {
     const ctx = buildToolContext('ae1')!;
-    const result = JSON.parse(executeTool('consultar_inventario', { medio: 'radio' }, ctx));
+    const result = JSON.parse(await executeTool('consultar_inventario', { medio: 'radio' }, ctx));
 
     expect(result.mensaje).toContain('No hay');
   });
@@ -313,12 +313,12 @@ describe('consultar_inventario', () => {
 // ---------------------------------------------------------------------------
 
 describe('enviar_email_seguimiento', () => {
-  it('creates a draft email', () => {
+  it('creates a draft email', async () => {
     const ctx = buildToolContext('ae1')!;
-    const result = JSON.parse(executeTool('enviar_email_seguimiento', {
+    const result = JSON.parse(await executeTool('enviar_email_seguimiento', {
       contacto_id: 'con1',
       asunto: 'Seguimiento propuesta',
-      cuerpo: 'Estimado, le envío seguimiento...',
+      cuerpo: 'Estimado, le envio seguimiento...',
     }, ctx));
 
     expect(result.ok).toBe(true);
@@ -330,31 +330,31 @@ describe('enviar_email_seguimiento', () => {
     expect(email.tipo).toBe('seguimiento');
   });
 
-  it('returns error for unknown contact', () => {
+  it('returns error for unknown contact', async () => {
     const ctx = buildToolContext('ae1')!;
-    const result = JSON.parse(executeTool('enviar_email_seguimiento', {
+    const result = JSON.parse(await executeTool('enviar_email_seguimiento', {
       contacto_id: 'ghost',
       asunto: 'Test',
       cuerpo: 'Test',
     }, ctx));
 
-    expect(result.error).toContain('No encontré');
+    expect(result.error).toContain('No encontr');
   });
 });
 
 describe('confirmar_envio_email', () => {
-  it('marks email as sent (MVP mode: saves as draft)', () => {
+  it('marks email as sent (MVP mode: saves as draft)', async () => {
     const ctx = buildToolContext('ae1')!;
 
     // Create draft first
-    const draft = JSON.parse(executeTool('enviar_email_seguimiento', {
+    const draft = JSON.parse(await executeTool('enviar_email_seguimiento', {
       contacto_id: 'con1',
       asunto: 'Test',
       cuerpo: 'Test body',
     }, ctx));
 
     // Confirm it
-    const result = JSON.parse(executeTool('confirmar_envio_email', {
+    const result = JSON.parse(await executeTool('confirmar_envio_email', {
       email_id: draft.email_id,
     }, ctx));
 
@@ -368,9 +368,9 @@ describe('confirmar_envio_email', () => {
 // ---------------------------------------------------------------------------
 
 describe('crear_evento_calendario', () => {
-  it('creates a local calendar event', () => {
+  it('creates a local calendar event', async () => {
     const ctx = buildToolContext('ae1')!;
-    const result = JSON.parse(executeTool('crear_evento_calendario', {
+    const result = JSON.parse(await executeTool('crear_evento_calendario', {
       titulo: 'Seguimiento P&G',
       fecha_inicio: '2026-03-10T10:00:00Z',
       tipo: 'seguimiento',
@@ -387,26 +387,57 @@ describe('crear_evento_calendario', () => {
 });
 
 describe('consultar_agenda', () => {
-  it('returns events for today', () => {
+  it('returns events for today', async () => {
     const ctx = buildToolContext('ae1')!;
 
     // Insert an event for today
     const todayStr = new Date().toISOString();
-    testDb.prepare(`INSERT INTO evento_calendario (id, persona_id, titulo, fecha_inicio, fecha_fin, tipo) VALUES ('ev-today', 'ae1', 'Reunión Test', ?, ?, 'reunion')`).run(todayStr, todayStr);
+    testDb.prepare(`INSERT INTO evento_calendario (id, persona_id, titulo, fecha_inicio, fecha_fin, tipo) VALUES ('ev-today', 'ae1', 'Reunion Test', ?, ?, 'reunion')`).run(todayStr, todayStr);
 
-    const result = JSON.parse(executeTool('consultar_agenda', { rango: 'hoy' }, ctx));
+    const result = JSON.parse(await executeTool('consultar_agenda', { rango: 'hoy' }, ctx));
     expect(result.eventos.length).toBeGreaterThanOrEqual(1);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Unknown tool
+// Async executeTool
 // ---------------------------------------------------------------------------
 
 describe('executeTool', () => {
-  it('returns error for unknown tool', () => {
+  it('returns error for unknown tool', async () => {
     const ctx = buildToolContext('ae1')!;
-    const result = JSON.parse(executeTool('no_existe', {}, ctx));
+    const result = JSON.parse(await executeTool('no_existe', {}, ctx));
     expect(result.error).toContain('desconocida');
+  });
+
+  it('returns a Promise', () => {
+    const ctx = buildToolContext('ae1')!;
+    const result = executeTool('consultar_pipeline', {}, ctx);
+    expect(result).toBeInstanceOf(Promise);
+  });
+
+  it('handles async tool handlers (email confirm)', async () => {
+    const ctx = buildToolContext('ae1')!;
+    const draft = JSON.parse(await executeTool('enviar_email_seguimiento', {
+      contacto_id: 'con1',
+      asunto: 'Async test',
+      cuerpo: 'Testing async',
+    }, ctx));
+
+    const result = await executeTool('confirmar_envio_email', {
+      email_id: draft.email_id,
+    }, ctx);
+    const parsed = JSON.parse(result);
+    expect(parsed.ok).toBe(true);
+  });
+
+  it('handles async calendar creation', async () => {
+    const ctx = buildToolContext('ae1')!;
+    const result = await executeTool('crear_evento_calendario', {
+      titulo: 'Async Event',
+      fecha_inicio: '2026-04-01T14:00:00Z',
+    }, ctx);
+    const parsed = JSON.parse(result);
+    expect(parsed.ok).toBe(true);
   });
 });

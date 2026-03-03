@@ -1,9 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import { bootstrapCrm } from '../../crm/src/bootstrap.js';
+import { startAlertScheduler } from '../../crm/src/alert-scheduler.js';
+import { seedBriefings } from '../../crm/src/briefing-seeds.js';
 
 import {
   ASSISTANT_NAME,
+  DATA_DIR,
   IDLE_TIMEOUT,
   MAIN_GROUP_FOLDER,
   POLL_INTERVAL,
@@ -455,6 +458,8 @@ async function main(): Promise<void> {
     logger.fatal({ err }, 'CRM bootstrap failed — aborting startup');
     process.exit(1);
   }
+  startAlertScheduler(DATA_DIR);  // CRM hook: alert evaluation every 2h
+  seedBriefings();                // CRM hook: idempotent briefing task seeding
   logger.info('Database initialized');
   loadState();
 

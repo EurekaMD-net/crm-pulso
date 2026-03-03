@@ -9,6 +9,7 @@
  */
 
 import { getDatabase } from '../../../engine/src/db.js';
+import { isGoogleEnabled, getCalendarClient } from '../google-auth.js';
 import type { ToolContext } from './index.js';
 
 function genId(prefix: string): string {
@@ -23,7 +24,7 @@ function isCalendarEnabled(): boolean {
 // crear_evento_calendario
 // ---------------------------------------------------------------------------
 
-export function crear_evento_calendario(args: Record<string, unknown>, ctx: ToolContext): string {
+export async function crear_evento_calendario(args: Record<string, unknown>, ctx: ToolContext): Promise<string> {
   const db = getDatabase();
   const titulo = args.titulo as string;
   const fechaInicio = args.fecha_inicio as string;
@@ -40,11 +41,28 @@ export function crear_evento_calendario(args: Record<string, unknown>, ctx: Tool
 
   const id = genId('evt');
 
-  // Google Calendar API would go here if enabled
+  // Google Calendar API
   let googleEventId: string | null = null;
-  if (isCalendarEnabled()) {
-    // TODO: implement Google Calendar API call
-    // googleEventId = await createGoogleEvent(...)
+  if (isCalendarEnabled() && isGoogleEnabled()) {
+    const persona = db.prepare('SELECT email, google_calendar_id FROM persona WHERE id = ?').get(ctx.persona_id) as any;
+    if (persona?.email) {
+      try {
+        const calendar = getCalendarClient(persona.email);
+        const calendarId = persona.google_calendar_id || 'primary';
+        const event = await calendar.events.insert({
+          calendarId,
+          requestBody: {
+            summary: titulo,
+            description: descripcion,
+            start: { dateTime: fechaInicio },
+            end: { dateTime: fechaFin },
+          },
+        });
+        googleEventId = event.data.id ?? null;
+      } catch {
+        // Fail gracefully — still store locally
+      }
+    }
   }
 
   db.prepare(`
@@ -58,9 +76,11 @@ export function crear_evento_calendario(args: Record<string, unknown>, ctx: Tool
     hour: '2-digit', minute: '2-digit',
   });
 
-  const calendarNote = isCalendarEnabled()
-    ? ''
-    : ' (registrado localmente — Google Calendar no configurado)';
+  const calendarNote = googleEventId
+    ? ' (sincronizado con Google Calendar)'
+    : isCalendarEnabled()
+      ? ''
+      : ' (registrado localmente — Google Calendar no configurado)';
 
   return JSON.stringify({
     ok: true,

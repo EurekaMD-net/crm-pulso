@@ -9,6 +9,7 @@
 
 import { getDatabase } from '../../engine/src/db.js';
 import { getPersonByGroupFolder, hasAccessTo } from './hierarchy.js';
+import { evaluateAlerts, logAlerts } from './alerts.js';
 import { logger } from './logger.js';
 import type { IpcDeps } from '../../engine/src/ipc.js';
 
@@ -105,11 +106,36 @@ export async function processCrmIpc(
   data: Record<string, unknown>,
   sourceGroup: string,
   _isMain: boolean,
-  _deps: IpcDeps,
+  deps: IpcDeps,
 ): Promise<boolean> {
   const db = getDatabase();
 
   switch (data.type) {
+    case 'crm_evaluate_alerts': {
+      try {
+        const alerts = evaluateAlerts();
+        if (alerts.length === 0) {
+          logger.info('Alert evaluation: no new alerts');
+          return true;
+        }
+
+        const groups = deps.registeredGroups();
+        for (const alert of alerts) {
+          const jid = Object.keys(groups).find(
+            k => groups[k].folder === alert.grupo_destino_folder,
+          );
+          if (jid) {
+            await deps.sendMessage(jid, alert.mensaje);
+          }
+        }
+        logAlerts(alerts);
+        logger.info({ count: alerts.length }, 'Alerts evaluated and sent');
+        return true;
+      } catch (err) {
+        return handleIpcError(err, sourceGroup, data.type);
+      }
+    }
+
     case 'crm_registrar_actividad': {
       try {
         const person = getPersonByGroupFolder(sourceGroup);

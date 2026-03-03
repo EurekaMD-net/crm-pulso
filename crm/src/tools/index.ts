@@ -49,7 +49,7 @@ export function buildToolContext(personaId: string): ToolContext | null {
 // Tool handler type
 // ---------------------------------------------------------------------------
 
-export type ToolHandler = (args: Record<string, unknown>, ctx: ToolContext) => string;
+export type ToolHandler = (args: Record<string, unknown>, ctx: ToolContext) => string | Promise<string>;
 
 // ---------------------------------------------------------------------------
 // Tool definitions (OpenAI function-calling format)
@@ -416,7 +416,7 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   establecer_recordatorio,
 };
 
-export function executeTool(name: string, args: Record<string, unknown>, ctx: ToolContext): string {
+export async function executeTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<string> {
   const handler = TOOL_HANDLERS[name];
   if (!handler) {
     return JSON.stringify({ error: `Herramienta desconocida: ${name}` });
