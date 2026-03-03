@@ -196,6 +196,10 @@ function buildVolumeMounts(
     });
   }
 
+  // CRM hook: Mount shared database (read-write) for direct tool access
+  const crmDbPath = path.join(DATA_DIR, 'store');
+  mounts.push({ hostPath: crmDbPath, containerPath: '/workspace/extra/crm-db', readonly: false });
+
   // Additional mounts validated against external allowlist (tamper-proof from containers)
   if (group.containerConfig?.additionalMounts) {
     const validatedMounts = validateAdditionalMounts(
@@ -214,7 +218,11 @@ function buildVolumeMounts(
  * Secrets are never written to disk or mounted as files.
  */
 function readSecrets(): Record<string, string> {
-  return readEnvFile(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']);
+  return readEnvFile([
+    'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY',
+    'INFERENCE_PRIMARY_URL', 'INFERENCE_PRIMARY_KEY', 'INFERENCE_PRIMARY_MODEL',
+    'INFERENCE_FALLBACK_URL', 'INFERENCE_FALLBACK_KEY', 'INFERENCE_FALLBACK_MODEL',
+  ]);
 }
 
 function buildContainerArgs(
