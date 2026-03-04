@@ -32,7 +32,7 @@ export function bootstrapCrm(): void {
       logger.warn({ missing }, 'CRM tables missing after bootstrap');
     }
 
-    logger.info({ tables: CRM_TABLES.length - missing.length }, 'CRM schema initialized');
+    logger.info({ tables: CRM_TABLES.length - missing.length, expected: CRM_TABLES.length }, 'CRM schema initialized');
   } catch (err) {
     logger.error({ err }, 'CRM bootstrap failed');
     throw err;

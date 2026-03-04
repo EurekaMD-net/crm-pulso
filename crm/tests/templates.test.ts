@@ -17,6 +17,21 @@ vi.mock('../../engine/src/db.js', () => ({
   getDatabase: () => testDb,
 }));
 
+const noop = () => {};
+const noopLogger = { info: noop, warn: noop, error: noop, debug: noop, fatal: noop, child: () => noopLogger };
+vi.mock('../../engine/src/logger.js', () => ({
+  logger: noopLogger,
+}));
+
+vi.mock('../src/google-auth.js', () => ({
+  isGoogleEnabled: () => false,
+  getGmailClient: () => { throw new Error('Not configured'); },
+  getGmailReadClient: () => { throw new Error('Not configured'); },
+  getCalendarClient: () => { throw new Error('Not configured'); },
+  getCalendarReadClient: () => { throw new Error('Not configured'); },
+  getDriveClient: () => { throw new Error('Not configured'); },
+}));
+
 // Dynamic import after mock
 const { getToolsForRole } = await import('../src/tools/index.js');
 
@@ -43,7 +58,7 @@ const allTemplateNames = ['global.md', 'ae.md', 'manager.md', 'director.md', 'vp
 // ---------------------------------------------------------------------------
 
 describe('global.md -- schema coverage', () => {
-  it('references all 12 CRM table names', () => {
+  it('references all 15 CRM table names', () => {
     for (const table of CRM_TABLES) {
       expect(globalMd, `Missing table: ${table}`).toContain(table);
     }
@@ -130,8 +145,8 @@ describe('global.md -- tool coverage', () => {
     }
   }
 
-  it('references all 17 tool names', () => {
-    expect(allToolNames.size).toBe(17);
+  it('references all 25 tool names', () => {
+    expect(allToolNames.size).toBe(25);
     for (const name of allToolNames) {
       expect(globalMd, `Missing tool: ${name}`).toContain(name);
     }
@@ -145,7 +160,7 @@ describe('global.md -- tool coverage', () => {
 describe('ae.md -- tool references', () => {
   const aeTools = getToolsForRole('ae').map(t => t.function.name);
 
-  it('references all 16 AE tools', () => {
+  it('references all 24 AE tools', () => {
     for (const name of aeTools) {
       expect(aeMd, `Missing AE tool: ${name}`).toContain(name);
     }
@@ -159,7 +174,7 @@ describe('ae.md -- tool references', () => {
 describe('manager.md -- tool references', () => {
   const gerenteTools = getToolsForRole('gerente').map(t => t.function.name);
 
-  it('references all 9 gerente tools', () => {
+  it('references all 16 gerente tools', () => {
     for (const name of gerenteTools) {
       expect(managerMd, `Missing gerente tool: ${name}`).toContain(name);
     }
@@ -178,7 +193,7 @@ describe('manager.md -- tool references', () => {
 describe('director.md -- tool references', () => {
   const directorTools = getToolsForRole('director').map(t => t.function.name);
 
-  it('references all 8 director tools', () => {
+  it('references all 15 director tools', () => {
     for (const name of directorTools) {
       expect(directorMd, `Missing director tool: ${name}`).toContain(name);
     }
@@ -192,7 +207,7 @@ describe('director.md -- tool references', () => {
 describe('vp.md -- tool references', () => {
   const vpTools = getToolsForRole('vp').map(t => t.function.name);
 
-  it('references all 7 VP tools', () => {
+  it('references all 14 VP tools', () => {
     for (const name of vpTools) {
       expect(vpMd, `Missing VP tool: ${name}`).toContain(name);
     }
@@ -211,7 +226,7 @@ describe('vp.md -- tool references', () => {
 describe('no OLD English schema references', () => {
   const oldNames = [
     'crm_people', 'crm_accounts', 'crm_contacts', 'crm_opportunities',
-    'crm_interactions', 'crm_quotas', 'crm_events', 'crm_media_types',
+    'crm_interactions', 'crm_quotas', 'crm_media_types',
     'crm_proposals', 'crm_tasks_crm',
   ];
 

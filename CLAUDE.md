@@ -11,26 +11,27 @@ Agentic CRM for media ad sales. NanoClaw engine at `engine/`, all CRM code at `c
 | File | Purpose |
 |------|---------|
 | `crm/src/bootstrap.ts` | CRM init: creates schema, registers hooks |
-| `crm/src/schema.ts` | 11 CRM tables + 2 RAG tables |
+| `crm/src/schema.ts` | 15 CRM tables (12 core + crm_events + crm_documents + crm_embeddings) |
 | `crm/src/hierarchy.ts` | isManagerOf, isDirectorOf, isVp helpers |
-| `crm/src/ipc-handlers.ts` | CRM IPC handler (crm_log_interaction, etc.) |
-| `crm/src/doc-sync.ts` | Document sync pipeline (Phase 7) |
-| `crm/src/register.ts` | Batch hierarchy registration |
-| `crm/container/mcp/src/crm-tools.ts` | CRM write tools MCP server |
-| `crm/container/mcp/src/google-workspace.ts` | Gmail, Drive, Calendar MCP server |
-| `crm/container/mcp/src/rag-search.ts` | Semantic document search MCP server |
+| `crm/src/ipc-handlers.ts` | CRM IPC handler (crm_registrar_actividad, etc.) |
+| `crm/src/doc-sync.ts` | Document sync + RAG pipeline (chunk, embed, search) |
+| `crm/src/register.ts` | Batch hierarchy registration (CSV/JSON) |
+| `crm/src/escalation.ts` | Real-time escalation (quota, coaching, pattern, systemic) |
+| `crm/src/alerts.ts` | Alert evaluators (6 types + event countdown) |
+| `crm/src/google-auth.ts` | Google Workspace JWT auth (Gmail, Drive, Calendar) |
+| `crm/src/tools/index.ts` | Tool registry: 25 tools, role-based filtering |
 | `crm/groups/global.md` | Global CLAUDE.md template (schema, queries, rules) |
-| `crm/groups/ae.md` | AE persona template |
-| `crm/groups/manager.md` | Manager persona template |
+| `crm/groups/ae.md` | AE persona template (24 tools) |
+| `crm/groups/manager.md` | Manager persona template (16 tools) |
 
 ### Engine Hook Points (DO NOT modify beyond these 5 files)
 
 | File | Change |
 |------|--------|
 | `engine/src/db.ts` | `getDatabase()` export |
-| `engine/src/index.ts` | `bootstrapCrm()` call in main() |
+| `engine/src/index.ts` | `bootstrapCrm()` + schedulers (alerts, followups, doc-sync) |
 | `engine/src/ipc.ts` | CRM IPC delegation in default case |
-| `engine/container/agent-runner/src/index.ts` | CRM MCP servers + allowed tools |
+| `engine/container/agent-runner/src/index.ts` | Allowed tools |
 | `engine/src/container-runner.ts` | CRM document store mount |
 
 ## Development
@@ -83,17 +84,20 @@ git subtree pull --prefix=engine https://github.com/qwibitai/nanoclaw.git main -
 ### Message Flow
 
 ```
-WhatsApp → engine (NanoClaw) → CRM container (extends engine image)
-                                    ├── Claude Agent SDK
-                                    ├── CRM MCP tools (crm-tools, google-workspace, rag-search)
+WhatsApp → engine (NanoClaw) → Direct tools (25 CRM tools via inference adapter)
+                                    ├── Role-based tool filtering
+                                    ├── Google Workspace (Gmail, Drive, Calendar)
+                                    ├── RAG search (buscar_documentos)
                                     └── CRM CLAUDE.md (persona + schema + rules)
 ```
 
 ## CRM Patterns
 
-### Adding a new MCP tool
-1. Add the tool handler in the appropriate MCP server (`crm/container/mcp/src/`)
-2. The tool is automatically available to agents (allowed via `mcp__crm_tools__*` wildcard)
+### Adding a new tool
+1. Create handler in `crm/src/tools/<module>.ts`
+2. Add TOOL_* definition + role sets + handler in `crm/src/tools/index.ts`
+3. Update role templates in `crm/groups/*.md`
+4. Update tool count tests in `agent-runner.test.ts` and `templates.test.ts`
 
 ### Adding a new IPC type
 1. Add the handler in `crm/src/ipc-handlers.ts`
@@ -101,15 +105,15 @@ WhatsApp → engine (NanoClaw) → CRM container (extends engine image)
 
 ### Adding new schema tables
 1. Add table definition in `crm/src/schema.ts`
-2. Call creation in `crm/src/bootstrap.ts`
+2. Update CRM_TABLES array
 3. Add tests in `crm/tests/schema.test.ts`
 
 ## Testing
 
 ```bash
-npm run test         # All tests
+npm run test         # All tests (361 CRM tests)
 ```
 
 Tests live in:
 - `engine/src/*.test.ts` — Engine tests
-- `crm/tests/*.test.ts` — CRM tests
+- `crm/tests/*.test.ts` — CRM tests (15 test files)

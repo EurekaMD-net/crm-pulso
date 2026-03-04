@@ -22,6 +22,10 @@ import {
   crear_evento_calendario, consultar_agenda,
 } from './calendar.js';
 import { establecer_recordatorio } from './seguimiento.js';
+import { consultar_eventos, consultar_inventario_evento } from './eventos.js';
+import { buscar_documentos } from './rag.js';
+import { buscar_emails, leer_email, crear_borrador_email } from './gmail.js';
+import { listar_archivos_drive, leer_archivo_drive } from './drive.js';
 
 // ---------------------------------------------------------------------------
 // Tool context — passed to every tool handler
@@ -352,6 +356,131 @@ const TOOL_ESTABLECER_RECORDATORIO: ToolDefinition = {
   },
 };
 
+const TOOL_CONSULTAR_EVENTOS: ToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'consultar_eventos',
+    description: 'Consulta eventos proximos (deportivos, tentpoles, estacionales, industria) y su inventario disponible.',
+    parameters: {
+      type: 'object',
+      properties: {
+        tipo: { type: 'string', enum: ['tentpole', 'deportivo', 'estacional', 'industria'], description: 'Filtrar por tipo de evento' },
+        dias_adelante: { type: 'number', description: 'Dias a futuro (default 90)' },
+      },
+    },
+  },
+};
+
+const TOOL_CONSULTAR_INVENTARIO_EVENTO: ToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'consultar_inventario_evento',
+    description: 'Consulta el inventario detallado de un evento especifico: disponibilidad por medio, meta de ingresos.',
+    parameters: {
+      type: 'object',
+      properties: {
+        evento_nombre: { type: 'string', description: 'Nombre del evento' },
+      },
+      required: ['evento_nombre'],
+    },
+  },
+};
+
+const TOOL_BUSCAR_EMAILS: ToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'buscar_emails',
+    description: 'Busca emails en la bandeja de entrada de Gmail.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Consulta de busqueda (formato Gmail: from:, subject:, etc.)' },
+        limite: { type: 'number', description: 'Numero maximo de resultados (default 10)' },
+      },
+    },
+  },
+};
+
+const TOOL_LEER_EMAIL: ToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'leer_email',
+    description: 'Lee el contenido completo de un email por su ID.',
+    parameters: {
+      type: 'object',
+      properties: {
+        email_id: { type: 'string', description: 'ID del email (obtenido de buscar_emails)' },
+      },
+      required: ['email_id'],
+    },
+  },
+};
+
+const TOOL_CREAR_BORRADOR_EMAIL: ToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'crear_borrador_email',
+    description: 'Crea un borrador de email en Gmail.',
+    parameters: {
+      type: 'object',
+      properties: {
+        destinatario: { type: 'string', description: 'Email del destinatario' },
+        asunto: { type: 'string', description: 'Asunto del email' },
+        cuerpo: { type: 'string', description: 'Cuerpo del email' },
+      },
+      required: ['destinatario', 'asunto', 'cuerpo'],
+    },
+  },
+};
+
+const TOOL_LISTAR_ARCHIVOS_DRIVE: ToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'listar_archivos_drive',
+    description: 'Lista archivos en Google Drive con busqueda opcional.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Texto de busqueda (opcional)' },
+        carpeta_id: { type: 'string', description: 'ID de carpeta para filtrar (opcional)' },
+        limite: { type: 'number', description: 'Numero maximo de resultados (default 20)' },
+      },
+    },
+  },
+};
+
+const TOOL_LEER_ARCHIVO_DRIVE: ToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'leer_archivo_drive',
+    description: 'Lee el contenido de un archivo de Google Drive (truncado a 50KB).',
+    parameters: {
+      type: 'object',
+      properties: {
+        archivo_id: { type: 'string', description: 'ID del archivo (obtenido de listar_archivos_drive)' },
+      },
+      required: ['archivo_id'],
+    },
+  },
+};
+
+const TOOL_BUSCAR_DOCUMENTOS: ToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'buscar_documentos',
+    description: 'Busca en documentos sincronizados (Drive, email) usando busqueda semantica.',
+    parameters: {
+      type: 'object',
+      properties: {
+        consulta: { type: 'string', description: 'Texto de busqueda semantica' },
+        limite: { type: 'number', description: 'Numero maximo de resultados (default 5)' },
+        tipo_doc: { type: 'string', description: 'Filtrar por tipo (google_doc, google_sheet, text, email)' },
+      },
+      required: ['consulta'],
+    },
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Role-based tool sets
 // ---------------------------------------------------------------------------
@@ -363,24 +492,40 @@ const AE_TOOLS: ToolDefinition[] = [
   TOOL_CREAR_EVENTO_CALENDARIO, TOOL_CONSULTAR_AGENDA,
   TOOL_CONSULTAR_PIPELINE, TOOL_CONSULTAR_CUENTA, TOOL_CONSULTAR_INVENTARIO,
   TOOL_CONSULTAR_ACTIVIDADES, TOOL_CONSULTAR_DESCARGA, TOOL_CONSULTAR_CUOTA,
+  TOOL_CONSULTAR_EVENTOS, TOOL_CONSULTAR_INVENTARIO_EVENTO,
+  TOOL_BUSCAR_EMAILS, TOOL_LEER_EMAIL, TOOL_CREAR_BORRADOR_EMAIL,
+  TOOL_LISTAR_ARCHIVOS_DRIVE, TOOL_LEER_ARCHIVO_DRIVE,
+  TOOL_BUSCAR_DOCUMENTOS,
 ];
 
 const GERENTE_TOOLS: ToolDefinition[] = [
   TOOL_CONSULTAR_PIPELINE, TOOL_CONSULTAR_CUENTA, TOOL_CONSULTAR_INVENTARIO,
   TOOL_CONSULTAR_ACTIVIDADES, TOOL_CONSULTAR_DESCARGA, TOOL_CONSULTAR_CUOTA,
   TOOL_ENVIAR_EMAIL_BRIEFING, TOOL_CREAR_EVENTO_CALENDARIO, TOOL_CONSULTAR_AGENDA,
+  TOOL_CONSULTAR_EVENTOS, TOOL_CONSULTAR_INVENTARIO_EVENTO,
+  TOOL_BUSCAR_EMAILS, TOOL_LEER_EMAIL,
+  TOOL_LISTAR_ARCHIVOS_DRIVE, TOOL_LEER_ARCHIVO_DRIVE,
+  TOOL_BUSCAR_DOCUMENTOS,
 ];
 
 const DIRECTOR_TOOLS: ToolDefinition[] = [
   TOOL_CONSULTAR_PIPELINE, TOOL_CONSULTAR_CUENTA, TOOL_CONSULTAR_INVENTARIO,
   TOOL_CONSULTAR_ACTIVIDADES, TOOL_CONSULTAR_DESCARGA, TOOL_CONSULTAR_CUOTA,
   TOOL_CREAR_EVENTO_CALENDARIO, TOOL_CONSULTAR_AGENDA,
+  TOOL_CONSULTAR_EVENTOS, TOOL_CONSULTAR_INVENTARIO_EVENTO,
+  TOOL_BUSCAR_EMAILS, TOOL_LEER_EMAIL,
+  TOOL_LISTAR_ARCHIVOS_DRIVE, TOOL_LEER_ARCHIVO_DRIVE,
+  TOOL_BUSCAR_DOCUMENTOS,
 ];
 
 const VP_TOOLS: ToolDefinition[] = [
   TOOL_CONSULTAR_PIPELINE, TOOL_CONSULTAR_CUENTA, TOOL_CONSULTAR_INVENTARIO,
   TOOL_CONSULTAR_ACTIVIDADES, TOOL_CONSULTAR_DESCARGA, TOOL_CONSULTAR_CUOTA,
   TOOL_CONSULTAR_AGENDA,
+  TOOL_CONSULTAR_EVENTOS, TOOL_CONSULTAR_INVENTARIO_EVENTO,
+  TOOL_BUSCAR_EMAILS, TOOL_LEER_EMAIL,
+  TOOL_LISTAR_ARCHIVOS_DRIVE, TOOL_LEER_ARCHIVO_DRIVE,
+  TOOL_BUSCAR_DOCUMENTOS,
 ];
 
 export function getToolsForRole(role: 'ae' | 'gerente' | 'director' | 'vp'): ToolDefinition[] {
@@ -414,6 +559,14 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   crear_evento_calendario,
   consultar_agenda,
   establecer_recordatorio,
+  consultar_eventos,
+  consultar_inventario_evento,
+  buscar_emails,
+  leer_email,
+  crear_borrador_email,
+  listar_archivos_drive,
+  leer_archivo_drive,
+  buscar_documentos,
 };
 
 export async function executeTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<string> {

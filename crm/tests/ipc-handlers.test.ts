@@ -243,6 +243,69 @@ describe('crm_crear_propuesta', () => {
   });
 });
 
+// --- crm_check_followups ---
+
+describe('crm_check_followups', () => {
+  const fakeGroup = { name: 'AE1', folder: 'ae1', trigger: '@bot', added_at: '2026-01-01' } as any;
+  beforeEach(setupDb);
+
+  it('sends reminders for upcoming follow-ups', async () => {
+    // Create activity with follow-up within 2 hours
+    const upcoming = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    testDb.prepare(`INSERT INTO actividad (id, ae_id, cuenta_id, tipo, resumen, siguiente_accion, fecha_siguiente_accion, fecha) VALUES ('act1', 'ae1', 'c1', 'llamada', 'Test', 'Llamar de vuelta', ?, datetime('now'))`).run(upcoming);
+
+    const sent: { jid: string; text: string }[] = [];
+    const depsWithSend: IpcDeps = {
+      ...fakeDeps,
+      sendMessage: async (jid, text) => { sent.push({ jid, text }); },
+      registeredGroups: () => ({ 'jid-ae1': fakeGroup }),
+    };
+
+    await processCrmIpc({ type: 'crm_check_followups' }, 'main', true, depsWithSend);
+    expect(sent.length).toBe(1);
+    expect(sent[0].text).toContain('Llamar de vuelta');
+  });
+
+  it('skips past follow-ups', async () => {
+    const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    testDb.prepare(`INSERT INTO actividad (id, ae_id, tipo, resumen, siguiente_accion, fecha_siguiente_accion, fecha) VALUES ('act2', 'ae1', 'llamada', 'Test', 'Old action', ?, datetime('now'))`).run(past);
+
+    const sent: string[] = [];
+    const depsWithSend: IpcDeps = {
+      ...fakeDeps,
+      sendMessage: async (_jid, text) => { sent.push(text); },
+      registeredGroups: () => ({ 'jid-ae1': fakeGroup }),
+    };
+
+    await processCrmIpc({ type: 'crm_check_followups' }, 'main', true, depsWithSend);
+    expect(sent.length).toBe(0);
+  });
+
+  it('deduplicates reminders on same day', async () => {
+    const upcoming = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    testDb.prepare(`INSERT INTO actividad (id, ae_id, tipo, resumen, siguiente_accion, fecha_siguiente_accion, fecha) VALUES ('act3', 'ae1', 'llamada', 'Test', 'Follow up', ?, datetime('now'))`).run(upcoming);
+
+    const depsWithSend: IpcDeps = {
+      ...fakeDeps,
+      sendMessage: async () => {},
+      registeredGroups: () => ({ 'jid-ae1': fakeGroup }),
+    };
+
+    await processCrmIpc({ type: 'crm_check_followups' }, 'main', true, depsWithSend);
+
+    // Second call should not send again
+    const sent: string[] = [];
+    const depsWithCapture: IpcDeps = {
+      ...fakeDeps,
+      sendMessage: async (_jid, text) => { sent.push(text); },
+      registeredGroups: () => ({ 'jid-ae1': fakeGroup }),
+    };
+
+    await processCrmIpc({ type: 'crm_check_followups' }, 'main', true, depsWithCapture);
+    expect(sent.length).toBe(0);
+  });
+});
+
 // --- Unknown types ---
 
 describe('unknown IPC types', () => {

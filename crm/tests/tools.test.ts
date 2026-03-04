@@ -15,6 +15,21 @@ vi.mock('../../engine/src/db.js', () => ({
   getDatabase: () => testDb,
 }));
 
+const noop = () => {};
+const noopLogger = { info: noop, warn: noop, error: noop, debug: noop, fatal: noop, child: () => noopLogger };
+vi.mock('../../engine/src/logger.js', () => ({
+  logger: noopLogger,
+}));
+
+vi.mock('../src/google-auth.js', () => ({
+  isGoogleEnabled: () => false,
+  getGmailClient: () => { throw new Error('Not configured'); },
+  getGmailReadClient: () => { throw new Error('Not configured'); },
+  getCalendarClient: () => { throw new Error('Not configured'); },
+  getCalendarReadClient: () => { throw new Error('Not configured'); },
+  getDriveClient: () => { throw new Error('Not configured'); },
+}));
+
 const {
   getToolsForRole, executeTool, buildToolContext,
 } = await import('../src/tools/index.js');
@@ -400,6 +415,57 @@ describe('consultar_agenda', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Event Tools
+// ---------------------------------------------------------------------------
+
+describe('consultar_eventos', () => {
+  it('returns upcoming events', async () => {
+    const futureDate = new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10);
+    const invTotal = JSON.stringify({ tv_abierta: 100, ctv: 50 });
+    const invVendido = JSON.stringify({ tv_abierta: 30, ctv: 10 });
+    testDb.prepare(`INSERT INTO crm_events (id, nombre, tipo, fecha_inicio, inventario_total, inventario_vendido, prioridad) VALUES ('ev1', 'Copa del Mundo', 'deportivo', ?, ?, ?, 'alta')`).run(futureDate, invTotal, invVendido);
+
+    const ctx = buildToolContext('ae1')!;
+    const result = JSON.parse(await executeTool('consultar_eventos', {}, ctx));
+    expect(result.total).toBeGreaterThanOrEqual(1);
+    expect(result.eventos[0].nombre).toBe('Copa del Mundo');
+    expect(result.eventos[0].disponibilidad).toBeDefined();
+  });
+
+  it('filters by tipo', async () => {
+    const futureDate = new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10);
+    testDb.prepare(`INSERT INTO crm_events (id, nombre, tipo, fecha_inicio) VALUES ('ev1', 'Copa', 'deportivo', ?)`).run(futureDate);
+    testDb.prepare(`INSERT INTO crm_events (id, nombre, tipo, fecha_inicio) VALUES ('ev2', 'Buen Fin', 'estacional', ?)`).run(futureDate);
+
+    const ctx = buildToolContext('ae1')!;
+    const result = JSON.parse(await executeTool('consultar_eventos', { tipo: 'deportivo' }, ctx));
+    expect(result.total).toBe(1);
+    expect(result.eventos[0].nombre).toBe('Copa');
+  });
+});
+
+describe('consultar_inventario_evento', () => {
+  it('returns detailed inventory', async () => {
+    const invTotal = JSON.stringify({ tv_abierta: 100, ctv: 50, radio: 200 });
+    const invVendido = JSON.stringify({ tv_abierta: 60, ctv: 20, radio: 100 });
+    testDb.prepare(`INSERT INTO crm_events (id, nombre, tipo, fecha_inicio, inventario_total, inventario_vendido) VALUES ('ev1', 'Copa del Mundo', 'deportivo', '2026-06-11', ?, ?)`).run(invTotal, invVendido);
+
+    const ctx = buildToolContext('ae1')!;
+    const result = JSON.parse(await executeTool('consultar_inventario_evento', { evento_nombre: 'Copa' }, ctx));
+    expect(result.evento.nombre).toBe('Copa del Mundo');
+    expect(result.inventario.length).toBe(3);
+    expect(result.inventario[0].medio).toBe('tv_abierta');
+    expect(result.inventario[0].disponible_pct).toBe(40);
+  });
+
+  it('returns error for unknown event', async () => {
+    const ctx = buildToolContext('ae1')!;
+    const result = JSON.parse(await executeTool('consultar_inventario_evento', { evento_nombre: 'NoExiste' }, ctx));
+    expect(result.error).toContain('No encontre');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Async executeTool
 // ---------------------------------------------------------------------------
 
@@ -439,5 +505,52 @@ describe('executeTool', () => {
     }, ctx);
     const parsed = JSON.parse(result);
     expect(parsed.ok).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Gmail & Drive Tools -- Graceful Degradation
+// ---------------------------------------------------------------------------
+
+describe('Gmail tools graceful degradation', () => {
+  it('buscar_emails returns error without Google configured', async () => {
+    delete process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+    const ctx = buildToolContext('ae1')!;
+    const result = JSON.parse(await executeTool('buscar_emails', { query: 'test' }, ctx));
+    expect(result.error).toContain('Gmail no configurado');
+  });
+
+  it('leer_email returns error without Google configured', async () => {
+    delete process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+    const ctx = buildToolContext('ae1')!;
+    const result = JSON.parse(await executeTool('leer_email', { email_id: 'abc123' }, ctx));
+    expect(result.error).toContain('Gmail no configurado');
+  });
+
+  it('crear_borrador_email returns error without Google configured', async () => {
+    delete process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+    const ctx = buildToolContext('ae1')!;
+    const result = JSON.parse(await executeTool('crear_borrador_email', {
+      destinatario: 'test@example.com',
+      asunto: 'Test',
+      cuerpo: 'Test body',
+    }, ctx));
+    expect(result.error).toContain('Gmail no configurado');
+  });
+});
+
+describe('Drive tools graceful degradation', () => {
+  it('listar_archivos_drive returns error without Google configured', async () => {
+    delete process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+    const ctx = buildToolContext('ae1')!;
+    const result = JSON.parse(await executeTool('listar_archivos_drive', {}, ctx));
+    expect(result.error).toContain('Google Drive no configurado');
+  });
+
+  it('leer_archivo_drive returns error without Google configured', async () => {
+    delete process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+    const ctx = buildToolContext('ae1')!;
+    const result = JSON.parse(await executeTool('leer_archivo_drive', { archivo_id: 'abc123' }, ctx));
+    expect(result.error).toContain('Google Drive no configurado');
   });
 });

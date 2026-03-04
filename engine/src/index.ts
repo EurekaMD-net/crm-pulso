@@ -3,6 +3,8 @@ import path from 'path';
 import { bootstrapCrm } from '../../crm/src/bootstrap.js';
 import { startAlertScheduler } from '../../crm/src/alert-scheduler.js';
 import { seedBriefings } from '../../crm/src/briefing-seeds.js';
+import { startFollowupScheduler } from '../../crm/src/followup-scheduler.js';
+import { startDocSyncScheduler } from '../../crm/src/doc-sync.js';
 
 import {
   ASSISTANT_NAME,
@@ -459,6 +461,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   startAlertScheduler(DATA_DIR);  // CRM hook: alert evaluation every 2h
+  startFollowupScheduler(DATA_DIR);  // CRM hook: follow-up reminders hourly
+  startDocSyncScheduler(DATA_DIR);   // CRM hook: document sync daily at 3 AM
   seedBriefings();                // CRM hook: idempotent briefing task seeding
   logger.info('Database initialized');
   loadState();

@@ -1,7 +1,7 @@
 /**
  * CRM Schema Definitions — Domain-specific for media ad sales
  *
- * 12 tables. All created in the same SQLite database used by the NanoClaw
+ * 15 tables. All created in the same SQLite database used by the NanoClaw
  * engine (via getDatabase() export).
  *
  * Tables:
@@ -17,6 +17,9 @@
  *   - alerta_log: Alert deduplication log
  *   - email_log: Sent/draft email tracking
  *   - evento_calendario: Calendar event tracking
+ *   - crm_events: Sporting/industry events (World Cup, Liga MX, tentpoles)
+ *   - crm_documents: Document metadata for RAG pipeline
+ *   - crm_embeddings: Document chunk embeddings for RAG search
  */
 
 import type Database from 'better-sqlite3';
@@ -25,6 +28,7 @@ export const CRM_TABLES = [
   'persona', 'cuenta', 'contacto', 'contrato', 'descarga',
   'propuesta', 'actividad', 'cuota', 'inventario',
   'alerta_log', 'email_log', 'evento_calendario',
+  'crm_events', 'crm_documents', 'crm_embeddings',
 ] as const;
 
 export type CrmTableName = typeof CRM_TABLES[number];
@@ -245,5 +249,49 @@ export function createCrmSchema(db: Database.Database): void {
       creado_por TEXT DEFAULT 'agente' CHECK(creado_por IN ('agente','usuario','sistema'))
     );
     CREATE INDEX IF NOT EXISTS idx_evento_persona ON evento_calendario(persona_id);
+
+    -- 13. CRM_EVENTS (sporting/industry events, NOT calendar entries)
+    CREATE TABLE IF NOT EXISTS crm_events (
+      id TEXT PRIMARY KEY,
+      nombre TEXT NOT NULL,
+      tipo TEXT CHECK(tipo IN ('tentpole','deportivo','estacional','industria')),
+      fecha_inicio TEXT NOT NULL,
+      fecha_fin TEXT,
+      inventario_total TEXT,
+      inventario_vendido TEXT,
+      meta_ingresos REAL,
+      ingresos_actual REAL DEFAULT 0,
+      prioridad TEXT DEFAULT 'media' CHECK(prioridad IN ('alta','media','baja')),
+      notas TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_crm_events_fecha ON crm_events(fecha_inicio);
+
+    -- 14. CRM_DOCUMENTS (document metadata for RAG pipeline)
+    CREATE TABLE IF NOT EXISTS crm_documents (
+      id TEXT PRIMARY KEY,
+      source TEXT NOT NULL CHECK(source IN ('drive','email','manual')),
+      source_id TEXT,
+      persona_id TEXT REFERENCES persona(id),
+      titulo TEXT NOT NULL,
+      tipo_doc TEXT,
+      contenido_hash TEXT,
+      chunk_count INTEGER DEFAULT 0,
+      fecha_sync TEXT DEFAULT (datetime('now')),
+      fecha_modificacion TEXT,
+      tamano_bytes INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_crm_docs_persona ON crm_documents(persona_id);
+    CREATE INDEX IF NOT EXISTS idx_crm_docs_source ON crm_documents(source, source_id);
+
+    -- 15. CRM_EMBEDDINGS (document chunk embeddings for RAG search)
+    CREATE TABLE IF NOT EXISTS crm_embeddings (
+      id TEXT PRIMARY KEY,
+      document_id TEXT NOT NULL REFERENCES crm_documents(id) ON DELETE CASCADE,
+      chunk_index INTEGER NOT NULL,
+      contenido TEXT NOT NULL,
+      embedding BLOB,
+      UNIQUE(document_id, chunk_index)
+    );
+    CREATE INDEX IF NOT EXISTS idx_crm_embed_doc ON crm_embeddings(document_id);
   `);
 }

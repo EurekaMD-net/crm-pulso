@@ -21,7 +21,7 @@ interface BriefingSeed {
 const BRIEFING_SEEDS: BriefingSeed[] = [
   {
     rol: 'ae',
-    cron: '0 8 * * 1-5',
+    cron: '10 9 * * 1-5',  // Staggered: base 9:10, offset by index
     prompt: 'Briefing matutino: revisa mi agenda de hoy, deals estancados >7 dias, acciones pendientes con fecha vencida, y mi porcentaje de cuota esta semana. Formato WhatsApp, conciso.',
   },
   {
@@ -31,17 +31,17 @@ const BRIEFING_SEEDS: BriefingSeed[] = [
   },
   {
     rol: 'gerente',
-    cron: '0 9 * * 1',
+    cron: '0 9 * * 1',  // Staggered: base 9:00, offset by index
     prompt: 'Resumen semanal de equipo: cuota por AE (logro vs meta), propuestas en riesgo (estancadas >14d o valor >5M), actividad por AE (ultima semana), gap descarga por cuenta, y top wins/losses. Formato WhatsApp.',
   },
   {
     rol: 'director',
-    cron: '0 10 * * 1',
+    cron: '52 8 * * 1',
     prompt: 'Revision regional: pipeline total por equipo, ranking cuota por gerente, mega-deals activos, varianza descarga por region, alertas escaladas. Formato WhatsApp.',
   },
   {
     rol: 'vp',
-    cron: '0 8 * * 1-5',
+    cron: '45 8 * * 1-5',
     prompt: 'Brief ejecutivo: agenda del dia, asuntos urgentes, estado mega-deals, alertas pendientes, y recomendacion de accion. Formato WhatsApp.',
   },
 ];

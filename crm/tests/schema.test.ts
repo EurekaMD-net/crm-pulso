@@ -11,7 +11,7 @@ beforeEach(() => {
 });
 
 describe('CRM Schema — tables', () => {
-  it('creates all 12 CRM tables', () => {
+  it('creates all 15 CRM tables', () => {
     const tables = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`)
       .all()
@@ -54,6 +54,10 @@ describe('CRM Schema — indexes', () => {
       'idx_cuota_persona_semana',
       'idx_email_log_persona',
       'idx_evento_persona',
+      'idx_crm_events_fecha',
+      'idx_crm_docs_persona',
+      'idx_crm_docs_source',
+      'idx_crm_embed_doc',
     ];
     for (const idx of expected) {
       expect(indexes).toContain(idx);
@@ -324,5 +328,128 @@ describe('CRM Schema — alerta_log', () => {
     const row = db.prepare('SELECT * FROM alerta_log WHERE id = ?').get('al1') as any;
     expect(row.alerta_tipo).toBe('A01');
     expect(row.fecha_envio).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// crm_events
+// ---------------------------------------------------------------------------
+
+describe('CRM Schema — crm_events', () => {
+  it('allows creating events', () => {
+    db.prepare(`INSERT INTO crm_events (id, nombre, tipo, fecha_inicio, fecha_fin, prioridad) VALUES ('ev1', 'Copa del Mundo', 'deportivo', '2026-06-11', '2026-07-19', 'alta')`).run();
+
+    const row = db.prepare('SELECT * FROM crm_events WHERE id = ?').get('ev1') as any;
+    expect(row.nombre).toBe('Copa del Mundo');
+    expect(row.tipo).toBe('deportivo');
+    expect(row.prioridad).toBe('alta');
+  });
+
+  it('rejects invalid tipo', () => {
+    expect(() =>
+      db.prepare(`INSERT INTO crm_events (id, nombre, tipo, fecha_inicio) VALUES ('bad', 'X', 'random', '2026-01-01')`).run(),
+    ).toThrow(/CHECK/);
+  });
+
+  it('rejects invalid prioridad', () => {
+    expect(() =>
+      db.prepare(`INSERT INTO crm_events (id, nombre, tipo, fecha_inicio, prioridad) VALUES ('bad', 'X', 'tentpole', '2026-01-01', 'urgente')`).run(),
+    ).toThrow(/CHECK/);
+  });
+
+  it('accepts all valid tipos', () => {
+    for (const tipo of ['tentpole', 'deportivo', 'estacional', 'industria']) {
+      expect(() =>
+        db.prepare(`INSERT INTO crm_events (id, nombre, tipo, fecha_inicio) VALUES (?, ?, ?, '2026-01-01')`).run(`ev-${tipo}`, `Event ${tipo}`, tipo),
+      ).not.toThrow();
+    }
+  });
+
+  it('defaults prioridad to media', () => {
+    db.prepare(`INSERT INTO crm_events (id, nombre, tipo, fecha_inicio) VALUES ('ev2', 'Buen Fin', 'estacional', '2026-11-20')`).run();
+    const row = db.prepare('SELECT prioridad FROM crm_events WHERE id = ?').get('ev2') as any;
+    expect(row.prioridad).toBe('media');
+  });
+
+  it('stores JSON inventory fields', () => {
+    const invTotal = JSON.stringify({ tv_abierta: 100, ctv: 50 });
+    const invVendido = JSON.stringify({ tv_abierta: 60, ctv: 20 });
+    db.prepare(`INSERT INTO crm_events (id, nombre, tipo, fecha_inicio, inventario_total, inventario_vendido) VALUES ('ev3', 'Liga MX', 'deportivo', '2026-07-01', ?, ?)`).run(invTotal, invVendido);
+
+    const row = db.prepare('SELECT inventario_total, inventario_vendido FROM crm_events WHERE id = ?').get('ev3') as any;
+    expect(JSON.parse(row.inventario_total)).toEqual({ tv_abierta: 100, ctv: 50 });
+    expect(JSON.parse(row.inventario_vendido)).toEqual({ tv_abierta: 60, ctv: 20 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// crm_documents + crm_embeddings (RAG)
+// ---------------------------------------------------------------------------
+
+describe('CRM Schema — crm_documents', () => {
+  it('allows creating documents', () => {
+    db.prepare(`INSERT INTO persona (id, nombre, rol) VALUES ('ae1', 'AE', 'ae')`).run();
+    db.prepare(`INSERT INTO crm_documents (id, source, persona_id, titulo, tipo_doc) VALUES ('doc1', 'drive', 'ae1', 'Propuesta Q3', 'pdf')`).run();
+
+    const row = db.prepare('SELECT * FROM crm_documents WHERE id = ?').get('doc1') as any;
+    expect(row.source).toBe('drive');
+    expect(row.titulo).toBe('Propuesta Q3');
+    expect(row.fecha_sync).toBeTruthy();
+  });
+
+  it('rejects invalid source', () => {
+    expect(() =>
+      db.prepare(`INSERT INTO crm_documents (id, source, titulo) VALUES ('bad', 'ftp', 'X')`).run(),
+    ).toThrow(/CHECK/);
+  });
+
+  it('accepts all valid sources', () => {
+    for (const source of ['drive', 'email', 'manual']) {
+      expect(() =>
+        db.prepare(`INSERT INTO crm_documents (id, source, titulo) VALUES (?, ?, 'Test')`).run(`doc-${source}`, source),
+      ).not.toThrow();
+    }
+  });
+
+  it('enforces FK on persona_id', () => {
+    expect(() =>
+      db.prepare(`INSERT INTO crm_documents (id, source, persona_id, titulo) VALUES ('bad', 'drive', 'ghost', 'X')`).run(),
+    ).toThrow(/FOREIGN KEY/);
+  });
+});
+
+describe('CRM Schema — crm_embeddings', () => {
+  it('allows creating embeddings linked to documents', () => {
+    db.prepare(`INSERT INTO crm_documents (id, source, titulo) VALUES ('doc1', 'manual', 'Test Doc')`).run();
+    db.prepare(`INSERT INTO crm_embeddings (id, document_id, chunk_index, contenido) VALUES ('emb1', 'doc1', 0, 'First chunk of text')`).run();
+
+    const row = db.prepare('SELECT * FROM crm_embeddings WHERE id = ?').get('emb1') as any;
+    expect(row.document_id).toBe('doc1');
+    expect(row.chunk_index).toBe(0);
+    expect(row.contenido).toBe('First chunk of text');
+  });
+
+  it('enforces UNIQUE(document_id, chunk_index)', () => {
+    db.prepare(`INSERT INTO crm_documents (id, source, titulo) VALUES ('doc1', 'manual', 'Test')`).run();
+    db.prepare(`INSERT INTO crm_embeddings (id, document_id, chunk_index, contenido) VALUES ('emb1', 'doc1', 0, 'Chunk A')`).run();
+    expect(() =>
+      db.prepare(`INSERT INTO crm_embeddings (id, document_id, chunk_index, contenido) VALUES ('emb2', 'doc1', 0, 'Chunk B')`).run(),
+    ).toThrow(/UNIQUE/);
+  });
+
+  it('CASCADE deletes embeddings when document deleted', () => {
+    db.prepare(`INSERT INTO crm_documents (id, source, titulo) VALUES ('doc1', 'manual', 'Test')`).run();
+    db.prepare(`INSERT INTO crm_embeddings (id, document_id, chunk_index, contenido) VALUES ('emb1', 'doc1', 0, 'Chunk')`).run();
+    db.prepare(`INSERT INTO crm_embeddings (id, document_id, chunk_index, contenido) VALUES ('emb2', 'doc1', 1, 'Chunk 2')`).run();
+
+    db.prepare(`DELETE FROM crm_documents WHERE id = 'doc1'`).run();
+    const count = db.prepare('SELECT COUNT(*) as c FROM crm_embeddings WHERE document_id = ?').get('doc1') as any;
+    expect(count.c).toBe(0);
+  });
+
+  it('enforces FK on document_id', () => {
+    expect(() =>
+      db.prepare(`INSERT INTO crm_embeddings (id, document_id, chunk_index, contenido) VALUES ('bad', 'ghost', 0, 'X')`).run(),
+    ).toThrow(/FOREIGN KEY/);
   });
 });

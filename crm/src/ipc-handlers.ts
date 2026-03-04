@@ -168,6 +168,15 @@ export async function processCrmIpc(
         }
 
         logger.info({ id, persona: person.nombre }, 'Actividad registered');
+
+        // Non-blocking escalation check
+        try {
+          const { evaluateEscalation } = await import('./escalation.js');
+          await evaluateEscalation(person.id, deps);
+        } catch {
+          // Never let escalation failure break activity registration
+        }
+
         return true;
       } catch (err) {
         return handleIpcError(err, sourceGroup, data.type);
@@ -249,6 +258,83 @@ export async function processCrmIpc(
         );
 
         logger.info({ id, persona: person.nombre }, 'Propuesta created');
+        return true;
+      } catch (err) {
+        return handleIpcError(err, sourceGroup, data.type);
+      }
+    }
+
+    case 'crm_check_followups': {
+      try {
+        const now = new Date();
+        const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString();
+        const nowStr = now.toISOString();
+
+        // Find activities with upcoming follow-ups (within next 2 hours)
+        const rows = db.prepare(`
+          SELECT a.id, a.ae_id, a.siguiente_accion, a.fecha_siguiente_accion,
+                 c.nombre AS cuenta_nombre,
+                 per.whatsapp_group_folder
+          FROM actividad a
+          LEFT JOIN cuenta c ON a.cuenta_id = c.id
+          LEFT JOIN persona per ON a.ae_id = per.id
+          WHERE a.fecha_siguiente_accion IS NOT NULL
+            AND a.fecha_siguiente_accion >= ?
+            AND a.fecha_siguiente_accion <= ?
+            AND per.whatsapp_group_folder IS NOT NULL
+            AND per.activo = 1
+        `).all(nowStr, twoHoursLater) as any[];
+
+        if (rows.length === 0) {
+          logger.info('Follow-up check: no pending follow-ups');
+          return true;
+        }
+
+        // Dedup via alerta_log
+        const today = now.toISOString().slice(0, 10);
+        const checkDedup = db.prepare(
+          `SELECT 1 FROM alerta_log WHERE alerta_tipo = 'followup_reminder' AND entidad_id = ? AND grupo_destino = ? AND fecha_envio_date = ?`,
+        );
+        const insertLog = db.prepare(
+          `INSERT OR IGNORE INTO alerta_log (id, alerta_tipo, entidad_id, grupo_destino, fecha_envio) VALUES (?, 'followup_reminder', ?, ?, datetime('now'))`,
+        );
+
+        const groups = deps.registeredGroups();
+        let sent = 0;
+
+        for (const row of rows) {
+          if (checkDedup.get(row.id, row.whatsapp_group_folder, today)) continue;
+
+          const jid = Object.keys(groups).find(
+            k => groups[k].folder === row.whatsapp_group_folder,
+          );
+          if (!jid) continue;
+
+          const fechaDisplay = new Date(row.fecha_siguiente_accion).toLocaleString('es-MX', {
+            hour: '2-digit', minute: '2-digit', hour12: true,
+          });
+          const msg = `*Recordatorio: Accion Pendiente*\n\n`
+            + `\u2022 ${row.siguiente_accion}\n`
+            + (row.cuenta_nombre ? `\u2022 Cuenta: ${row.cuenta_nombre}\n` : '')
+            + `\u2022 Hora: ${fechaDisplay}\n`;
+
+          await deps.sendMessage(jid, msg);
+          insertLog.run(`fup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, row.id, row.whatsapp_group_folder);
+          sent++;
+        }
+
+        logger.info({ sent }, 'Follow-up reminders sent');
+        return true;
+      } catch (err) {
+        return handleIpcError(err, sourceGroup, data.type);
+      }
+    }
+
+    case 'crm_doc_sync': {
+      try {
+        const { syncDocuments } = await import('./doc-sync.js');
+        const count = await syncDocuments();
+        logger.info({ count }, 'Document sync completed');
         return true;
       } catch (err) {
         return handleIpcError(err, sourceGroup, data.type);

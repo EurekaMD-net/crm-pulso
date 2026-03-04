@@ -20,6 +20,7 @@ const {
   alertDescargaGap,
   alertMegaDealMovimiento,
   alertInactividadAe,
+  alertEventCountdown,
   evaluateAlerts,
   logAlerts,
 } = await import('../src/alerts.js');
@@ -273,6 +274,56 @@ describe('alertInactividadAe', () => {
     // The alert is sent to gerente's folder, not AE's folder, so it should appear
     expect(ae3Alerts.length).toBeGreaterThanOrEqual(1);
     expect(ae3Alerts[0].grupo_destino_folder).toBe('ger-miguel');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. alertEventCountdown
+// ---------------------------------------------------------------------------
+
+describe('alertEventCountdown', () => {
+  it('returns alerts for events within 30 days', () => {
+    const futureDate = new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10);
+    const invTotal = JSON.stringify({ tv_abierta: 100, ctv: 50 });
+    const invVendido = JSON.stringify({ tv_abierta: 30, ctv: 10 });
+    testDb.prepare(`INSERT INTO crm_events (id, nombre, tipo, fecha_inicio, inventario_total, inventario_vendido, prioridad) VALUES ('ev1', 'Copa del Mundo', 'deportivo', ?, ?, ?, 'alta')`).run(futureDate, invTotal, invVendido);
+
+    const results = alertEventCountdown();
+    // Should alert AEs (ae1, ae2 have folders; ae3 has no folder)
+    const aeAlerts = results.filter(r => r.alerta_tipo === 'event_countdown');
+    expect(aeAlerts.length).toBe(2); // ae1 and ae2
+  });
+
+  it('alerts directors/VP when >70% sold', () => {
+    const futureDate = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10);
+    const invTotal = JSON.stringify({ tv_abierta: 100 });
+    const invVendido = JSON.stringify({ tv_abierta: 80 }); // 80% sold
+    testDb.prepare(`INSERT INTO crm_events (id, nombre, tipo, fecha_inicio, inventario_total, inventario_vendido, prioridad) VALUES ('ev2', 'Liga MX Final', 'deportivo', ?, ?, ?, 'alta')`).run(futureDate, invTotal, invVendido);
+
+    const results = alertEventCountdown();
+    const highDemand = results.filter(r => r.alerta_tipo === 'event_countdown_high_demand');
+    expect(highDemand.length).toBeGreaterThanOrEqual(1);
+    const folders = highDemand.map(r => r.grupo_destino_folder);
+    expect(folders).toContain('dir-ana');
+    expect(folders).toContain('vp-roberto');
+  });
+
+  it('skips events >30 days away', () => {
+    const farDate = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
+    testDb.prepare(`INSERT INTO crm_events (id, nombre, tipo, fecha_inicio, prioridad) VALUES ('ev3', 'Far Event', 'estacional', ?, 'media')`).run(farDate);
+
+    const results = alertEventCountdown();
+    const evAlerts = results.filter(r => r.entidad_id.startsWith('ev3'));
+    expect(evAlerts.length).toBe(0);
+  });
+
+  it('skips past events', () => {
+    const pastDate = new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 10);
+    testDb.prepare(`INSERT INTO crm_events (id, nombre, tipo, fecha_inicio, prioridad) VALUES ('ev4', 'Past Event', 'tentpole', ?, 'media')`).run(pastDate);
+
+    const results = alertEventCountdown();
+    const evAlerts = results.filter(r => r.entidad_id.startsWith('ev4'));
+    expect(evAlerts.length).toBe(0);
   });
 });
 

@@ -19,11 +19,5 @@ RUN npm install
 COPY container/agent-runner/ /app/crm/container/agent-runner/
 RUN npm run build
 
-# Copy MCP servers (retained for backward compatibility)
-COPY mcp/package.json mcp/package-lock.json* /app/crm-mcp/
-RUN cd /app/crm-mcp && npm install
-COPY mcp/ /app/crm-mcp/
-RUN cd /app/crm-mcp && npm run build
-
 # Override entrypoint to run CRM agent-runner
 ENTRYPOINT ["node", "/app/crm/container/agent-runner/dist/crm/container/agent-runner/index.js"]

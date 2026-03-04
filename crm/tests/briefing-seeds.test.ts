@@ -138,7 +138,7 @@ describe('seedBriefings', () => {
     ).all() as any[];
 
     const crons = aeTasks.map((t: any) => t.schedule_value).sort();
-    expect(crons).toEqual(['0 16 * * 5', '0 8 * * 1-5']);
+    expect(crons).toEqual(['0 16 * * 5', '10 9 * * 1-5']);
   });
 
   it('skips inactive personas', () => {
@@ -202,5 +202,57 @@ describe('seedBriefings', () => {
   it('BRIEFING_SEEDS covers all expected roles', () => {
     const roles = [...new Set(BRIEFING_SEEDS.map(s => s.rol))];
     expect(roles.sort()).toEqual(['ae', 'director', 'gerente', 'vp']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Stagger order verification
+// ---------------------------------------------------------------------------
+
+describe('briefing stagger order', () => {
+  it('VP fires before Director', () => {
+    const vpSeed = BRIEFING_SEEDS.find(s => s.rol === 'vp')!;
+    const dirSeed = BRIEFING_SEEDS.find(s => s.rol === 'director')!;
+
+    // VP: 45 8 → 8:45, Director: 52 8 → 8:52
+    const vpMinute = parseInt(vpSeed.cron.split(' ')[0]);
+    const vpHour = parseInt(vpSeed.cron.split(' ')[1]);
+    const dirMinute = parseInt(dirSeed.cron.split(' ')[0]);
+    const dirHour = parseInt(dirSeed.cron.split(' ')[1]);
+
+    expect(vpHour * 60 + vpMinute).toBeLessThan(dirHour * 60 + dirMinute);
+  });
+
+  it('Director fires before Gerente', () => {
+    const dirSeed = BRIEFING_SEEDS.find(s => s.rol === 'director')!;
+    const gerSeed = BRIEFING_SEEDS.find(s => s.rol === 'gerente')!;
+
+    const dirMinute = parseInt(dirSeed.cron.split(' ')[0]);
+    const dirHour = parseInt(dirSeed.cron.split(' ')[1]);
+    const gerMinute = parseInt(gerSeed.cron.split(' ')[0]);
+    const gerHour = parseInt(gerSeed.cron.split(' ')[1]);
+
+    expect(dirHour * 60 + dirMinute).toBeLessThan(gerHour * 60 + gerMinute);
+  });
+
+  it('Gerente fires before AE morning', () => {
+    const gerSeed = BRIEFING_SEEDS.find(s => s.rol === 'gerente')!;
+    const aeMorningSeed = BRIEFING_SEEDS.find(s => s.rol === 'ae' && s.cron.includes('1-5'))!;
+
+    const gerMinute = parseInt(gerSeed.cron.split(' ')[0]);
+    const gerHour = parseInt(gerSeed.cron.split(' ')[1]);
+    const aeMinute = parseInt(aeMorningSeed.cron.split(' ')[0]);
+    const aeHour = parseInt(aeMorningSeed.cron.split(' ')[1]);
+
+    expect(gerHour * 60 + gerMinute).toBeLessThan(aeHour * 60 + aeMinute);
+  });
+
+  it('all seeds have distinct cron expressions per role', () => {
+    const seen = new Set<string>();
+    for (const seed of BRIEFING_SEEDS) {
+      const key = `${seed.rol}::${seed.cron}`;
+      expect(seen.has(key)).toBe(false);
+      seen.add(key);
+    }
   });
 });

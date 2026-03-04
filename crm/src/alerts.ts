@@ -308,6 +308,74 @@ export function alertInactividadAe(): AlertResult[] {
 }
 
 // ---------------------------------------------------------------------------
+// 6. Event countdown (events starting within 30 days)
+// ---------------------------------------------------------------------------
+
+export function alertEventCountdown(): AlertResult[] {
+  const db = getDatabase();
+  const rows = db.prepare(`
+    SELECT id, nombre, tipo, fecha_inicio, inventario_total, inventario_vendido, prioridad
+    FROM crm_events
+    WHERE date(fecha_inicio) BETWEEN date('now') AND date('now', '+30 days')
+  `).all() as any[];
+
+  const results: AlertResult[] = [];
+
+  for (const row of rows) {
+    const diasPara = Math.ceil((new Date(row.fecha_inicio).getTime() - Date.now()) / 86400000);
+    let soldPct = 0;
+
+    if (row.inventario_total && row.inventario_vendido) {
+      try {
+        const total = JSON.parse(row.inventario_total);
+        const vendido = JSON.parse(row.inventario_vendido);
+        const totalUnits = Object.values(total).reduce((s: number, v: any) => s + Number(v), 0);
+        const soldUnits = Object.values(vendido).reduce((s: number, v: any) => s + Number(v), 0);
+        soldPct = totalUnits > 0 ? Math.round((soldUnits / totalUnits) * 100) : 0;
+      } catch { /* ignore */ }
+    }
+
+    const disponible = 100 - soldPct;
+
+    // Alert AEs about upcoming events with inventory info
+    const aes = db.prepare("SELECT id, whatsapp_group_folder FROM persona WHERE rol = 'ae' AND activo = 1 AND whatsapp_group_folder IS NOT NULL").all() as any[];
+    for (const ae of aes) {
+      results.push({
+        alerta_tipo: 'event_countdown',
+        entidad_id: `${row.id}-${ae.id}`,
+        grupo_destino_folder: ae.whatsapp_group_folder,
+        mensaje: `*Alerta: Evento Proximo*\n\n`
+          + `"${row.nombre}" (${row.tipo}) inicia en ${diasPara} dias.\n`
+          + `\u2022 Inventario disponible: ${disponible}%\n`
+          + `\u2022 Prioridad: ${row.prioridad}\n\n`
+          + `Accion recomendada: revisar oportunidades de venta para este evento.`,
+      });
+    }
+
+    // Alert Director/VP if >70% sold (high demand)
+    if (soldPct > 70) {
+      const seniors = db.prepare(
+        "SELECT id, whatsapp_group_folder FROM persona WHERE rol IN ('director','vp') AND activo = 1 AND whatsapp_group_folder IS NOT NULL",
+      ).all() as any[];
+      for (const senior of seniors) {
+        results.push({
+          alerta_tipo: 'event_countdown_high_demand',
+          entidad_id: `${row.id}-${senior.id}`,
+          grupo_destino_folder: senior.whatsapp_group_folder,
+          mensaje: `*Alerta: Alta Demanda en Evento*\n\n`
+            + `"${row.nombre}" tiene ${soldPct}% vendido a ${diasPara} dias del inicio.\n`
+            + `\u2022 Disponible: ${disponible}%\n`
+            + `\u2022 Prioridad: ${row.prioridad}\n\n`
+            + `Accion recomendada: evaluar pricing y asignacion de inventario restante.`,
+        });
+      }
+    }
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
 // Orchestrator: evaluate all + dedup
 // ---------------------------------------------------------------------------
 
@@ -321,6 +389,7 @@ export function evaluateAlerts(): AlertResult[] {
     ...alertDescargaGap(),
     ...alertMegaDealMovimiento(),
     ...alertInactividadAe(),
+    ...alertEventCountdown(),
   ];
 
   // Filter out already-sent alerts (same type + entity + group + date)

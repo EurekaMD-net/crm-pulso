@@ -433,9 +433,6 @@ async function runQuery(
         'TodoWrite', 'ToolSearch', 'Skill',
         'NotebookEdit',
         'mcp__nanoclaw__*',
-        'mcp__crm_tools__*',
-        'mcp__google_workspace__*',
-        'mcp__rag_search__*'
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -449,35 +446,6 @@ async function runQuery(
             NANOCLAW_CHAT_JID: containerInput.chatJid,
             NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
-          },
-        },
-        // CRM hook: CRM write tools (log_interaction, update_opportunity, etc.)
-        crm_tools: {
-          command: 'node',
-          args: ['/app/crm-mcp/dist/crm-tools.js'],
-          env: {
-            NANOCLAW_CHAT_JID: containerInput.chatJid,
-            NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
-            NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
-          },
-        },
-        // CRM hook: Google Workspace (Gmail, Drive, Docs, Sheets, Calendar)
-        google_workspace: {
-          command: 'node',
-          args: ['/app/crm-mcp/dist/google-workspace.js'],
-          env: {
-            GOOGLE_SERVICE_ACCOUNT_KEY: sdkEnv.GOOGLE_SERVICE_ACCOUNT_KEY || '',
-            GOOGLE_IMPERSONATE_EMAIL: (containerInput as Record<string, unknown>).repEmail as string || '',
-            NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
-          },
-        },
-        // CRM hook: RAG semantic document search (Phase 7)
-        rag_search: {
-          command: 'node',
-          args: ['/app/crm-mcp/dist/rag-search.js'],
-          env: {
-            RAG_DB_PATH: '/workspace/extra/crm-db/messages.db',
-            NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
           },
         },
       },

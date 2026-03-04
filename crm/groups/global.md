@@ -47,6 +47,14 @@ Formato WhatsApp:
 
 *evento_calendario*: id, persona_id, google_event_id, titulo, descripcion, fecha_inicio, fecha_fin, tipo (seguimiento|reunion|tentpole|deadline|briefing), propuesta_id, cuenta_id, creado_por (agente|usuario|sistema)
 
+### Eventos Comerciales
+*crm_events*: id, nombre, tipo (tentpole|deportivo|estacional|industria), fecha_inicio, fecha_fin, inventario_total (JSON), inventario_vendido (JSON), meta_ingresos, ingresos_actual, prioridad (alta|media|baja), notas
+
+### RAG (Documentos)
+*crm_documents*: id, source (drive|email|manual), source_id, persona_id, titulo, tipo_doc, contenido_hash, chunk_count, fecha_sync, fecha_modificacion, tamano_bytes
+
+*crm_embeddings*: id, document_id (FK crm_documents CASCADE), chunk_index, contenido, embedding (BLOB)
+
 ## Enums Clave
 
 ### Etapas de Pipeline (flujo)
@@ -109,6 +117,22 @@ No todas las herramientas estan disponibles para todos los roles.
 ### Seguimiento
 - *establecer_recordatorio* -- Crea recordatorio para fecha futura
 
+### Gmail
+- *buscar_emails* -- Busca emails en la bandeja de entrada de Gmail
+- *leer_email* -- Lee el contenido completo de un email por su ID
+- *crear_borrador_email* -- Crea un borrador de email en Gmail (solo AE)
+
+### Google Drive
+- *listar_archivos_drive* -- Lista archivos en Google Drive con busqueda opcional
+- *leer_archivo_drive* -- Lee el contenido de un archivo de Drive (truncado a 50KB)
+
+### Eventos
+- *consultar_eventos* -- Consulta eventos proximos (deportivos, tentpoles, estacionales)
+- *consultar_inventario_evento* -- Inventario detallado de un evento (disponibilidad por medio)
+
+### Documentos (RAG)
+- *buscar_documentos* -- Busqueda semantica en documentos sincronizados (Drive, email). Respeta jerarquia de acceso.
+
 ## Patrones de Uso
 
 ### Flujo de registro de actividad
@@ -150,3 +174,9 @@ Protocolo de contexto persistente:
 - Carpeta `conversations/` contiene historial de conversaciones archivadas
 - Mantener notas por cuenta en tu CLAUDE.md: dinamicas de relacion, estilo de venta, contexto clave
 - Despues de cada conversacion: actualizar notas con hechos nuevos, compromisos, inteligencia de deal
+
+### Protocolo de sesion
+1. **Al iniciar conversacion**: Si hay referencias ambiguas (ej. "el cliente", "la propuesta"), consulta actividades y propuestas recientes para establecer contexto antes de responder.
+2. **Al registrar actividad**: Usa nombres completos (no pronombres). Incluye suficiente contexto para que futuras sesiones comprendan la situacion sin contexto adicional.
+3. **Antes de quedar inactivo**: Actualiza CLAUDE.md con hechos nuevos, compromisos pendientes, y cualquier inteligencia de negocio relevante descubierta en la conversacion.
+4. **Recordatorios**: El sistema envia recordatorios automaticos para acciones con fecha_siguiente_accion. No necesitas recrearlos manualmente.

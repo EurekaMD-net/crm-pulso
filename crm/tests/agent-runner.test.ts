@@ -26,6 +26,21 @@ vi.mock('../../engine/src/db.js', () => ({
   getDatabase: () => testDb,
 }));
 
+const noop = () => {};
+const noopLogger = { info: noop, warn: noop, error: noop, debug: noop, fatal: noop, child: () => noopLogger };
+vi.mock('../../engine/src/logger.js', () => ({
+  logger: noopLogger,
+}));
+
+vi.mock('../src/google-auth.js', () => ({
+  isGoogleEnabled: () => false,
+  getGmailClient: () => { throw new Error('Not configured'); },
+  getGmailReadClient: () => { throw new Error('Not configured'); },
+  getCalendarClient: () => { throw new Error('Not configured'); },
+  getCalendarReadClient: () => { throw new Error('Not configured'); },
+  getDriveClient: () => { throw new Error('Not configured'); },
+}));
+
 // Dynamic imports after mock
 const { getPersonByGroupFolder } = await import('../src/hierarchy.js');
 const { buildToolContext, getToolsForRole, executeTool } = await import('../src/tools/index.js');
@@ -130,24 +145,24 @@ describe('tool context construction', () => {
 // ---------------------------------------------------------------------------
 
 describe('role-based tool filtering', () => {
-  it('AE gets 16 tools', () => {
+  it('AE gets 24 tools', () => {
     const tools = getToolsForRole('ae');
+    expect(tools.length).toBe(24);
+  });
+
+  it('gerente gets 16 tools', () => {
+    const tools = getToolsForRole('gerente');
     expect(tools.length).toBe(16);
   });
 
-  it('gerente gets 9 tools', () => {
-    const tools = getToolsForRole('gerente');
-    expect(tools.length).toBe(9);
-  });
-
-  it('director gets 8 tools', () => {
+  it('director gets 15 tools', () => {
     const tools = getToolsForRole('director');
-    expect(tools.length).toBe(8);
+    expect(tools.length).toBe(15);
   });
 
-  it('VP gets 7 tools', () => {
+  it('VP gets 14 tools', () => {
     const tools = getToolsForRole('vp');
-    expect(tools.length).toBe(7);
+    expect(tools.length).toBe(14);
   });
 
   it('all roles have consultar_pipeline', () => {

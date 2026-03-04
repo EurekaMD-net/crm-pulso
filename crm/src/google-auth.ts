@@ -10,7 +10,10 @@ import { google } from 'googleapis';
 import { JWT } from 'google-auth-library';
 
 const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.send'];
+const GMAIL_READONLY_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
 const CALENDAR_SCOPES = ['https://www.googleapis.com/auth/calendar.events'];
+const CALENDAR_READONLY_SCOPES = ['https://www.googleapis.com/auth/calendar.readonly'];
+const DRIVE_READONLY_SCOPES = ['https://www.googleapis.com/auth/drive.readonly'];
 
 /** Returns true if Google Workspace integration is configured. */
 export function isGoogleEnabled(): boolean {
@@ -35,6 +38,18 @@ export function getGmailClient(impersonateEmail: string) {
   return google.gmail({ version: 'v1', auth });
 }
 
+/** Get a read-only Gmail client impersonating the given email. */
+export function getGmailReadClient(impersonateEmail: string) {
+  const key = getServiceAccountKey();
+  const auth = new JWT({
+    email: key.client_email,
+    key: key.private_key,
+    scopes: GMAIL_READONLY_SCOPES,
+    subject: impersonateEmail,
+  });
+  return google.gmail({ version: 'v1', auth });
+}
+
 /** Get an authenticated Calendar client impersonating the given email. */
 export function getCalendarClient(impersonateEmail: string) {
   const auth = new JWT({
@@ -44,4 +59,28 @@ export function getCalendarClient(impersonateEmail: string) {
     subject: impersonateEmail,
   });
   return google.calendar({ version: 'v3', auth });
+}
+
+/** Get a read-only Calendar client impersonating the given email. */
+export function getCalendarReadClient(impersonateEmail: string) {
+  const key = getServiceAccountKey();
+  const auth = new JWT({
+    email: key.client_email,
+    key: key.private_key,
+    scopes: CALENDAR_READONLY_SCOPES,
+    subject: impersonateEmail,
+  });
+  return google.calendar({ version: 'v3', auth });
+}
+
+/** Get a read-only Drive client impersonating the given email. */
+export function getDriveClient(impersonateEmail: string) {
+  const key = getServiceAccountKey();
+  const auth = new JWT({
+    email: key.client_email,
+    key: key.private_key,
+    scopes: DRIVE_READONLY_SCOPES,
+    subject: impersonateEmail,
+  });
+  return google.drive({ version: 'v3', auth });
 }
