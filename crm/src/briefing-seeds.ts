@@ -7,8 +7,8 @@
  */
 
 import { CronExpressionParser } from 'cron-parser';
-import { getDatabase } from '../../engine/src/db.js';
-import { createTask } from '../../engine/src/db.js';
+import { getDatabase as getCrmDatabase } from './db.js';
+import { getDatabase as getEngineDatabase, createTask } from '../../engine/src/db.js';
 import { TIMEZONE } from '../../engine/src/config.js';
 import { logger } from './logger.js';
 
@@ -49,15 +49,16 @@ const BRIEFING_SEEDS: BriefingSeed[] = [
 export { BRIEFING_SEEDS };
 
 export function seedBriefings(): void {
-  const db = getDatabase();
+  const crmDb = getCrmDatabase();     // persona (CRM tables in data/store/crm.db)
+  const engineDb = getEngineDatabase(); // registered_groups, scheduled_tasks (store/messages.db)
 
   // Get all active personas with group folders
-  const personas = db.prepare(
+  const personas = crmDb.prepare(
     "SELECT id, rol, whatsapp_group_folder FROM persona WHERE activo = 1 AND whatsapp_group_folder IS NOT NULL",
   ).all() as { id: string; rol: string; whatsapp_group_folder: string }[];
 
   // Resolve group folders to JIDs
-  const groups = db.prepare(
+  const groups = engineDb.prepare(
     'SELECT jid, folder FROM registered_groups',
   ).all() as { jid: string; folder: string }[];
 
@@ -67,7 +68,7 @@ export function seedBriefings(): void {
   }
 
   // Check existing active tasks to avoid duplicates
-  const existingTasks = db.prepare(
+  const existingTasks = engineDb.prepare(
     "SELECT group_folder, schedule_value FROM scheduled_tasks WHERE status = 'active' AND schedule_type = 'cron'",
   ).all() as { group_folder: string; schedule_value: string }[];
 

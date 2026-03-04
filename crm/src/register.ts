@@ -7,7 +7,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { getDatabase } from '../../engine/src/db.js';
+import { getDatabase } from './db.js';
 import { logger } from './logger.js';
 
 export interface TeamMember {

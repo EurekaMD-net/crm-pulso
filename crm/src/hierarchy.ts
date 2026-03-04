@@ -8,7 +8,7 @@
  */
 
 import type Database from 'better-sqlite3';
-import { getDatabase } from '../../engine/src/db.js';
+import { getDatabase } from './db.js';
 
 export interface Persona {
   id: string;

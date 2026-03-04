@@ -5,7 +5,7 @@
  * AE sees own data. Gerente sees direct reports. Director/VP see broader scope.
  */
 
-import { getDatabase } from '../../../engine/src/db.js';
+import { getDatabase } from '../db.js';
 import type { ToolContext } from './index.js';
 
 // ---------------------------------------------------------------------------

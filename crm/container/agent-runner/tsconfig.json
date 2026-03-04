@@ -11,12 +11,15 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "declaration": false,
-    "sourceMap": false
+    "sourceMap": false,
+    "baseUrl": ".",
+    "paths": {
+      "better-sqlite3": ["./node_modules/@types/better-sqlite3"]
+    }
   },
   "include": [
     "index.ts",
-    "shims/**/*.ts",
-    "../../src/**/*.ts"
+    "shims/**/*.ts"
   ],
   "exclude": [
     "node_modules",

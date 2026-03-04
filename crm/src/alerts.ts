@@ -6,7 +6,7 @@
  * Deduplication via alerta_log prevents duplicate alerts within the same day.
  */
 
-import { getDatabase } from '../../engine/src/db.js';
+import { getDatabase } from './db.js';
 import { getPersonById, getManager, getDirector } from './hierarchy.js';
 import type { Persona } from './hierarchy.js';
 

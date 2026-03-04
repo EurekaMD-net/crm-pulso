@@ -11,7 +11,7 @@ import { crear_evento_calendario } from './calendar.js';
 // establecer_recordatorio
 // ---------------------------------------------------------------------------
 
-export function establecer_recordatorio(args: Record<string, unknown>, ctx: ToolContext): string {
+export async function establecer_recordatorio(args: Record<string, unknown>, ctx: ToolContext): Promise<string> {
   // A reminder is just a calendar event of type seguimiento
   return crear_evento_calendario({
     titulo: args.titulo,

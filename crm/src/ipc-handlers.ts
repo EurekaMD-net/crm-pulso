@@ -7,7 +7,7 @@
  * Tables referenced: actividad, propuesta, cuenta, persona
  */
 
-import { getDatabase } from '../../engine/src/db.js';
+import { getDatabase } from './db.js';
 import { getPersonByGroupFolder, hasAccessTo } from './hierarchy.js';
 import { evaluateAlerts, logAlerts } from './alerts.js';
 import { logger } from './logger.js';

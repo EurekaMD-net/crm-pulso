@@ -5,7 +5,7 @@
  * cerrar_propuesta, actualizar_descarga
  */
 
-import { getDatabase } from '../../../engine/src/db.js';
+import { getDatabase } from '../db.js';
 import type { ToolContext } from './index.js';
 
 // ---------------------------------------------------------------------------

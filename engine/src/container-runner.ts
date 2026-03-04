@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 
 import {
-  CONTAINER_IMAGE,
+  CONTAINER_IMAGE as CONTAINER_IMAGE_DEFAULT,
   CONTAINER_MAX_OUTPUT_SIZE,
   CONTAINER_TIMEOUT,
   DATA_DIR,
@@ -16,6 +16,11 @@ import {
   TIMEZONE,
 } from './config.js';
 import { readEnvFile } from './env.js';
+
+// CRM hook: read CONTAINER_IMAGE from .env directly so it always overrides the
+// nanoclaw default regardless of whether process.env was pre-populated.
+const { CONTAINER_IMAGE: CONTAINER_IMAGE_ENV } = readEnvFile(['CONTAINER_IMAGE']);
+const CONTAINER_IMAGE = CONTAINER_IMAGE_ENV || CONTAINER_IMAGE_DEFAULT;
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import {
@@ -196,9 +201,11 @@ function buildVolumeMounts(
     });
   }
 
-  // CRM hook: Mount shared database (read-write) for direct tool access
-  const crmDbPath = path.join(DATA_DIR, 'store');
-  mounts.push({ hostPath: crmDbPath, containerPath: '/workspace/extra/crm-db', readonly: false });
+  // CRM hook: Mount CRM database directory (read-write) for direct tool access.
+  // Uses DATA_DIR/store (data/store/) which houses crm.db — kept separate from
+  // store/messages.db (engine's WAL db) to avoid SQLITE_IOERR_SHMOPEN on Docker
+  // bind mounts when both the engine process and the container open the same file.
+  mounts.push({ hostPath: path.join(DATA_DIR, 'store'), containerPath: '/workspace/extra/crm-db', readonly: false });
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)
   if (group.containerConfig?.additionalMounts) {
@@ -233,6 +240,8 @@ function buildContainerArgs(
 
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
+  // CRM hook: tell the container agent where to find the CRM database
+  args.push('-e', 'CRM_DB_PATH=/workspace/extra/crm-db/crm.db');
 
   // Run as host user so bind-mounted files are accessible.
   // Skip when running as root (uid 0), as the container's node user (uid 1000),

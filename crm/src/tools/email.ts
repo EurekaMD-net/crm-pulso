@@ -9,7 +9,7 @@
  * as drafts in email_log and a message indicates SMTP is not configured.
  */
 
-import { getDatabase } from '../../../engine/src/db.js';
+import { getDatabase } from '../db.js';
 import { isGoogleEnabled, getGmailClient } from '../google-auth.js';
 import type { ToolContext } from './index.js';
 

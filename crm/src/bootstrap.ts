@@ -5,19 +5,14 @@
  * Creates CRM schema tables in the shared SQLite database.
  */
 
-import { getDatabase } from '../../engine/src/db.js';
+import { getDatabase } from './db.js';
 import { logger } from './logger.js';
 import { createCrmSchema, CRM_TABLES } from './schema.js';
 
 export function bootstrapCrm(): void {
   const db = getDatabase();
   try {
-    // Performance pragmas — safe for single-writer, multi-reader pattern
-    db.pragma('journal_mode = WAL');
-    db.pragma('synchronous = NORMAL');
-    db.pragma('cache_size = -64000');
-    db.pragma('temp_store = MEMORY');
-    db.pragma('mmap_size = 268435456');
+    // Pragmas — journal_mode is set in db.ts (DELETE, not WAL, for Docker compat)
 
     createCrmSchema(db);
 

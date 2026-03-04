@@ -8,7 +8,7 @@
  * Entry point: evaluateEscalation(aeId, deps) — calls all 4, deduplicates.
  */
 
-import { getDatabase } from '../../engine/src/db.js';
+import { getDatabase } from './db.js';
 import { getPersonById, getTeamIds, getFullTeamIds } from './hierarchy.js';
 import { logger } from './logger.js';
 import type { IpcDeps } from '../../engine/src/ipc.js';

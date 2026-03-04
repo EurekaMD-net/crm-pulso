@@ -8,7 +8,7 @@
  * in evento_calendario table without calling Google API.
  */
 
-import { getDatabase } from '../../../engine/src/db.js';
+import { getDatabase } from '../db.js';
 import { isGoogleEnabled, getCalendarClient } from '../google-auth.js';
 import type { ToolContext } from './index.js';
 

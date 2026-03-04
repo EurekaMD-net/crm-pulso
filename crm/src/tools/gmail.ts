@@ -8,7 +8,7 @@
  * All tools gracefully degrade when Google is not configured.
  */
 
-import { getDatabase } from '../../../engine/src/db.js';
+import { getDatabase } from '../db.js';
 import { isGoogleEnabled, getGmailReadClient, getGmailClient } from '../google-auth.js';
 import type { ToolContext } from './index.js';
 

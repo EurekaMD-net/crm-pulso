@@ -11,7 +11,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { getDatabase } from '../../engine/src/db.js';
+import { getDatabase } from './db.js';
 import { isGoogleEnabled, getDriveClient } from './google-auth.js';
 import { logger } from './logger.js';
 

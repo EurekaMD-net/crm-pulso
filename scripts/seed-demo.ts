@@ -6,11 +6,10 @@
  * Mexican media company. Run with: npx tsx scripts/seed-demo.ts
  */
 
-import { getDatabase, initDatabase } from '../engine/src/db.js';
+import { getDatabase } from '../crm/src/db.js';
 import { createCrmSchema } from '../crm/src/schema.js';
 
-// Initialize DB
-(initDatabase as Function)?.();
+// Initialize CRM DB (data/store/crm.db)
 const db = getDatabase();
 db.pragma('foreign_keys = ON');
 createCrmSchema(db);
