@@ -6,19 +6,20 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/root/claude/crm-azteca
-ExecStart=/usr/bin/node engine/dist/index.js
+ExecStart=/usr/bin/npx tsx engine/src/index.ts
 Restart=on-failure
-RestartSec=5
+RestartSec=10
 StandardOutput=journal
 StandardError=journal
 
 # Environment
 EnvironmentFile=/root/claude/crm-azteca/.env
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.nvm/versions/node/v22.22.0/bin
 
 # Security
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/root/claude/crm-azteca/store /root/claude/crm-azteca/data /root/claude/crm-azteca/groups
+ReadWritePaths=/root/claude/crm-azteca/store /root/claude/crm-azteca/data /root/claude/crm-azteca/groups /tmp
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target

@@ -26,6 +26,7 @@ import { consultar_eventos, consultar_inventario_evento } from './eventos.js';
 import { buscar_documentos } from './rag.js';
 import { buscar_emails, leer_email, crear_borrador_email } from './gmail.js';
 import { listar_archivos_drive, leer_archivo_drive } from './drive.js';
+import { buscar_web } from './web-search.js';
 
 // ---------------------------------------------------------------------------
 // Tool context — passed to every tool handler
@@ -481,6 +482,22 @@ const TOOL_BUSCAR_DOCUMENTOS: ToolDefinition = {
   },
 };
 
+const TOOL_BUSCAR_WEB: ToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'buscar_web',
+    description: 'Busca informacion en internet en tiempo real (noticias, datos de mercado, empresas, tendencias).',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Texto de busqueda' },
+        limite: { type: 'number', description: 'Maximo resultados (default 5, max 10)' },
+      },
+      required: ['query'],
+    },
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Role-based tool sets
 // ---------------------------------------------------------------------------
@@ -495,7 +512,7 @@ const AE_TOOLS: ToolDefinition[] = [
   TOOL_CONSULTAR_EVENTOS, TOOL_CONSULTAR_INVENTARIO_EVENTO,
   TOOL_BUSCAR_EMAILS, TOOL_LEER_EMAIL, TOOL_CREAR_BORRADOR_EMAIL,
   TOOL_LISTAR_ARCHIVOS_DRIVE, TOOL_LEER_ARCHIVO_DRIVE,
-  TOOL_BUSCAR_DOCUMENTOS,
+  TOOL_BUSCAR_DOCUMENTOS, TOOL_BUSCAR_WEB,
 ];
 
 const GERENTE_TOOLS: ToolDefinition[] = [
@@ -505,7 +522,7 @@ const GERENTE_TOOLS: ToolDefinition[] = [
   TOOL_CONSULTAR_EVENTOS, TOOL_CONSULTAR_INVENTARIO_EVENTO,
   TOOL_BUSCAR_EMAILS, TOOL_LEER_EMAIL,
   TOOL_LISTAR_ARCHIVOS_DRIVE, TOOL_LEER_ARCHIVO_DRIVE,
-  TOOL_BUSCAR_DOCUMENTOS,
+  TOOL_BUSCAR_DOCUMENTOS, TOOL_BUSCAR_WEB,
 ];
 
 const DIRECTOR_TOOLS: ToolDefinition[] = [
@@ -515,7 +532,7 @@ const DIRECTOR_TOOLS: ToolDefinition[] = [
   TOOL_CONSULTAR_EVENTOS, TOOL_CONSULTAR_INVENTARIO_EVENTO,
   TOOL_BUSCAR_EMAILS, TOOL_LEER_EMAIL,
   TOOL_LISTAR_ARCHIVOS_DRIVE, TOOL_LEER_ARCHIVO_DRIVE,
-  TOOL_BUSCAR_DOCUMENTOS,
+  TOOL_BUSCAR_DOCUMENTOS, TOOL_BUSCAR_WEB,
 ];
 
 const VP_TOOLS: ToolDefinition[] = [
@@ -525,7 +542,7 @@ const VP_TOOLS: ToolDefinition[] = [
   TOOL_CONSULTAR_EVENTOS, TOOL_CONSULTAR_INVENTARIO_EVENTO,
   TOOL_BUSCAR_EMAILS, TOOL_LEER_EMAIL,
   TOOL_LISTAR_ARCHIVOS_DRIVE, TOOL_LEER_ARCHIVO_DRIVE,
-  TOOL_BUSCAR_DOCUMENTOS,
+  TOOL_BUSCAR_DOCUMENTOS, TOOL_BUSCAR_WEB,
 ];
 
 export function getToolsForRole(role: 'ae' | 'gerente' | 'director' | 'vp'): ToolDefinition[] {
@@ -567,6 +584,7 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   listar_archivos_drive,
   leer_archivo_drive,
   buscar_documentos,
+  buscar_web,
 };
 
 export async function executeTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<string> {

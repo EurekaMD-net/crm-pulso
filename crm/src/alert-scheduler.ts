@@ -17,12 +17,16 @@ export function startAlertScheduler(dataDir: string): void {
   fs.mkdirSync(tasksDir, { recursive: true });
 
   const writeAlertTask = () => {
-    const filename = `alert-${Date.now()}.json`;
-    fs.writeFileSync(
-      path.join(tasksDir, filename),
-      JSON.stringify({ type: 'crm_evaluate_alerts' }),
-    );
-    logger.info('Alert evaluation task scheduled');
+    try {
+      const filename = `alert-${Date.now()}.json`;
+      fs.writeFileSync(
+        path.join(tasksDir, filename),
+        JSON.stringify({ type: 'crm_evaluate_alerts' }),
+      );
+      logger.info('Alert evaluation task scheduled');
+    } catch (err) {
+      logger.error({ err }, 'Failed to write alert task file');
+    }
   };
 
   // Run once immediately, then every 2 hours

@@ -248,19 +248,25 @@ export async function evaluateEscalation(
   aeId: string,
   deps: IpcDeps,
 ): Promise<void> {
+  const run = async (name: string, fn: () => Promise<void>) => {
+    try { await fn(); } catch (err) {
+      logger.error({ aeId, escalation: name, err }, 'Escalation failed, continuing');
+    }
+  };
+
   // 1 & 2: AE-level checks
-  await escalateQuotaEmergency(aeId, deps);
-  await escalateCoachingSignal(aeId, deps);
+  await run('quota', () => escalateQuotaEmergency(aeId, deps));
+  await run('coaching', () => escalateCoachingSignal(aeId, deps));
 
   // 3: Team-level check (gerente)
   const person = getPersonById(aeId);
   if (person?.reporta_a) {
-    await escalatePatternDetection(person.reporta_a, deps);
+    await run('pattern', () => escalatePatternDetection(person.reporta_a!, deps));
 
     // 4: Region-level check (director)
     const gerente = getPersonById(person.reporta_a);
     if (gerente?.reporta_a) {
-      await escalateSystemicRisk(gerente.reporta_a, deps);
+      await run('systemic', () => escalateSystemicRisk(gerente.reporta_a!, deps));
     }
   }
 }

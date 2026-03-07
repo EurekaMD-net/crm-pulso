@@ -7,15 +7,9 @@
  * All tools gracefully degrade when Google is not configured.
  */
 
-import { getDatabase } from '../db.js';
 import { isGoogleEnabled, getDriveClient } from '../google-auth.js';
+import { getPersonaEmail } from './helpers.js';
 import type { ToolContext } from './index.js';
-
-function getPersonaEmail(personaId: string): string | null {
-  const db = getDatabase();
-  const row = db.prepare('SELECT email FROM persona WHERE id = ?').get(personaId) as any;
-  return row?.email ?? null;
-}
 
 // ---------------------------------------------------------------------------
 // listar_archivos_drive

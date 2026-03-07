@@ -50,9 +50,10 @@ interface ContainerOutput {
 
 const IPC_INPUT_DIR = '/workspace/ipc/input';
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
-const IPC_POLL_MS = 500;
-const MAX_MESSAGES = 40;
-const MAX_TOOL_ROUNDS = 15;
+const IPC_POLL_MIN_MS = 100;
+const IPC_POLL_MAX_MS = 500;
+const MAX_MESSAGES = 12;
+const MAX_TOOL_ROUNDS = 8;
 const SESSIONS_DIR = '/workspace/group/.crm-sessions';
 
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
@@ -124,6 +125,7 @@ function drainIpcInput(): string[] {
 
 function waitForIpcMessage(): Promise<string | null> {
   return new Promise((resolve) => {
+    let pollMs = IPC_POLL_MIN_MS;
     const poll = () => {
       if (shouldClose()) {
         resolve(null);
@@ -134,7 +136,8 @@ function waitForIpcMessage(): Promise<string | null> {
         resolve(messages.join('\n'));
         return;
       }
-      setTimeout(poll, IPC_POLL_MS);
+      pollMs = Math.min(pollMs * 1.5, IPC_POLL_MAX_MS);
+      setTimeout(poll, pollMs);
     };
     poll();
   });
@@ -158,7 +161,11 @@ function loadSession(sessionId: string): ChatMessage[] | null {
 function saveSession(sessionId: string, messages: ChatMessage[]): void {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
   const filePath = path.join(SESSIONS_DIR, `${sessionId}.json`);
-  fs.writeFileSync(filePath, JSON.stringify(messages));
+  const tmpPath = filePath + '.tmp';
+  // Don't persist system prompt — it's rebuilt from templates on load
+  const toSave = messages.filter(m => m.role !== 'system');
+  fs.writeFileSync(tmpPath, JSON.stringify(toSave));
+  fs.renameSync(tmpPath, filePath);
 }
 
 function generateSessionId(): string {
@@ -195,12 +202,18 @@ function buildSystemPrompt(groupFolder: string, personaName: string, personaRol:
 // ---------------------------------------------------------------------------
 
 function truncateMessages(messages: ChatMessage[], maxMessages: number): ChatMessage[] {
-  // Always keep system message (first) + last N messages
+  // Always keep system message (first) + last N user/assistant exchanges
   if (messages.length <= maxMessages + 1) return messages;
 
   const system = messages[0]?.role === 'system' ? [messages[0]] : [];
   const rest = messages[0]?.role === 'system' ? messages.slice(1) : messages;
-  const kept = rest.slice(-maxMessages);
+  // Keep only the last N messages, but ensure we don't break tool call pairs
+  // (an assistant with tool_calls must be followed by tool results)
+  let kept = rest.slice(-maxMessages);
+  // If first kept message is a tool result, drop orphaned tool messages
+  while (kept.length > 0 && kept[0].role === 'tool') {
+    kept = kept.slice(1);
+  }
   return [...system, ...kept];
 }
 
@@ -228,7 +241,7 @@ async function main(): Promise<void> {
   // Set inference env vars from secrets
   if (containerInput.secrets) {
     for (const [key, value] of Object.entries(containerInput.secrets)) {
-      if (key.startsWith('INFERENCE_')) {
+      if (key.startsWith('INFERENCE_') || key === 'BRAVE_SEARCH_API_KEY') {
         process.env[key] = value;
       }
     }
@@ -286,9 +299,15 @@ async function main(): Promise<void> {
     persona.rol,
   );
 
-  // Tool executor: wraps executeTool with ToolContext
+  // Tool executor: wraps executeTool with ToolContext + timeout
+  const TOOL_TIMEOUT_MS = 15_000;
   const executor = async (name: string, args: Record<string, unknown>): Promise<string> => {
-    return executeTool(name, args, toolCtx);
+    return Promise.race([
+      executeTool(name, args, toolCtx),
+      new Promise<string>((_, reject) =>
+        setTimeout(() => reject(new Error(`Tool "${name}" timed out after ${TOOL_TIMEOUT_MS}ms`)), TOOL_TIMEOUT_MS),
+      ),
+    ]);
   };
 
   // Load or create session
@@ -303,8 +322,10 @@ async function main(): Promise<void> {
     }
   }
 
-  // Ensure system message is present
-  if (messages.length === 0 || messages[0].role !== 'system') {
+  // Always set/refresh system message (persona may have changed since last session)
+  if (messages.length > 0 && messages[0].role === 'system') {
+    messages[0] = { role: 'system', content: systemPrompt };
+  } else {
     messages.unshift({ role: 'system', content: systemPrompt });
   }
 
@@ -402,5 +423,7 @@ export {
   MAX_TOOL_ROUNDS,
   IPC_INPUT_DIR,
   IPC_INPUT_CLOSE_SENTINEL,
+  IPC_POLL_MIN_MS,
+  IPC_POLL_MAX_MS,
 };
 export type { ContainerInput, ContainerOutput };

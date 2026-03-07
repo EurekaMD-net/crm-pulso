@@ -16,18 +16,7 @@ export function bootstrapCrm(): void {
 
     createCrmSchema(db);
 
-    // Verify all expected tables exist
-    const existing = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-      .all() as { name: string }[];
-    const existingNames = new Set(existing.map(r => r.name));
-    const missing = CRM_TABLES.filter(t => !existingNames.has(t));
-
-    if (missing.length > 0) {
-      logger.warn({ missing }, 'CRM tables missing after bootstrap');
-    }
-
-    logger.info({ tables: CRM_TABLES.length - missing.length, expected: CRM_TABLES.length }, 'CRM schema initialized');
+    logger.info({ tables: CRM_TABLES.length }, 'CRM schema initialized');
   } catch (err) {
     logger.error({ err }, 'CRM bootstrap failed');
     throw err;

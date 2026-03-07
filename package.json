@@ -9,8 +9,8 @@
     "auth": "tsx engine/src/whatsapp-auth.ts",
     "build": "tsc --build",
     "build:container": "crm/container/build.sh",
-    "start": "node engine/dist/index.js",
-    "typecheck": "tsc --build --noEmit",
+    "start": "tsx engine/src/index.ts",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "bootstrap": "tsx scripts/bootstrap.sh",
     "register-team": "tsx scripts/register-hierarchy.ts"

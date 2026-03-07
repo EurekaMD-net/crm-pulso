@@ -112,7 +112,7 @@ function loadProviders(): InferenceProvider[] {
 // ---------------------------------------------------------------------------
 
 const TIMEOUT_MS = parseInt(process.env.INFERENCE_TIMEOUT_MS ?? '30000', 10);
-const MAX_TOKENS = parseInt(process.env.INFERENCE_MAX_TOKENS ?? '4096', 10);
+const MAX_TOKENS = parseInt(process.env.INFERENCE_MAX_TOKENS ?? '2048', 10);
 
 interface OpenAIResponse {
   choices: Array<{
@@ -152,6 +152,11 @@ async function callProvider(
   }
   if (request.tools && request.tools.length > 0) {
     body.tools = request.tools;
+    body.tool_choice = 'auto';
+  }
+  // Disable reasoning/thinking mode for faster responses (Qwen 3.5+ only)
+  if (provider.model.startsWith('qwen3')) {
+    body.enable_thinking = false;
   }
 
   const controller = new AbortController();
@@ -218,12 +223,23 @@ export async function infer(request: InferenceRequest): Promise<InferenceRespons
   let lastError: Error | undefined;
 
   for (const provider of providers) {
-    try {
-      return await callProvider(provider, request);
-    } catch (err) {
-      lastError = err instanceof Error ? err : new Error(String(err));
-      logger.warn({ provider: provider.name, error: lastError.message }, 'provider failed, trying next');
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await callProvider(provider, request);
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        const statusMatch = lastError.message.match(/HTTP (\d+)/);
+        const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
+        if (status === 429 || (status >= 500 && status < 600)) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 8000);
+          logger.warn({ provider: provider.name, attempt, status, delay }, 'retryable error, backing off');
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        break; // non-retryable error, try next provider
+      }
     }
+    logger.warn({ provider: provider.name, error: lastError?.message }, 'provider failed, trying next');
   }
 
   throw new Error(`All inference providers failed. Last error: ${lastError?.message}`);
@@ -275,24 +291,31 @@ export async function inferWithTools(
       tool_calls: response.tool_calls,
     });
 
-    // Execute each tool call and append results
-    for (const toolCall of response.tool_calls) {
-      let result: string;
-      try {
-        const args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
-        result = await executor(toolCall.function.name, args);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        result = JSON.stringify({ error: message });
-        logger.error({ tool: toolCall.function.name, error: message }, 'tool execution failed');
-      }
-
-      conversation.push({
-        role: 'tool',
-        content: result,
-        tool_call_id: toolCall.id,
-      });
-    }
+    // Execute tool calls in parallel and append results
+    const toolResults = await Promise.all(
+      response.tool_calls.map(async (toolCall) => {
+        let result: string;
+        try {
+          const rawArgs = toolCall.function.arguments;
+          // Detect likely truncation: unclosed braces/brackets
+          const opens = (rawArgs.match(/[{[]/g) || []).length;
+          const closes = (rawArgs.match(/[}\]]/g) || []).length;
+          if (opens > closes) {
+            result = JSON.stringify({ error: 'Tool call truncated (max_tokens hit). Try a simpler query.' });
+            logger.warn({ tool: toolCall.function.name, argsLen: rawArgs.length }, 'tool call JSON truncated');
+          } else {
+            const args = JSON.parse(rawArgs) as Record<string, unknown>;
+            result = await executor(toolCall.function.name, args);
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          result = JSON.stringify({ error: message });
+          logger.error({ tool: toolCall.function.name, error: message }, 'tool execution failed');
+        }
+        return { role: 'tool' as const, content: result, tool_call_id: toolCall.id };
+      }),
+    );
+    conversation.push(...toolResults);
   }
 
   // Safety: hit max rounds — return last content or empty

@@ -83,6 +83,11 @@ export class WhatsAppChannel implements Channel {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
+        // Skip exit when using --pairing-code (QR fires before pairing code is ready)
+        if (process.argv.includes('--pairing-code')) {
+          logger.info('QR received but pairing code mode active, waiting...');
+          return;
+        }
         const msg =
           'WhatsApp authentication required. Run /setup in Claude Code.';
         logger.error(msg);

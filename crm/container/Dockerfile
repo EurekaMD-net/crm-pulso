@@ -1,4 +1,4 @@
-FROM nanoclaw-agent:latest
+FROM nanoclaw-agent:latest AS builder
 
 # Switch to root for package installation (base image ends with USER node)
 USER root
@@ -25,6 +25,19 @@ RUN ln -s /app/crm/container/agent-runner/node_modules /app/crm/node_modules
 # Copy agent runner source and build
 COPY container/agent-runner/ /app/crm/container/agent-runner/
 RUN npm run build
+
+# --- Runtime stage: no build tools ---
+FROM nanoclaw-agent:latest
+
+USER root
+
+# Only runtime dependency: sqlite3 CLI (no python3, make, g++)
+RUN apt-get update && apt-get install -y --no-install-recommends sqlite3 && rm -rf /var/lib/apt/lists/*
+
+# Copy built CRM from builder stage
+COPY --from=builder /app/crm/ /app/crm/
+COPY --from=builder /app/engine/src/db.ts /app/engine/src/db.ts
+COPY --from=builder /app/engine/src/logger.ts /app/engine/src/logger.ts
 
 # Switch back to non-root for runtime
 USER node

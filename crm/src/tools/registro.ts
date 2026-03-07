@@ -71,15 +71,18 @@ export function registrar_actividad(args: Record<string, unknown>, ctx: ToolCont
   const id = genId('act');
   const timestamp = now();
 
-  db.prepare(`
-    INSERT INTO actividad (id, ae_id, cuenta_id, propuesta_id, tipo, resumen, sentimiento, siguiente_accion, fecha_siguiente_accion, fecha)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, ctx.persona_id, cuenta?.id ?? null, propuesta?.id ?? null, tipo, resumen, sentimiento, siguienteAccion ?? null, fechaSiguienteAccion ?? null, timestamp);
+  const tx = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO actividad (id, ae_id, cuenta_id, propuesta_id, tipo, resumen, sentimiento, siguiente_accion, fecha_siguiente_accion, fecha)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, ctx.persona_id, cuenta?.id ?? null, propuesta?.id ?? null, tipo, resumen, sentimiento, siguienteAccion ?? null, fechaSiguienteAccion ?? null, timestamp);
 
-  // Update propuesta activity timestamp if linked
-  if (propuesta) {
-    db.prepare('UPDATE propuesta SET fecha_ultima_actividad = ?, dias_sin_actividad = 0 WHERE id = ?').run(timestamp, propuesta.id);
-  }
+    // Update propuesta activity timestamp if linked
+    if (propuesta) {
+      db.prepare('UPDATE propuesta SET fecha_ultima_actividad = ?, dias_sin_actividad = 0 WHERE id = ?').run(timestamp, propuesta.id);
+    }
+  });
+  tx();
 
   const parts = [`Actividad registrada: ${tipo}`];
   if (cuenta) parts.push(`Cuenta: ${cuenta.nombre}`);
