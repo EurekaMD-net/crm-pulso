@@ -21,7 +21,7 @@
 1. ~~**Historical analysis tools**~~ — Done (analizar_winloss, analizar_tendencias)
 3. ~~**Cross-sell recommendations**~~ — Done (recomendar_crosssell)
 4. **Agent swarm** — multi-agent coordination for complex workflows
-5. **Dashboard UI** — D1 done (API + auth + 6 endpoints + 25 tests). Next: D2 (VP dashboard HTML)
+5. ~~**Dashboard UI**~~ — Done (D1-D3: API + auth + 6 endpoints + VP/Director/Manager dashboards + login routing)
 
 ## Blocked
 
@@ -34,6 +34,9 @@
 
 | Commit | Description |
 |--------|-------------|
+| `8375926` | feat: manager and director dashboards with role-based routing |
+| `79489cb` | feat: VP dashboard UI with pipeline funnel, cuota bars, risk table |
+| `b57e149` | feat: dashboard REST API with JWT auth and 6 endpoints |
 | `499e3bb` | feat: cross-sell recommendation tool (recomendar_crosssell) |
 | `80b86af` | feat: analytics seed script for 4-week historical test data |
 | `3d797f8` | feat: add historical analysis tools (analizar_winloss, analizar_tendencias) |
