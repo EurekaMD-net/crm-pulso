@@ -12,6 +12,7 @@ Salespeople chat with AI agents via WhatsApp. Each person gets a personal CRM as
 - **Handles scheduling** — Creates calendar events, sets follow-up reminders, delivers morning briefings.
 - **Searches documents** — RAG pipeline with sqlite-vec indexes Google Drive files for semantic vector search (Dashscope text-embedding-v3, 1024d), scoped by hierarchy.
 - **Escalates risks** — When quota is critically low, negative patterns emerge, or mega-deals stall, the agent escalates up the chain (AE → Manager → Director → VP).
+- **Serves dashboards** — On-demand web dashboards per role with hierarchical quota views, pipeline funnels, at-risk deals, and alerts. Links delivered via WhatsApp with short-code URLs.
 
 ## Architecture
 
@@ -48,7 +49,7 @@ WhatsApp → engine (NanoClaw) → Direct tools (29 CRM tools via inference adap
 
 ### Data Model
 
-16 SQLite tables: `persona`, `cuenta`, `contacto`, `contrato`, `descarga`, `propuesta`, `actividad`, `cuota`, `inventario`, `alerta_log`, `email_log`, `evento_calendario`, `crm_events`, `crm_documents`, `crm_embeddings`, `crm_vec_embeddings` (sqlite-vec virtual table for KNN search).
+17 SQLite tables: `persona`, `cuenta`, `contacto`, `contrato`, `descarga`, `propuesta`, `actividad`, `cuota`, `inventario`, `alerta_log`, `email_log`, `evento_calendario`, `crm_events`, `crm_documents`, `crm_embeddings`, `crm_vec_embeddings` (sqlite-vec virtual table for KNN search).
 
 ### Tools by Role
 
@@ -91,7 +92,7 @@ agentic-crm/
 ├── engine/              # NanoClaw — the AI agent platform (git subtree)
 ├── crm/
 │   ├── src/
-│   │   ├── schema.ts         # 16 CRM tables (incl. sqlite-vec virtual table)
+│   │   ├── schema.ts         # 17 CRM tables (incl. sqlite-vec + dashboard_links)
 │   │   ├── bootstrap.ts      # Schema init + hooks
 │   │   ├── hierarchy.ts      # Org chart traversal + access control
 │   │   ├── tools/            # 29 tools across 13 modules
