@@ -103,10 +103,11 @@ agentic-crm/
 │   │   ├── briefing-seeds.ts # Staggered scheduled briefings
 │   │   ├── google-auth.ts    # Google Workspace JWT auth (6 clients)
 │   │   ├── ipc-handlers.ts   # 6 IPC task types
-│   │   └── followup-scheduler.ts  # Business-hours reminder scheduler
+│   │   ├── followup-scheduler.ts  # Business-hours reminder scheduler
+│   │   └── dashboard/       # REST API dashboard (auth + 6 endpoints)
 │   ├── container/       # CRM container image (extends engine)
 │   ├── groups/          # CLAUDE.md templates per role (ae, manager, director, vp)
-│   └── tests/           # 400 tests across 18 test files
+│   └── tests/           # 425 tests across 19 test files
 ├── scripts/             # Bootstrap, registration, data import
 ├── docs/                # Architecture, deployment, upstream sync
 └── groups/              # Live group folders (created at runtime)
@@ -155,7 +156,7 @@ agentic-crm/
 npm run dev              # Run with hot reload (tsx watch)
 npm run build            # Compile TypeScript
 npm run typecheck        # Type check
-npm run test             # Run all tests (400 CRM tests)
+npm run test             # Run all tests (425 CRM tests)
 npm run bootstrap        # First-time CRM setup
 npm run register-team    # Register team from CSV/JSON
 npm run build:container  # Build CRM container (extends engine image)

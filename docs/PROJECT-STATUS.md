@@ -1,7 +1,7 @@
 # CRM Azteca — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-03-08 (post historical analysis tools)
+> Last updated: 2026-03-08 (post dashboard API D1)
 
 ## Phase Tracker
 
@@ -21,7 +21,7 @@
 1. ~~**Historical analysis tools**~~ — Done (analizar_winloss, analizar_tendencias)
 3. ~~**Cross-sell recommendations**~~ — Done (recomendar_crosssell)
 4. **Agent swarm** — multi-agent coordination for complex workflows
-5. **Dashboard UI** — plan exists at `docs/DASHBOARD-PLAN.md`
+5. **Dashboard UI** — D1 done (API + auth + 6 endpoints + 25 tests). Next: D2 (VP dashboard HTML)
 
 ## Blocked
 
@@ -34,6 +34,7 @@
 
 | Commit | Description |
 |--------|-------------|
+| `499e3bb` | feat: cross-sell recommendation tool (recomendar_crosssell) |
 | `80b86af` | feat: analytics seed script for 4-week historical test data |
 | `3d797f8` | feat: add historical analysis tools (analizar_winloss, analizar_tendencias) |
 | `85a5a55` | feat: sqlite-vec integration for semantic RAG search |
@@ -46,8 +47,8 @@
 |--------|-------|
 | CRM tools | 29 |
 | SQLite tables | 16 |
-| Test files | 81 |
-| Tests passing | 400 CRM + 640 engine = 1040+ |
+| Test files | 82 |
+| Tests passing | 425 CRM + 640 engine = 1065+ |
 | Persona templates | 8 |
 | Active groups | 4 |
 | Seed: personas | 20 |

@@ -20,6 +20,9 @@ Agentic CRM for media ad sales. NanoClaw engine at `engine/`, all CRM code at `c
 | `crm/src/alerts.ts` | Alert evaluators (6 types + event countdown) |
 | `crm/src/google-auth.ts` | Google Workspace JWT auth (Gmail, Drive, Calendar) |
 | `crm/src/tools/index.ts` | Tool registry: 29 tools, role-based filtering |
+| `crm/src/dashboard/server.ts` | Dashboard HTTP server + router (6 API endpoints) |
+| `crm/src/dashboard/auth.ts` | Dashboard JWT auth (HMAC-SHA256, no external deps) |
+| `crm/src/dashboard/api.ts` | Dashboard API handlers (reuses scopeFilter pattern) |
 | `crm/groups/global.md` | Global CLAUDE.md template (schema, queries, rules) |
 | `crm/groups/ae.md` | AE persona template (28 tools) |
 | `crm/groups/manager.md` | Manager persona template (20 tools) |
@@ -29,7 +32,7 @@ Agentic CRM for media ad sales. NanoClaw engine at `engine/`, all CRM code at `c
 | File | Change |
 |------|--------|
 | `engine/src/db.ts` | `getDatabase()` export |
-| `engine/src/index.ts` | `bootstrapCrm()` + schedulers (alerts, followups, doc-sync) |
+| `engine/src/index.ts` | `bootstrapCrm()` + schedulers + `startDashboardServer()` |
 | `engine/src/ipc.ts` | CRM IPC delegation in default case |
 | `engine/container/agent-runner/src/index.ts` | Allowed tools |
 | `engine/src/container-runner.ts` | CRM document store mount |
@@ -84,7 +87,7 @@ git subtree pull --prefix=engine https://github.com/qwibitai/nanoclaw.git main -
 ### Message Flow
 
 ```
-WhatsApp → engine (NanoClaw) → Direct tools (25 CRM tools via inference adapter)
+WhatsApp → engine (NanoClaw) → Direct tools (29 CRM tools via inference adapter)
                                     ├── Role-based tool filtering
                                     ├── Google Workspace (Gmail, Drive, Calendar)
                                     ├── RAG search (buscar_documentos)
@@ -111,9 +114,9 @@ WhatsApp → engine (NanoClaw) → Direct tools (25 CRM tools via inference adap
 ## Testing
 
 ```bash
-npm run test         # All tests (400 CRM tests)
+npm run test         # All tests (425 CRM tests)
 ```
 
 Tests live in:
 - `engine/src/*.test.ts` — Engine tests
-- `crm/tests/*.test.ts` — CRM tests (18 test files)
+- `crm/tests/*.test.ts` — CRM tests (19 test files)
