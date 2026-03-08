@@ -9,12 +9,32 @@ export function escapeXml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
-export function formatMessages(messages: NewMessage[]): string {
+export function compactMessages(
+  messages: NewMessage[],
+  maxMessages: number,
+): { messages: NewMessage[]; truncatedCount: number } {
+  if (messages.length <= maxMessages) {
+    return { messages, truncatedCount: 0 };
+  }
+  return {
+    messages: messages.slice(-maxMessages),
+    truncatedCount: messages.length - maxMessages,
+  };
+}
+
+export function formatMessages(
+  messages: NewMessage[],
+  truncatedCount?: number,
+): string {
   const lines = messages.map(
     (m) =>
       `<message sender="${escapeXml(m.sender_name)}" time="${m.timestamp}">${escapeXml(m.content)}</message>`,
   );
-  return `<messages>\n${lines.join('\n')}\n</messages>`;
+  const header =
+    truncatedCount && truncatedCount > 0
+      ? `<context-note>${truncatedCount} older messages were truncated. Check the group's CLAUDE.md and conversations/ folder for historical context.</context-note>\n`
+      : '';
+  return `<messages>\n${header}${lines.join('\n')}\n</messages>`;
 }
 
 export function stripInternalTags(text: string): string {

@@ -11,6 +11,7 @@ import {
   DATA_DIR,
   IDLE_TIMEOUT,
   MAIN_GROUP_FOLDER,
+  MAX_CONTEXT_MESSAGES,
   POLL_INTERVAL,
   TRIGGER_PATTERN,
 } from './config.js';
@@ -44,7 +45,7 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
-import { findChannel, formatMessages, formatOutbound } from './router.js';
+import { compactMessages, findChannel, formatMessages, formatOutbound } from './router.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
@@ -166,7 +167,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     if (!hasTrigger) return true;
   }
 
-  const prompt = formatMessages(missedMessages);
+  const { messages: windowedMessages, truncatedCount } = compactMessages(
+    missedMessages,
+    MAX_CONTEXT_MESSAGES,
+  );
+  const prompt = formatMessages(windowedMessages, truncatedCount);
   const imageAttachments = parseImageReferences(missedMessages);
 
   // Advance cursor so the piping path in startMessageLoop won't re-fetch
@@ -208,16 +213,18 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
           : JSON.stringify(result.result);
       // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
       const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
-      logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
+      logger.info({ group: group.name, streaming: !!result.streaming }, `Agent output: ${raw.slice(0, 200)}`);
       if (text) {
         await channel.sendMessage(chatJid, text);
         outputSentToUser = true;
       }
-      // Only reset idle timer on actual results, not session-update markers (result: null)
-      resetIdleTimer();
+      // Only reset idle timer on final results, not streaming chunks or session-update markers
+      if (!result.streaming) {
+        resetIdleTimer();
+      }
     }
 
-    if (result.status === 'success') {
+    if (result.status === 'success' && !result.streaming) {
       queue.notifyIdle(chatJid);
     }
 

@@ -44,6 +44,7 @@ interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+  streaming?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -413,6 +414,53 @@ async function main(): Promise<void> {
   // Qwen 3.5 (text model) cannot process image_url content blocks, so we pass
   // the text reference only. The agent can acknowledge the image was received.
 
+  // Block streaming: accumulate full response, then emit the first block early
+  // while the rest is still generating. Max 3 blocks, split at paragraph boundaries.
+  const MAX_BLOCKS = 3;
+  const FIRST_BLOCK_MIN = 300; // emit first block after ~300 chars to reduce perceived latency
+  let streamBuffer = '';
+  let firstBlockSent = false;
+
+  function emitFirstBlock(): void {
+    if (firstBlockSent || streamBuffer.length < FIRST_BLOCK_MIN) return;
+    // Find a clean paragraph break near or after FIRST_BLOCK_MIN
+    const searchFrom = FIRST_BLOCK_MIN - 50;
+    const breakIdx = streamBuffer.indexOf('\n\n', searchFrom);
+    if (breakIdx === -1) return; // no clean break yet, keep buffering
+    const block = streamBuffer.slice(0, breakIdx).trim();
+    streamBuffer = streamBuffer.slice(breakIdx + 2);
+    firstBlockSent = true;
+    if (block) {
+      writeOutput({ status: 'success', result: block, newSessionId: sessionId, streaming: true });
+    }
+  }
+
+  function onTextChunk(delta: string): void {
+    streamBuffer += delta;
+    if (!firstBlockSent) emitFirstBlock();
+  }
+
+  /** Split remaining text into up to N blocks at paragraph boundaries. */
+  function splitIntoBlocks(text: string, maxBlocks: number): string[] {
+    const trimmed = text.trim();
+    if (!trimmed || maxBlocks <= 1) return trimmed ? [trimmed] : [];
+
+    const paragraphs = trimmed.split(/\n\n+/);
+    if (paragraphs.length <= maxBlocks) {
+      // Few paragraphs — send each as its own block
+      return paragraphs.map(p => p.trim()).filter(Boolean);
+    }
+
+    // Distribute paragraphs evenly across blocks
+    const blocks: string[] = [];
+    const perBlock = Math.ceil(paragraphs.length / maxBlocks);
+    for (let i = 0; i < paragraphs.length; i += perBlock) {
+      const chunk = paragraphs.slice(i, i + perBlock).join('\n\n').trim();
+      if (chunk) blocks.push(chunk);
+    }
+    return blocks;
+  }
+
   // Message loop
   try {
     while (true) {
@@ -428,18 +476,33 @@ async function main(): Promise<void> {
       ackIndex++;
       writeOutput({ status: 'success', result: ack, newSessionId: sessionId });
 
-      // Call inference with tools
-      const result = await inferWithTools(messages, tools, executor, MAX_TOOL_ROUNDS);
+      // Call inference with tools (streaming text deltas via onTextChunk)
+      firstBlockSent = false;
+      streamBuffer = '';
+      const result = await inferWithTools(messages, tools, executor, MAX_TOOL_ROUNDS, onTextChunk);
 
       // Update messages with full conversation from inference
       messages = result.messages;
 
-      // Write output
-      writeOutput({
-        status: 'success',
-        result: result.content,
-        newSessionId: sessionId,
-      });
+      // Emit remaining text as blocks (max MAX_BLOCKS total, minus 1 if first block was sent)
+      const remainingSlots = firstBlockSent ? MAX_BLOCKS - 1 : MAX_BLOCKS;
+      const remaining = streamBuffer.trim();
+
+      if (remaining) {
+        const blocks = splitIntoBlocks(remaining, remainingSlots);
+        for (const block of blocks) {
+          writeOutput({ status: 'success', result: block, newSessionId: sessionId, streaming: true });
+        }
+        // Completion marker
+        writeOutput({ status: 'success', result: null, newSessionId: sessionId });
+      } else if (firstBlockSent) {
+        // First block was sent during streaming, no remaining text
+        writeOutput({ status: 'success', result: null, newSessionId: sessionId });
+      } else {
+        // No streaming happened (short response) — send as single message
+        writeOutput({ status: 'success', result: result.content, newSessionId: sessionId });
+      }
+      streamBuffer = '';
 
       // Save session
       saveSession(sessionId, messages);

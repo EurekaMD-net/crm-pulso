@@ -133,12 +133,16 @@ interface OpenAIResponse {
   };
 }
 
+export type OnTextChunk = (text: string) => void;
+
 async function callProvider(
   provider: InferenceProvider,
   request: InferenceRequest,
+  onTextChunk?: OnTextChunk,
 ): Promise<InferenceResponse> {
   const url = `${provider.baseUrl}/chat/completions`;
   const start = Date.now();
+  const streaming = !!onTextChunk;
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (provider.apiKey) {
@@ -149,6 +153,7 @@ async function callProvider(
     model: provider.model,
     messages: request.messages,
     max_tokens: request.max_tokens ?? MAX_TOKENS,
+    stream: streaming,
   };
   if (request.temperature !== undefined) {
     body.temperature = request.temperature;
@@ -178,26 +183,28 @@ async function callProvider(
       throw new Error(`HTTP ${response.status}: ${text.slice(0, 200)}`);
     }
 
-    const data = (await response.json()) as OpenAIResponse;
-    const latency = Date.now() - start;
+    let result: InferenceResponse;
 
-    const choice = data.choices?.[0];
-    if (!choice) {
-      throw new Error('Empty response: no choices returned');
+    if (streaming && response.body) {
+      // Parse SSE stream, emit text deltas, accumulate full response
+      result = await parseSSEStream(response.body, provider, start, onTextChunk);
+    } else {
+      const data = (await response.json()) as OpenAIResponse;
+      const choice = data.choices?.[0];
+      if (!choice) throw new Error('Empty response: no choices returned');
+      result = {
+        content: choice.message.content,
+        tool_calls: choice.message.tool_calls,
+        usage: data.usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        provider: provider.name,
+        latency_ms: Date.now() - start,
+      };
     }
-
-    const result: InferenceResponse = {
-      content: choice.message.content,
-      tool_calls: choice.message.tool_calls,
-      usage: data.usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-      provider: provider.name,
-      latency_ms: latency,
-    };
 
     logger.info({
       provider: provider.name,
       model: provider.model,
-      latency_ms: latency,
+      latency_ms: result.latency_ms,
       prompt_tokens: result.usage.prompt_tokens,
       completion_tokens: result.usage.completion_tokens,
       tool_calls: result.tool_calls?.length ?? 0,
@@ -209,6 +216,90 @@ async function callProvider(
   }
 }
 
+/** Parse an OpenAI-compatible SSE stream, emitting text deltas via callback. */
+async function parseSSEStream(
+  body: ReadableStream<Uint8Array>,
+  provider: InferenceProvider,
+  startTime: number,
+  onTextChunk: OnTextChunk,
+): Promise<InferenceResponse> {
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let content = '';
+  const toolCalls: Map<number, ToolCall> = new Map();
+  let usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+
+  const reader = body.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // Process complete SSE events
+      let newlineIdx: number;
+      while ((newlineIdx = buffer.indexOf('\n\n')) !== -1) {
+        const event = buffer.slice(0, newlineIdx);
+        buffer = buffer.slice(newlineIdx + 2);
+
+        for (const line of event.split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6);
+          if (data === '[DONE]') continue;
+
+          try {
+            const chunk = JSON.parse(data);
+            const delta = chunk.choices?.[0]?.delta;
+            if (!delta) continue;
+
+            // Accumulate text content and emit to callback
+            if (delta.content) {
+              content += delta.content;
+              onTextChunk(delta.content);
+            }
+
+            // Accumulate tool calls
+            if (delta.tool_calls) {
+              for (const tc of delta.tool_calls) {
+                const idx = tc.index ?? 0;
+                const existing = toolCalls.get(idx);
+                if (!existing) {
+                  toolCalls.set(idx, {
+                    id: tc.id ?? '',
+                    type: 'function',
+                    function: { name: tc.function?.name ?? '', arguments: tc.function?.arguments ?? '' },
+                  });
+                } else {
+                  if (tc.id) existing.id = tc.id;
+                  if (tc.function?.name) existing.function.name += tc.function.name;
+                  if (tc.function?.arguments) existing.function.arguments += tc.function.arguments;
+                }
+              }
+            }
+
+            // Capture usage from final chunk
+            if (chunk.usage) usage = chunk.usage;
+          } catch { /* skip malformed chunks */ }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const assembledToolCalls = toolCalls.size > 0
+    ? Array.from(toolCalls.values())
+    : undefined;
+
+  return {
+    content: content || null,
+    tool_calls: assembledToolCalls,
+    usage,
+    provider: provider.name,
+    latency_ms: Date.now() - startTime,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -216,8 +307,12 @@ async function callProvider(
 /**
  * Send a single inference request with automatic failover.
  * Tries providers in priority order; falls back on timeout, network error, or 5xx.
+ * Optional onTextChunk enables SSE streaming — text deltas are emitted as they arrive.
  */
-export async function infer(request: InferenceRequest): Promise<InferenceResponse> {
+export async function infer(
+  request: InferenceRequest,
+  onTextChunk?: OnTextChunk,
+): Promise<InferenceResponse> {
   const providers = loadProviders();
   if (providers.length === 0) {
     throw new Error('No inference providers configured. Set INFERENCE_PRIMARY_URL and INFERENCE_PRIMARY_MODEL.');
@@ -228,7 +323,7 @@ export async function infer(request: InferenceRequest): Promise<InferenceRespons
   for (const provider of providers) {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        return await callProvider(provider, request);
+        return await callProvider(provider, request, onTextChunk);
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
         const statusMatch = lastError.message.match(/HTTP (\d+)/);
@@ -266,13 +361,16 @@ export async function inferWithTools(
   tools: ToolDefinition[],
   executor: ToolExecutor,
   maxRounds = 10,
+  onTextChunk?: OnTextChunk,
 ): Promise<{ content: string; messages: ChatMessage[]; totalUsage: { prompt_tokens: number; completion_tokens: number } }> {
   const conversation = [...messages];
   let totalPrompt = 0;
   let totalCompletion = 0;
 
   for (let round = 0; round < maxRounds; round++) {
-    const response = await infer({ messages: conversation, tools });
+    // Stream text on every call — Qwen returns content: null with tool_calls,
+    // so text chunks only arrive on the final (non-tool) response.
+    const response = await infer({ messages: conversation, tools }, onTextChunk);
     totalPrompt += response.usage.prompt_tokens;
     totalCompletion += response.usage.completion_tokens;
 

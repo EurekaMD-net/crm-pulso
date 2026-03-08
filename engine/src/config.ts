@@ -58,6 +58,11 @@ export const TRIGGER_PATTERN = new RegExp(
   'i',
 );
 
+export const MAX_CONTEXT_MESSAGES = parseInt(
+  process.env.MAX_CONTEXT_MESSAGES || '30',
+  10,
+);
+
 // Timezone for scheduled tasks (cron expressions, etc.)
 // Uses system timezone by default
 export const TIMEZONE =

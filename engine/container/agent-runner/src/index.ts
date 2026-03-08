@@ -35,6 +35,7 @@ interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+  streaming?: boolean;
 }
 
 interface SessionEntry {
@@ -391,6 +392,20 @@ async function runQuery(
   let messageCount = 0;
   let resultCount = 0;
 
+  // Block streaming: buffer assistant text and flush on paragraph breaks or timer
+  const STREAM_FLUSH_MS = 1500;
+  const STREAM_MIN_CHARS = 80;
+  let streamBuffer = '';
+  let streamFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function flushStream(): void {
+    if (streamFlushTimer) { clearTimeout(streamFlushTimer); streamFlushTimer = null; }
+    const text = streamBuffer.trim();
+    streamBuffer = '';
+    if (!text) return;
+    writeOutput({ status: 'success', result: text, streaming: true });
+  }
+
   // Load global CLAUDE.md as additional system context (shared across all groups)
   const globalClaudeMdPath = '/workspace/global/CLAUDE.md';
   let globalClaudeMd: string | undefined;
@@ -463,6 +478,23 @@ async function runQuery(
       lastAssistantUuid = (message as { uuid: string }).uuid;
     }
 
+    // Stream assistant text blocks as they arrive
+    if (message.type === 'assistant' && 'message' in message) {
+      const content = (message as { message?: { content?: Array<{ type: string; text?: string }> } }).message?.content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === 'text' && block.text) {
+            streamBuffer += block.text;
+          }
+        }
+        if (streamBuffer.includes('\n\n') || streamBuffer.length >= STREAM_MIN_CHARS) {
+          flushStream();
+        } else if (streamBuffer && !streamFlushTimer) {
+          streamFlushTimer = setTimeout(flushStream, STREAM_FLUSH_MS);
+        }
+      }
+    }
+
     if (message.type === 'system' && message.subtype === 'init') {
       newSessionId = message.session_id;
       log(`Session initialized: ${newSessionId}`);
@@ -474,6 +506,8 @@ async function runQuery(
     }
 
     if (message.type === 'result') {
+      // Flush any remaining streamed text before emitting the final result
+      flushStream();
       resultCount++;
       const textResult = 'result' in message ? (message as { result?: string }).result : null;
       log(`Result #${resultCount}: subtype=${message.subtype}${textResult ? ` text=${textResult.slice(0, 200)}` : ''}`);
