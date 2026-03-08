@@ -10,7 +10,7 @@ Salespeople chat with AI agents via WhatsApp. Each person gets a personal CRM as
 - **Tracks quotas** — Agents know each AE's weekly quota and proactively surface pipeline gaps.
 - **Manages email** — Search inbox, read messages, draft replies — all through the chat.
 - **Handles scheduling** — Creates calendar events, sets follow-up reminders, delivers morning briefings.
-- **Searches documents** — RAG pipeline indexes Google Drive files for semantic search scoped by hierarchy.
+- **Searches documents** — RAG pipeline with sqlite-vec indexes Google Drive files for semantic vector search (Dashscope text-embedding-v3, 1024d), scoped by hierarchy.
 - **Escalates risks** — When quota is critically low, negative patterns emerge, or mega-deals stall, the agent escalates up the chain (AE → Manager → Director → VP).
 
 ## Architecture
@@ -38,27 +38,28 @@ For a team of 50 salespeople, this creates ~68 WhatsApp groups, each with an iso
 ### Message Flow
 
 ```
-WhatsApp → engine (NanoClaw) → Direct tools (25 CRM tools via inference adapter)
+WhatsApp → engine (NanoClaw) → Direct tools (26 CRM tools via inference adapter)
                                     ├── Role-based tool filtering
                                     ├── Google Workspace (Gmail, Drive, Calendar)
-                                    ├── RAG search (buscar_documentos)
+                                    ├── RAG search (sqlite-vec KNN + text-embedding-v3)
+                                    ├── Web search (Brave API)
                                     └── CRM CLAUDE.md (persona + schema + rules)
 ```
 
 ### Data Model
 
-15 SQLite tables: `persona`, `cuenta`, `contacto`, `contrato`, `descarga`, `propuesta`, `actividad`, `cuota`, `inventario`, `alerta_log`, `email_log`, `evento_calendario`, `crm_events`, `crm_documents`, `crm_embeddings`.
+16 SQLite tables: `persona`, `cuenta`, `contacto`, `contrato`, `descarga`, `propuesta`, `actividad`, `cuota`, `inventario`, `alerta_log`, `email_log`, `evento_calendario`, `crm_events`, `crm_documents`, `crm_embeddings`, `crm_vec_embeddings` (sqlite-vec virtual table for KNN search).
 
 ### Tools by Role
 
 | Role | Tools | Examples |
 |------|-------|---------|
-| AE | 24 | Log activities, manage deals, send emails, set reminders, search docs |
-| Manager | 16 | Team pipeline, quota rollups, coaching briefings, email, docs |
-| Director | 15 | Regional analytics, event tracking, email, docs |
-| VP | 14 | Executive dashboards, cross-region visibility, docs |
+| AE | 25 | Log activities, manage deals, send emails, set reminders, search docs, web search |
+| Manager | 17 | Team pipeline, quota rollups, coaching briefings, email, docs, web search |
+| Director | 16 | Regional analytics, event tracking, email, docs, web search |
+| VP | 15 | Executive dashboards, cross-region visibility, docs, web search |
 
-25 unique tools total across activity logging, pipeline management, Google Workspace (Gmail, Drive, Calendar), event tracking, document search (RAG), and follow-up reminders.
+26 unique tools total across activity logging, pipeline management, Google Workspace (Gmail, Drive, Calendar), event tracking, document search (RAG with sqlite-vec), web search, and follow-up reminders.
 
 ### Proactive Workflows
 
@@ -90,13 +91,14 @@ agentic-crm/
 ├── engine/              # NanoClaw — the AI agent platform (git subtree)
 ├── crm/
 │   ├── src/
-│   │   ├── schema.ts         # 15 CRM tables
+│   │   ├── schema.ts         # 16 CRM tables (incl. sqlite-vec virtual table)
 │   │   ├── bootstrap.ts      # Schema init + hooks
 │   │   ├── hierarchy.ts      # Org chart traversal + access control
-│   │   ├── tools/            # 25 tools across 10 modules
+│   │   ├── tools/            # 26 tools across 11 modules
 │   │   ├── alerts.ts         # 6 alert evaluators + event countdown
 │   │   ├── escalation.ts     # 4 real-time escalation evaluators
-│   │   ├── doc-sync.ts       # RAG pipeline (chunk, embed, search)
+│   │   ├── embedding.ts      # Dashscope text-embedding-v3 API + local fallback
+│   │   ├── doc-sync.ts       # RAG pipeline (chunk → embed → sqlite-vec KNN search)
 │   │   ├── register.ts       # Batch team registration (CSV/JSON)
 │   │   ├── briefing-seeds.ts # Staggered scheduled briefings
 │   │   ├── google-auth.ts    # Google Workspace JWT auth (6 clients)
@@ -104,7 +106,7 @@ agentic-crm/
 │   │   └── followup-scheduler.ts  # Business-hours reminder scheduler
 │   ├── container/       # CRM container image (extends engine)
 │   ├── groups/          # CLAUDE.md templates per role (ae, manager, director, vp)
-│   └── tests/           # 361 tests across 15 test files
+│   └── tests/           # 363 tests across 16 test files
 ├── scripts/             # Bootstrap, registration, data import
 ├── docs/                # Architecture, deployment, upstream sync
 └── groups/              # Live group folders (created at runtime)
@@ -153,7 +155,7 @@ agentic-crm/
 npm run dev              # Run with hot reload (tsx watch)
 npm run build            # Compile TypeScript
 npm run typecheck        # Type check
-npm run test             # Run all tests (361 CRM tests)
+npm run test             # Run all tests (363 CRM tests)
 npm run bootstrap        # First-time CRM setup
 npm run register-team    # Register team from CSV/JSON
 npm run build:container  # Build CRM container (extends engine image)
@@ -168,5 +170,6 @@ The engine lives at `engine/` as a git subtree. See [docs/UPSTREAM-SYNC.md](docs
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) — Full CRM design (17 sections)
+- [Project Status](docs/PROJECT-STATUS.md) — Current phase tracker, blockers, metrics
 - [Deployment](docs/DEPLOYMENT.md) — AWS EC2 setup, systemd, backups
 - [Upstream Sync](docs/UPSTREAM-SYNC.md) — Pulling NanoClaw updates
