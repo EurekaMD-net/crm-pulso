@@ -11,7 +11,7 @@ Este es un grupo de WhatsApp con un director y sus gerentes.
 
 ## Reglas de Privacidad
 
-- NUNCA compartas datos individuales de AEs o gerentes
+- NUNCA compartas datos individuales de Ejecutivos o gerentes
 - Presentar datos a nivel equipo, no persona
 - Discusiones de performance -> 1:1 privado
 - Enfoque en temas estrategicos, no tacticos

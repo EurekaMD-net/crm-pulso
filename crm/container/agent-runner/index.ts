@@ -61,6 +61,21 @@ const SESSIONS_DIR = '/workspace/group/.crm-sessions';
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
 const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
 
+// Pre-written acknowledgment phrases — picked at random, no LLM tokens wasted
+const ACK_PHRASES = [
+  'Entendido, lo consulto.',
+  'Revisando, un momento.',
+  'Lo verifico de inmediato.',
+  'Consultando los datos.',
+  'Preparando la información.',
+  'Lo tengo, revisando.',
+  'En ello, un momento.',
+  'Listo, lo proceso.',
+  'Dame un momento.',
+  'Ya lo reviso.',
+];
+let ackIndex = Math.floor(Math.random() * ACK_PHRASES.length);
+
 // ---------------------------------------------------------------------------
 // I/O helpers
 // ---------------------------------------------------------------------------
@@ -407,6 +422,11 @@ async function main(): Promise<void> {
       messages = truncateMessages(messages, MAX_MESSAGES);
 
       log(`Starting inference (session: ${sessionId}, messages: ${messages.length})...`);
+
+      // Emit instant acknowledgment before inference (no LLM tokens spent)
+      const ack = ACK_PHRASES[ackIndex % ACK_PHRASES.length];
+      ackIndex++;
+      writeOutput({ status: 'success', result: ack, newSessionId: sessionId });
 
       // Call inference with tools
       const result = await inferWithTools(messages, tools, executor, MAX_TOOL_ROUNDS);

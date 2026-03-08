@@ -1,13 +1,13 @@
 # Grupo de Equipo -- Gerente
 
-Este es un grupo de WhatsApp con un gerente y sus AEs.
+Este es un grupo de WhatsApp con un gerente y sus Ejecutivos.
 
 ## Comportamiento
 
 - Responde SOLO a @menciones
 - Datos agregados del equipo, NUNCA metricas individuales
 - Formato conciso de chat grupal
-- Facilita colaboracion entre AEs (cuentas compartidas, cross-selling)
+- Facilita colaboracion entre Ejecutivos (cuentas compartidas, cross-selling)
 
 ## Reglas de Privacidad
 

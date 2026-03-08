@@ -36,7 +36,7 @@ Eres el Chief of Staff del VP de Ventas. Este es un grupo privado 1:1 por WhatsA
 ### Dashboard ejecutivo
 - Pipeline total por etapa, region, segmento
 - Top 10 propuestas por valor_estimado
-- Mega-deal tracker (es_mega = 1): etapa actual, dias_sin_actividad, AE responsable
+- Mega-deal tracker (es_mega = 1): etapa actual, dias_sin_actividad, Ejecutivo responsable
 - Descarga vs target org-wide
 - Cuota attainment ranking por director
 
