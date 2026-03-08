@@ -342,6 +342,10 @@ async function runAgent(
   }
 }
 
+// Per-group debounce: delay dispatch by one poll cycle so rapid-fire
+// messages from the same user are batched into a single prompt.
+const pendingDispatch = new Set<string>();
+
 async function startMessageLoop(): Promise<void> {
   if (messageLoopRunning) {
     logger.debug('Message loop already running, skipping duplicate start');
@@ -359,6 +363,9 @@ async function startMessageLoop(): Promise<void> {
         lastTimestamp,
         ASSISTANT_NAME,
       );
+
+      // Track which groups received new messages this cycle
+      const groupsWithNewMessages = new Set<string>();
 
       if (messages.length > 0) {
         logger.info({ count: messages.length }, 'New messages');
@@ -401,41 +408,69 @@ async function startMessageLoop(): Promise<void> {
             if (!hasTrigger) continue;
           }
 
-          // Pull all messages since lastAgentTimestamp so non-trigger
-          // context that accumulated between triggers is included.
-          const allPending = getMessagesSince(
-            chatJid,
-            lastAgentTimestamp[chatJid] || '',
-            ASSISTANT_NAME,
-          );
-          const messagesToSend =
-            allPending.length > 0 ? allPending : groupMessages;
-          const formatted = formatMessages(messagesToSend);
-
-          if (queue.sendMessage(chatJid, formatted)) {
-            logger.debug(
-              { chatJid, count: messagesToSend.length },
-              'Piped messages to active container',
-            );
-            lastAgentTimestamp[chatJid] =
-              messagesToSend[messagesToSend.length - 1].timestamp;
-            saveState();
-            // Show typing indicator while the container processes the piped message
-            channel
-              .setTyping?.(chatJid, true)
-              ?.catch((err) =>
-                logger.warn({ chatJid, err }, 'Failed to set typing indicator'),
-              );
+          // If container is already active, pipe immediately (no debounce —
+          // the container's IPC loop naturally batches).
+          if (queue.isActive(chatJid)) {
+            dispatchToGroup(chatJid, groupMessages, channel);
           } else {
-            // No active container — enqueue for a new one
-            queue.enqueueMessageCheck(chatJid);
+            // No active container — mark for debounced dispatch.
+            // Wait one extra poll cycle so rapid-fire messages are batched.
+            groupsWithNewMessages.add(chatJid);
+            if (!pendingDispatch.has(chatJid)) {
+              pendingDispatch.add(chatJid);
+              logger.debug({ chatJid }, 'Debouncing — waiting one cycle for more messages');
+            }
           }
         }
+      }
+
+      // Dispatch groups that were pending from the PREVIOUS cycle
+      // (i.e. no new messages arrived this cycle — burst is over).
+      for (const chatJid of [...pendingDispatch]) {
+        if (groupsWithNewMessages.has(chatJid)) continue; // still receiving, keep waiting
+        pendingDispatch.delete(chatJid);
+        queue.enqueueMessageCheck(chatJid);
       }
     } catch (err) {
       logger.error({ err }, 'Error in message loop');
     }
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
+  }
+}
+
+function dispatchToGroup(
+  chatJid: string,
+  groupMessages: NewMessage[],
+  channel: Channel,
+): void {
+  const allPending = getMessagesSince(
+    chatJid,
+    lastAgentTimestamp[chatJid] || '',
+    ASSISTANT_NAME,
+  );
+  const messagesToSend =
+    allPending.length > 0 ? allPending : groupMessages;
+  const { messages: compacted, truncatedCount } = compactMessages(
+    messagesToSend,
+    MAX_CONTEXT_MESSAGES,
+  );
+  const formatted = formatMessages(compacted, truncatedCount);
+
+  if (queue.sendMessage(chatJid, formatted)) {
+    logger.debug(
+      { chatJid, count: messagesToSend.length },
+      'Piped messages to active container',
+    );
+    lastAgentTimestamp[chatJid] =
+      messagesToSend[messagesToSend.length - 1].timestamp;
+    saveState();
+    channel
+      .setTyping?.(chatJid, true)
+      ?.catch((err) =>
+        logger.warn({ chatJid, err }, 'Failed to set typing indicator'),
+      );
+  } else {
+    queue.enqueueMessageCheck(chatJid);
   }
 }
 

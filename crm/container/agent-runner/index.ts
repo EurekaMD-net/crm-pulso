@@ -421,14 +421,34 @@ async function main(): Promise<void> {
   let streamBuffer = '';
   let firstBlockSent = false;
 
+  const FIRST_BLOCK_FALLBACK = 600; // fallback to sentence break if no paragraph break by this point
+
   function emitFirstBlock(): void {
     if (firstBlockSent || streamBuffer.length < FIRST_BLOCK_MIN) return;
     // Find a clean paragraph break near or after FIRST_BLOCK_MIN
     const searchFrom = FIRST_BLOCK_MIN - 50;
     const breakIdx = streamBuffer.indexOf('\n\n', searchFrom);
-    if (breakIdx === -1) return; // no clean break yet, keep buffering
-    const block = streamBuffer.slice(0, breakIdx).trim();
-    streamBuffer = streamBuffer.slice(breakIdx + 2);
+    let cutIdx = breakIdx;
+    let cutLen = 2; // length of the delimiter to skip
+
+    // Fallback: if no paragraph break found and buffer is long enough,
+    // cut at the last sentence boundary to avoid holding the entire response.
+    if (cutIdx === -1 && streamBuffer.length >= FIRST_BLOCK_FALLBACK) {
+      const sentenceRe = /[.!?]\s/g;
+      let lastMatch = -1;
+      let m: RegExpExecArray | null;
+      while ((m = sentenceRe.exec(streamBuffer)) !== null) {
+        if (m.index >= searchFrom) lastMatch = m.index;
+      }
+      if (lastMatch !== -1) {
+        cutIdx = lastMatch + 1; // include the punctuation
+        cutLen = 1; // skip only the trailing space
+      }
+    }
+
+    if (cutIdx === -1) return; // still no suitable break
+    const block = streamBuffer.slice(0, cutIdx).trim();
+    streamBuffer = streamBuffer.slice(cutIdx + cutLen);
     firstBlockSent = true;
     if (block) {
       writeOutput({ status: 'success', result: block, newSessionId: sessionId, streaming: true });

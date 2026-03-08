@@ -48,9 +48,10 @@ vi.mock('../image.js', () => ({
   processImage: vi.fn(),
 }));
 
-// Mock child_process (used for osascript notification)
+// Mock child_process (used for osascript notification + pdftotext)
 vi.mock('child_process', () => ({
   exec: vi.fn(),
+  execFile: vi.fn(),
 }));
 
 // Build a fake WASocket that's an EventEmitter with the methods we need

@@ -1,4 +1,7 @@
-import { exec, execFileSync } from 'child_process';
+import { exec, execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 import fs from 'fs';
 import path from 'path';
 
@@ -245,10 +248,11 @@ export class WhatsAppChannel implements Channel {
               // Extract text inline so the agent can read it directly
               let pdfText = '';
               try {
-                pdfText = execFileSync('pdftotext', ['-layout', filePath, '-'], {
+                const { stdout } = await execFileAsync('pdftotext', ['-layout', filePath, '-'], {
                   timeout: 15000,
                   maxBuffer: 512 * 1024,
-                }).toString().trim();
+                });
+                pdfText = stdout.trim();
               } catch (extractErr) {
                 logger.warn({ err: extractErr, filename }, 'pdftotext extraction failed');
               }
