@@ -19,7 +19,7 @@ import { readEnvFile } from './env.js';
 
 // CRM hook: read CONTAINER_IMAGE from .env directly so it always overrides the
 // nanoclaw default regardless of whether process.env was pre-populated.
-const { CONTAINER_IMAGE: CONTAINER_IMAGE_ENV } = readEnvFile(['CONTAINER_IMAGE']);
+const { CONTAINER_IMAGE: CONTAINER_IMAGE_ENV, DASHBOARD_BASE_URL } = readEnvFile(['CONTAINER_IMAGE', 'DASHBOARD_BASE_URL']);
 const CONTAINER_IMAGE = CONTAINER_IMAGE_ENV || CONTAINER_IMAGE_DEFAULT;
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
@@ -256,6 +256,10 @@ function buildContainerArgs(
   args.push('-e', `TZ=${TIMEZONE}`);
   // CRM hook: tell the container agent where to find the CRM database
   args.push('-e', 'CRM_DB_PATH=/workspace/extra/crm-db/crm.db');
+  // CRM hook: pass dashboard base URL so generated links use the public address
+  if (DASHBOARD_BASE_URL) {
+    args.push('-e', `DASHBOARD_BASE_URL=${DASHBOARD_BASE_URL}`);
+  }
 
   // Run as host user so bind-mounted files are accessible.
   // When running as root (uid 0), also run the container as root so

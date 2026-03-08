@@ -64,17 +64,6 @@
       </div>
     </div>
 
-    <!-- Activity -->
-    <div class="card card-full">
-      <div class="card-header">
-        <h2>Actividad Reciente</h2>
-      </div>
-      <div class="card-body">
-        <div class="table-wrap" id="activity-table">
-          <div class="loading">Cargando...</div>
-        </div>
-      </div>
-    </div>
   </div>
 
   <script type="module">
@@ -196,31 +185,48 @@
       }
     }
 
-    // --- Ejecutivo ranking by quota ---
+    // --- Ejecutivo ranking by quota (grouped by gerente) ---
     async function loadRanking() {
       try {
-        const cuota = await api('/api/v1/cuota');
+        const [cuota, equipo] = await Promise.all([
+          api('/api/v1/cuota'),
+          api('/api/v1/equipo'),
+        ]);
         const body = $('#ranking-body');
         body.innerHTML = '';
 
-        const sorted = cuota.cuotas.filter(q => q.rol === 'ae').sort((a, b) => b.porcentaje - a.porcentaje);
-        if (sorted.length === 0) {
+        const aeCuotas = cuota.cuotas.filter(q => q.rol === 'ae');
+        if (aeCuotas.length === 0) {
           body.innerHTML = '<div class="val-neutral" style="text-align:center;padding:20px;">Sin datos de cuota</div>';
           return;
         }
 
-        for (let i = 0; i < sorted.length; i++) {
-          const q = sorted[i];
-          body.appendChild(el('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:6px;' }, [
-            el('div', { style: 'width:20px;font-size:14px;font-weight:700;color:var(--gray-500);text-align:right;', textContent: `${i + 1}` }),
-            el('div', { style: 'flex:1;font-size:13px;', textContent: q.nombre }),
-            el('div', { style: 'width:60px;text-align:right;' }, [
-              el('span', { className: quotaClass(q.porcentaje), style: 'font-family:var(--font-mono);font-weight:600;', textContent: formatPct(q.porcentaje) }),
-            ]),
-            el('div', { style: 'width:80px;height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden;' }, [
-              el('div', { style: `width:${Math.min(q.porcentaje, 100)}%;height:100%;background:${quotaColor(q.porcentaje)};border-radius:3px;` }),
-            ]),
-          ]));
+        const cuotaMap = {};
+        for (const q of aeCuotas) cuotaMap[q.id] = q;
+
+        const gerentes = equipo.personas.filter(p => p.rol === 'gerente');
+        const aes = equipo.personas.filter(p => p.rol === 'ae');
+
+        for (const ger of gerentes) {
+          const gerAes = aes.filter(a => a.reporta_a === ger.id);
+          const gerCuotas = gerAes.map(a => cuotaMap[a.id]).filter(Boolean).sort((a, b) => b.porcentaje - a.porcentaje);
+          if (gerCuotas.length === 0) continue;
+
+          body.appendChild(el('div', { style: 'font-weight:600;font-size:13px;margin:10px 0 4px;color:var(--gray-600);border-bottom:1px solid var(--gray-200);padding-bottom:2px;', textContent: ger.nombre }));
+
+          for (let i = 0; i < gerCuotas.length; i++) {
+            const q = gerCuotas[i];
+            body.appendChild(el('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:6px;' }, [
+              el('div', { style: 'width:20px;font-size:14px;font-weight:700;color:var(--gray-500);text-align:right;', textContent: `${i + 1}` }),
+              el('div', { style: 'flex:1;font-size:13px;', textContent: q.nombre }),
+              el('div', { style: 'width:60px;text-align:right;' }, [
+                el('span', { className: quotaClass(q.porcentaje), style: 'font-family:var(--font-mono);font-weight:600;', textContent: formatPct(q.porcentaje) }),
+              ]),
+              el('div', { style: 'width:80px;height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden;' }, [
+                el('div', { style: `width:${Math.min(q.porcentaje, 100)}%;height:100%;background:${quotaColor(q.porcentaje)};border-radius:3px;` }),
+              ]),
+            ]));
+          }
         }
       } catch (err) {
         $('#ranking-body').innerHTML = `<div class="error-msg">${err.message}</div>`;
@@ -267,49 +273,9 @@
       }
     }
 
-    // --- Activity ---
-    async function loadActivity() {
-      try {
-        const data = await api('/api/v1/actividades', { limite: '20' });
-        const wrap = $('#activity-table');
-        wrap.innerHTML = '';
-
-        if (data.actividades.length === 0) {
-          wrap.innerHTML = '<div class="val-neutral" style="text-align:center;padding:20px;">Sin actividades</div>';
-          return;
-        }
-
-        const table = el('table');
-        table.appendChild(el('thead', {}, [el('tr', {}, [
-          el('th', { textContent: '' }),
-          el('th', { textContent: 'Tipo' }),
-          el('th', { textContent: 'Resumen' }),
-          el('th', { textContent: 'Cuenta' }),
-          el('th', { textContent: 'AE' }),
-          el('th', { textContent: 'Fecha' }),
-        ])]));
-
-        const tbody = el('tbody');
-        for (const a of data.actividades) {
-          tbody.appendChild(el('tr', {}, [
-            el('td', {}, [el('span', { className: `dot dot-${a.sentimiento || 'neutral'}` })]),
-            el('td', {}, [el('span', { className: 'tag tag-stage', textContent: a.tipo || '-' })]),
-            el('td', { textContent: a.resumen || '-', style: 'max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }),
-            el('td', { textContent: a.cuenta || '-' }),
-            el('td', { textContent: a.ejecutivo || '-' }),
-            el('td', { style: 'font-size:12px;color:var(--gray-500);white-space:nowrap;', textContent: timeAgo(a.fecha) }),
-          ]));
-        }
-        table.appendChild(tbody);
-        wrap.appendChild(table);
-      } catch (err) {
-        $('#activity-table').innerHTML = `<div class="error-msg">${err.message}</div>`;
-      }
-    }
-
     window.loadAll = async function() {
       $('#last-refresh').textContent = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-      await Promise.all([loadTeamComparison(), loadPipeline(), loadRanking(), loadRisk(), loadActivity()]);
+      await Promise.all([loadTeamComparison(), loadPipeline(), loadRanking(), loadRisk()]);
     };
 
     loadAll();

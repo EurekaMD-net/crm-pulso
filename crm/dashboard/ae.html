@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CRM Azteca — Manager Dashboard</title>
+  <title>CRM Azteca — Mi Dashboard</title>
   <link rel="stylesheet" href="/dashboard/style.css">
 </head>
 <body>
@@ -19,12 +19,13 @@
   </div>
 
   <div class="dashboard">
-    <!-- Ejecutivo cards -->
+    <!-- Quota + stats -->
     <div class="card card-full">
       <div class="card-header">
-        <h2>Mi Equipo</h2>
+        <h2>Mi Cuota</h2>
+        <span id="cuota-semana" class="val-neutral"></span>
       </div>
-      <div class="card-body" id="team-cards">
+      <div class="card-body" id="cuota-body">
         <div class="loading">Cargando...</div>
       </div>
     </div>
@@ -32,7 +33,7 @@
     <!-- Pipeline -->
     <div class="card card-full">
       <div class="card-header">
-        <h2>Pipeline del Equipo</h2>
+        <h2>Mi Pipeline</h2>
         <span id="pipeline-count" class="val-neutral"></span>
       </div>
       <div class="card-body">
@@ -46,20 +47,23 @@
     <!-- Descarga -->
     <div class="card">
       <div class="card-header">
-        <h2>Descarga Semanal</h2>
+        <h2>Mi Descarga</h2>
       </div>
       <div class="card-body" id="descarga-body">
         <div class="loading">Cargando...</div>
       </div>
     </div>
 
-    <!-- Coaching signals -->
+    <!-- At-risk deals -->
     <div class="card">
       <div class="card-header">
-        <h2>Coaching</h2>
+        <h2>Deals Estancados</h2>
+        <span id="risk-count" class="val-neutral"></span>
       </div>
-      <div class="card-body" id="coaching-body">
-        <div class="loading">Cargando...</div>
+      <div class="card-body">
+        <div class="table-wrap" id="risk-table">
+          <div class="loading">Cargando...</div>
+        </div>
       </div>
     </div>
 
@@ -75,71 +79,58 @@
 
     try {
       const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-      $('#role-badge').textContent = payload.rol.toUpperCase();
+      $('#role-badge').textContent = 'EJECUTIVO';
     } catch {}
 
-    // --- Team cards: one card per AE with quota, active deals, activity ---
-    async function loadTeam() {
+    // --- Cuota ---
+    async function loadCuota() {
       try {
-        const [equipo, cuota, pipeline, actividades] = await Promise.all([
+        const [equipo, cuota] = await Promise.all([
           api('/api/v1/equipo'),
           api('/api/v1/cuota'),
-          api('/api/v1/pipeline'),
-          api('/api/v1/actividades', { limite: '100' }),
         ]);
 
-        const me = equipo.personas.find(p => p.rol === 'gerente') || equipo.personas[0];
+        const me = equipo.personas[0];
         if (me) $('#persona-name').textContent = me.nombre;
 
-        const aes = equipo.personas.filter(p => p.rol === 'ae');
-        const container = $('#team-cards');
-        container.innerHTML = '';
+        const body = $('#cuota-body');
+        body.innerHTML = '';
 
-        if (aes.length === 0) {
-          container.innerHTML = '<div class="val-neutral" style="text-align:center;padding:20px;">Sin ejecutivos en el equipo</div>';
+        const q = cuota.cuotas[0];
+        $('#cuota-semana').textContent = `Semana ${cuota.semana}`;
+
+        if (!q) {
+          body.innerHTML = '<div class="val-neutral" style="text-align:center;padding:20px;">Sin datos de cuota</div>';
           return;
         }
 
-        const grid = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;' });
-
-        for (const ae of aes) {
-          const q = cuota.cuotas.find(c => c.nombre === ae.nombre);
-          const deals = pipeline.propuestas.filter(p => p.ejecutivo === ae.nombre);
-          const acts = actividades.actividades.filter(a => a.ejecutivo === ae.nombre);
-          const lastActivity = acts.length > 0 ? acts[0].fecha : null;
-          const negCount = acts.filter(a => a.sentimiento === 'negativo').length;
-          const stalledDeals = deals.filter(d => d.dias_sin_actividad >= 7).length;
-
-          const card = el('div', { style: 'border:1px solid var(--gray-200);border-radius:8px;padding:12px;' }, [
-            el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;' }, [
-              el('strong', { textContent: ae.nombre, style: 'font-size:14px;' }),
-              q ? el('span', { className: quotaClass(q.porcentaje), style: 'font-family:var(--font-mono);font-weight:700;font-size:18px;', textContent: formatPct(q.porcentaje) })
-                : el('span', { className: 'val-neutral', textContent: '-' }),
+        body.appendChild(el('div', { style: 'display:flex;align-items:center;gap:24px;flex-wrap:wrap;' }, [
+          el('div', { style: 'text-align:center;' }, [
+            el('div', { className: quotaClass(q.porcentaje), style: 'font-family:var(--font-mono);font-weight:700;font-size:48px;', textContent: formatPct(q.porcentaje) }),
+            el('div', { style: 'font-size:12px;color:var(--gray-500);margin-top:4px;', textContent: 'Avance de cuota' }),
+          ]),
+          el('div', { style: 'flex:1;min-width:200px;' }, [
+            el('div', { style: 'height:12px;background:var(--gray-100);border-radius:6px;overflow:hidden;margin-bottom:12px;' }, [
+              el('div', { style: `width:${Math.min(q.porcentaje, 100)}%;height:100%;background:${quotaColor(q.porcentaje)};border-radius:6px;transition:width .3s;` }),
             ]),
-            q ? el('div', { style: 'height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden;margin-bottom:8px;' }, [
-              el('div', { style: `width:${Math.min(q.porcentaje, 100)}%;height:100%;background:${quotaColor(q.porcentaje)};border-radius:3px;` }),
-            ]) : null,
-            el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px;color:var(--gray-500);' }, [
-              el('span', { textContent: `${deals.length} deals activos` }),
-              el('span', { textContent: `${formatMoney(deals.reduce((s, d) => s + (d.valor || 0), 0))} pipeline` }),
-              stalledDeals > 0
-                ? el('span', { className: 'val-danger', textContent: `${stalledDeals} estancadas` })
-                : el('span', { className: 'val-positive', textContent: '0 estancadas' }),
-              negCount > 0
-                ? el('span', { className: 'val-danger', textContent: `${negCount} negativos` })
-                : el('span', { textContent: `${negCount} negativos` }),
-              el('span', { textContent: `Ult. act: ${timeAgo(lastActivity)}` }),
-            ].filter(Boolean)),
-          ]);
-          grid.appendChild(card);
-        }
-        container.appendChild(grid);
+            el('div', { style: 'display:flex;justify-content:space-between;font-size:13px;' }, [
+              el('div', {}, [
+                el('span', { style: 'color:var(--gray-500);', textContent: 'Logro: ' }),
+                el('span', { style: 'font-family:var(--font-mono);font-weight:600;', textContent: formatMoney(q.logro) }),
+              ]),
+              el('div', {}, [
+                el('span', { style: 'color:var(--gray-500);', textContent: 'Meta: ' }),
+                el('span', { style: 'font-family:var(--font-mono);font-weight:600;', textContent: formatMoney(q.meta) }),
+              ]),
+            ]),
+          ]),
+        ]));
       } catch (err) {
-        $('#team-cards').innerHTML = `<div class="error-msg">${err.message}</div>`;
+        $('#cuota-body').innerHTML = `<div class="error-msg">${err.message}</div>`;
       }
     }
 
-    // --- Pipeline table ---
+    // --- Pipeline ---
     async function loadPipeline() {
       try {
         const data = await api('/api/v1/pipeline');
@@ -147,6 +138,8 @@
         stats.innerHTML = '';
 
         const megaCount = data.propuestas.filter(p => p.es_mega).length;
+        const stalledCount = data.propuestas.filter(p => p.dias_sin_actividad >= 7).length;
+
         stats.appendChild(el('div', { className: 'stat' }, [
           el('div', { className: 'stat-value', textContent: String(data.total_propuestas) }),
           el('div', { className: 'stat-label', textContent: 'Propuestas' }),
@@ -155,9 +148,15 @@
           el('div', { className: 'stat-value', textContent: formatMoney(data.valor_total) }),
           el('div', { className: 'stat-label', textContent: 'Valor Total' }),
         ]));
+        if (megaCount > 0) {
+          stats.appendChild(el('div', { className: 'stat' }, [
+            el('div', { className: 'stat-value', textContent: String(megaCount) }),
+            el('div', { className: 'stat-label', textContent: 'Mega-Deals' }),
+          ]));
+        }
         stats.appendChild(el('div', { className: 'stat' }, [
-          el('div', { className: 'stat-value', textContent: String(megaCount) }),
-          el('div', { className: 'stat-label', textContent: 'Mega-Deals' }),
+          el('div', { className: `stat-value ${stalledCount > 0 ? 'val-danger' : 'val-positive'}`, textContent: String(stalledCount) }),
+          el('div', { className: 'stat-label', textContent: 'Estancadas' }),
         ]));
 
         $('#pipeline-count').textContent = `${data.total_propuestas} propuestas`;
@@ -176,7 +175,6 @@
           el('th', { textContent: 'Valor' }),
           el('th', { textContent: 'Etapa' }),
           el('th', { textContent: 'Dias' }),
-          el('th', { textContent: 'AE' }),
         ])]));
 
         const tbody = el('tbody');
@@ -190,7 +188,6 @@
             el('td', { style: 'font-family:var(--font-mono);', textContent: formatMoney(p.valor) }),
             el('td', {}, [el('span', { className: 'tag tag-stage', textContent: p.etapa?.replace(/_/g, ' ') || '-' })]),
             el('td', { className: (p.dias_sin_actividad || 0) >= 7 ? 'val-danger' : '', style: 'font-weight:600;', textContent: String(p.dias_sin_actividad || 0) }),
-            el('td', { textContent: p.ejecutivo || '-' }),
           ]));
         }
         table.appendChild(tbody);
@@ -212,7 +209,6 @@
           return;
         }
 
-        // Summary
         const gapPct = data.total_planificado > 0 ? ((data.gap_total / data.total_planificado) * 100).toFixed(1) : '0';
         body.appendChild(el('div', { style: 'display:flex;gap:16px;margin-bottom:12px;' }, [
           el('div', { className: 'stat' }, [
@@ -229,7 +225,6 @@
           ]),
         ]));
 
-        // Per-account bars
         for (const c of data.cuentas) {
           const pct = c.planificado > 0 ? (c.facturado / c.planificado) * 100 : 0;
           body.appendChild(el('div', { style: 'margin-bottom:6px;' }, [
@@ -247,61 +242,49 @@
       }
     }
 
-    // --- Coaching signals ---
-    async function loadCoaching() {
+    // --- Risk table ---
+    async function loadRisk() {
       try {
-        const [pipeline, actividades] = await Promise.all([
-          api('/api/v1/pipeline'),
-          api('/api/v1/actividades', { limite: '100' }),
-        ]);
+        const data = await api('/api/v1/pipeline', { solo_estancadas: 'true' });
+        const wrap = $('#risk-table');
+        wrap.innerHTML = '';
+        $('#risk-count').textContent = String(data.propuestas.length);
 
-        const body = $('#coaching-body');
-        body.innerHTML = '';
-        const signals = [];
-
-        // Stalled mega-deals
-        const stalledMega = pipeline.propuestas.filter(p => p.es_mega && p.dias_sin_actividad >= 7);
-        if (stalledMega.length > 0) {
-          signals.push({ severity: 'danger', text: `${stalledMega.length} mega-deal(s) estancados: ${stalledMega.map(p => p.titulo).join(', ')}` });
-        }
-
-        // Negative sentiment streak
-        const negActs = actividades.actividades.filter(a => a.sentimiento === 'negativo');
-        if (negActs.length >= 3) {
-          signals.push({ severity: 'warning', text: `${negActs.length} actividades negativas recientes` });
-        }
-
-        // AEs with no recent activity
-        const equipo = await api('/api/v1/equipo');
-        const aes = equipo.personas.filter(p => p.rol === 'ae');
-        for (const ae of aes) {
-          const aeActs = actividades.actividades.filter(a => a.ejecutivo === ae.nombre);
-          if (aeActs.length === 0) {
-            signals.push({ severity: 'warning', text: `${ae.nombre}: sin actividad reciente` });
-          }
-        }
-
-        if (signals.length === 0) {
-          body.innerHTML = '<div class="val-positive" style="text-align:center;padding:20px;">Sin señales de coaching</div>';
+        if (data.propuestas.length === 0) {
+          wrap.innerHTML = '<div class="val-positive" style="text-align:center;padding:20px;">Sin deals estancados</div>';
           return;
         }
 
-        for (const s of signals) {
-          body.appendChild(el('div', {
-            style: `padding:8px 12px;border-radius:6px;margin-bottom:6px;font-size:13px;
-              background:${s.severity === 'danger' ? '#fef2f2' : '#fffbeb'};
-              border-left:3px solid ${s.severity === 'danger' ? 'var(--red)' : 'var(--yellow)'};`,
-            textContent: s.text,
-          }));
+        const table = el('table');
+        table.appendChild(el('thead', {}, [el('tr', {}, [
+          el('th', { textContent: 'Deal' }),
+          el('th', { textContent: 'Valor' }),
+          el('th', { textContent: 'Dias' }),
+          el('th', { textContent: 'Etapa' }),
+        ])]));
+
+        const tbody = el('tbody');
+        for (const p of data.propuestas) {
+          tbody.appendChild(el('tr', {}, [
+            el('td', {}, [
+              document.createTextNode(p.titulo),
+              p.es_mega ? el('span', { className: 'tag tag-mega', textContent: 'MEGA', style: 'margin-left:6px;' }) : null,
+            ].filter(Boolean)),
+            el('td', { style: 'font-family:var(--font-mono);', textContent: formatMoney(p.valor) }),
+            el('td', { className: 'val-danger', style: 'font-weight:600;', textContent: String(p.dias_sin_actividad || 0) }),
+            el('td', {}, [el('span', { className: 'tag tag-stage', textContent: p.etapa?.replace(/_/g, ' ') || '-' })]),
+          ]));
         }
+        table.appendChild(tbody);
+        wrap.appendChild(table);
       } catch (err) {
-        $('#coaching-body').innerHTML = `<div class="error-msg">${err.message}</div>`;
+        $('#risk-table').innerHTML = `<div class="error-msg">${err.message}</div>`;
       }
     }
 
     window.loadAll = async function() {
       $('#last-refresh').textContent = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-      await Promise.all([loadTeam(), loadPipeline(), loadDescarga(), loadCoaching()]);
+      await Promise.all([loadCuota(), loadPipeline(), loadDescarga(), loadRisk()]);
     };
 
     loadAll();

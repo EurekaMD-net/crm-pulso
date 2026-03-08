@@ -8,6 +8,7 @@
 import { getDatabase } from './db.js';
 import { logger } from './logger.js';
 import { createCrmSchema, CRM_TABLES } from './schema.js';
+import { initShortLinks } from './dashboard/auth.js';
 
 export function bootstrapCrm(): void {
   const db = getDatabase();
@@ -15,6 +16,7 @@ export function bootstrapCrm(): void {
     // Pragmas — journal_mode is set in db.ts (DELETE, not WAL, for Docker compat)
 
     createCrmSchema(db);
+    initShortLinks(getDatabase);
 
     logger.info({ tables: CRM_TABLES.length }, 'CRM schema initialized');
   } catch (err) {

@@ -108,7 +108,7 @@ export function getCuota(query: Record<string, string>, ctx: ToolContext): unkno
   }
 
   const rows = db.prepare(`
-    SELECT p.nombre, q.meta_total, q.logro, q.porcentaje, q.rol
+    SELECT q.persona_id, p.nombre, q.meta_total, q.logro, q.porcentaje, q.rol
     FROM cuota q
     JOIN persona p ON q.persona_id = p.id
     ${where}
@@ -119,6 +119,7 @@ export function getCuota(query: Record<string, string>, ctx: ToolContext): unkno
     semana,
     año,
     cuotas: rows.map(r => ({
+      id: r.persona_id,
       nombre: r.nombre,
       meta: r.meta_total,
       logro: r.logro,
@@ -304,20 +305,56 @@ export function getAlertas(query: Record<string, string>, ctx: ToolContext): unk
     params.push(...ids);
   }
 
+  // Filter out -mgr/-vp escalation copies and deduplicate by (tipo, base_entity)
+  where += ` AND a.entidad_id NOT LIKE '%-mgr' AND a.entidad_id NOT LIKE '%-vp'`;
+
   const rows = db.prepare(`
-    SELECT a.alerta_tipo, a.entidad_id, a.grupo_destino, a.fecha_envio
+    SELECT a.alerta_tipo, a.entidad_id, a.grupo_destino, MAX(a.fecha_envio) AS fecha_envio
     FROM alerta_log a
     ${where}
-    ORDER BY a.fecha_envio DESC
-    LIMIT 100
+    GROUP BY a.alerta_tipo, a.entidad_id
+    ORDER BY fecha_envio DESC
+    LIMIT 50
   `).all(...params) as any[];
+
+  // Resolve entity IDs to human-readable names
+  const resolveEntity = (tipo: string, entityId: string): string => {
+    try {
+      if (tipo === 'inactividad_ae') {
+        const p = db.prepare('SELECT nombre FROM persona WHERE id = ?').get(entityId) as any;
+        return p?.nombre || entityId;
+      }
+      if (tipo === 'descarga_gap') {
+        const c = db.prepare('SELECT nombre FROM cuenta WHERE id = ?').get(entityId) as any;
+        return c?.nombre || entityId;
+      }
+      if (tipo === 'propuesta_estancada' || tipo === 'mega_deal_movimiento') {
+        const pr = db.prepare('SELECT titulo FROM propuesta WHERE id = ?').get(entityId) as any;
+        return pr?.titulo || entityId;
+      }
+      if (tipo === 'coaching_alert' || tipo === 'cuota_alert') {
+        const p = db.prepare('SELECT nombre FROM persona WHERE id = ?').get(entityId) as any;
+        return p?.nombre || entityId;
+      }
+    } catch {}
+    return entityId;
+  };
+
+  const TIPO_LABELS: Record<string, string> = {
+    descarga_gap: 'Gap descarga',
+    propuesta_estancada: 'Deal estancado',
+    inactividad_ae: 'AE inactivo',
+    mega_deal_movimiento: 'Mega-deal',
+    coaching_alert: 'Coaching',
+    cuota_alert: 'Cuota',
+    evento_countdown: 'Evento',
+  };
 
   return {
     total: rows.length,
     alertas: rows.map(r => ({
-      tipo: r.alerta_tipo,
-      entidad_id: r.entidad_id,
-      grupo_destino: r.grupo_destino,
+      tipo: TIPO_LABELS[r.alerta_tipo] || r.alerta_tipo,
+      entidad: resolveEntity(r.alerta_tipo, r.entidad_id),
       fecha: r.fecha_envio,
     })),
   };

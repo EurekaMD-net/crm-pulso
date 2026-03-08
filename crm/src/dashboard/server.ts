@@ -20,7 +20,7 @@ import fs from 'fs';
 import path from 'path';
 import { URL, fileURLToPath } from 'url';
 import { logger } from '../logger.js';
-import { verifyToken, buildContextFromToken, createToken } from './auth.js';
+import { verifyToken, buildContextFromToken, createToken, resolveShortLink } from './auth.js';
 import {
   getPipeline, getCuota, getDescarga,
   getActividades, getEquipo, getAlertas,
@@ -107,6 +107,30 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
       return;
     }
     sendJson(res, 200, { token });
+    return;
+  }
+
+  // Short redirect: /go/{code} → /dashboard/{role}.html?token={jwt}
+  // Short codes keep WhatsApp links clickable (long URLs break auto-linking).
+  if (pathname.startsWith('/go/')) {
+    const code = pathname.slice(4);
+    const token = resolveShortLink(code);
+    if (!token) {
+      sendJson(res, 404, { error: 'Link not found or expired' });
+      return;
+    }
+    const payload = verifyToken(token);
+    if (!payload) {
+      sendJson(res, 401, { error: 'Token expired' });
+      return;
+    }
+    const rolePages: Record<string, string> = {
+      vp: 'vp.html', director: 'director.html',
+      gerente: 'manager.html', ae: 'ae.html',
+    };
+    const page = rolePages[payload.rol] || 'index.html';
+    res.writeHead(302, { Location: `/dashboard/${page}?token=${encodeURIComponent(token)}` });
+    res.end();
     return;
   }
 
