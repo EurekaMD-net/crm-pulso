@@ -28,6 +28,7 @@ import { buscar_emails, leer_email, crear_borrador_email } from './gmail.js';
 import { listar_archivos_drive, leer_archivo_drive } from './drive.js';
 import { buscar_web } from './web-search.js';
 import { analizar_winloss, analizar_tendencias } from './analytics.js';
+import { recomendar_crosssell } from './crosssell.js';
 
 // ---------------------------------------------------------------------------
 // Tool context — passed to every tool handler
@@ -532,6 +533,22 @@ const TOOL_ANALIZAR_TENDENCIAS: ToolDefinition = {
   },
 };
 
+const TOOL_RECOMENDAR_CROSSSELL: ToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'recomendar_crosssell',
+    description: 'Genera recomendaciones de cross-sell/upsell para una cuenta basado en su historial y comparacion con cuentas similares.',
+    parameters: {
+      type: 'object',
+      properties: {
+        cuenta_nombre: { type: 'string', description: 'Nombre de la cuenta a analizar' },
+        limite: { type: 'number', description: 'Maximo de recomendaciones (default 5)' },
+      },
+      required: ['cuenta_nombre'],
+    },
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Role-based tool sets
 // ---------------------------------------------------------------------------
@@ -547,7 +564,7 @@ const AE_TOOLS: ToolDefinition[] = [
   TOOL_BUSCAR_EMAILS, TOOL_LEER_EMAIL, TOOL_CREAR_BORRADOR_EMAIL,
   TOOL_LISTAR_ARCHIVOS_DRIVE, TOOL_LEER_ARCHIVO_DRIVE,
   TOOL_BUSCAR_DOCUMENTOS, TOOL_BUSCAR_WEB,
-  TOOL_ANALIZAR_WINLOSS, TOOL_ANALIZAR_TENDENCIAS,
+  TOOL_ANALIZAR_WINLOSS, TOOL_ANALIZAR_TENDENCIAS, TOOL_RECOMENDAR_CROSSSELL,
 ];
 
 const GERENTE_TOOLS: ToolDefinition[] = [
@@ -558,7 +575,7 @@ const GERENTE_TOOLS: ToolDefinition[] = [
   TOOL_BUSCAR_EMAILS, TOOL_LEER_EMAIL,
   TOOL_LISTAR_ARCHIVOS_DRIVE, TOOL_LEER_ARCHIVO_DRIVE,
   TOOL_BUSCAR_DOCUMENTOS, TOOL_BUSCAR_WEB,
-  TOOL_ANALIZAR_WINLOSS, TOOL_ANALIZAR_TENDENCIAS,
+  TOOL_ANALIZAR_WINLOSS, TOOL_ANALIZAR_TENDENCIAS, TOOL_RECOMENDAR_CROSSSELL,
 ];
 
 const DIRECTOR_TOOLS: ToolDefinition[] = [
@@ -569,7 +586,7 @@ const DIRECTOR_TOOLS: ToolDefinition[] = [
   TOOL_BUSCAR_EMAILS, TOOL_LEER_EMAIL,
   TOOL_LISTAR_ARCHIVOS_DRIVE, TOOL_LEER_ARCHIVO_DRIVE,
   TOOL_BUSCAR_DOCUMENTOS, TOOL_BUSCAR_WEB,
-  TOOL_ANALIZAR_WINLOSS, TOOL_ANALIZAR_TENDENCIAS,
+  TOOL_ANALIZAR_WINLOSS, TOOL_ANALIZAR_TENDENCIAS, TOOL_RECOMENDAR_CROSSSELL,
 ];
 
 const VP_TOOLS: ToolDefinition[] = [
@@ -580,7 +597,7 @@ const VP_TOOLS: ToolDefinition[] = [
   TOOL_BUSCAR_EMAILS, TOOL_LEER_EMAIL,
   TOOL_LISTAR_ARCHIVOS_DRIVE, TOOL_LEER_ARCHIVO_DRIVE,
   TOOL_BUSCAR_DOCUMENTOS, TOOL_BUSCAR_WEB,
-  TOOL_ANALIZAR_WINLOSS, TOOL_ANALIZAR_TENDENCIAS,
+  TOOL_ANALIZAR_WINLOSS, TOOL_ANALIZAR_TENDENCIAS, TOOL_RECOMENDAR_CROSSSELL,
 ];
 
 export function getToolsForRole(role: 'ae' | 'gerente' | 'director' | 'vp'): ToolDefinition[] {
@@ -625,6 +642,7 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   buscar_web,
   analizar_winloss,
   analizar_tendencias,
+  recomendar_crosssell,
 };
 
 export async function executeTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<string> {

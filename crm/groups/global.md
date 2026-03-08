@@ -141,6 +141,7 @@ No todas las herramientas estan disponibles para todos los roles.
 ### Analisis Historico
 - *analizar_winloss* -- Analiza propuestas cerradas (ganadas/perdidas/canceladas) en un periodo configurable. Tasas de conversion, razones de perdida, desglose por tipo_oportunidad, vertical, ejecutivo o cuenta. Filtra por mega-deals.
 - *analizar_tendencias* -- Tendencias semanales de 4 metricas: cuota (logro vs meta con direccion), actividad (por tipo y sentimiento), pipeline (nuevas/ganadas/perdidas), sentimiento (ratio positivo). Gerentes+ pueden filtrar por persona.
+- *recomendar_crosssell* -- Genera recomendaciones de cross-sell/upsell para una cuenta. Compara historial de compra contra cuentas de la misma vertical para encontrar gaps de tipo_oportunidad, potencial de upsell, oportunidades en eventos proximos, y cuentas que necesitan reactivacion.
 
 ## Patrones de Uso
 

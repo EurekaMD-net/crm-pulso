@@ -13,13 +13,13 @@
 | 4 | Scale & Reliability | Done | Parallel tools, Docker optimizations, web search | 2026-03 |
 | 5 | Events & Inventory | Done | Event management, inventory tracking | 2026-03 |
 | 6 | Escalation & Alerts | Done | Alert system, management escalation chain | 2026-03 |
-| 7 | Intelligence Layer | Partial | RAG + doc search + sqlite-vec + historical analysis done. Missing: agent swarm, cross-sell | 2026-03 |
+| 7 | Intelligence Layer | Partial | RAG + doc search + sqlite-vec + historical analysis + cross-sell done. Missing: agent swarm | 2026-03 |
 | 8 | Workspace Abstraction | Planned | Google + Microsoft unified API. Blocked on Azure AD app registration | — |
 
 ## Available Now (zero external blockers)
 
 1. ~~**Historical analysis tools**~~ — Done (analizar_winloss, analizar_tendencias)
-3. **Cross-sell recommendations** — leverage proposal + account data for suggestions
+3. ~~**Cross-sell recommendations**~~ — Done (recomendar_crosssell)
 4. **Agent swarm** — multi-agent coordination for complex workflows
 5. **Dashboard UI** — plan exists at `docs/DASHBOARD-PLAN.md`
 
@@ -44,10 +44,10 @@
 
 | Metric | Count |
 |--------|-------|
-| CRM tools | 28 |
+| CRM tools | 29 |
 | SQLite tables | 16 |
-| Test files | 80 |
-| Tests passing | 385 CRM + 640 engine = 1025+ |
+| Test files | 81 |
+| Tests passing | 400 CRM + 640 engine = 1040+ |
 | Persona templates | 8 |
 | Active groups | 4 |
 | Seed: personas | 20 |

@@ -19,10 +19,10 @@ Agentic CRM for media ad sales. NanoClaw engine at `engine/`, all CRM code at `c
 | `crm/src/escalation.ts` | Real-time escalation (quota, coaching, pattern, systemic) |
 | `crm/src/alerts.ts` | Alert evaluators (6 types + event countdown) |
 | `crm/src/google-auth.ts` | Google Workspace JWT auth (Gmail, Drive, Calendar) |
-| `crm/src/tools/index.ts` | Tool registry: 28 tools, role-based filtering |
+| `crm/src/tools/index.ts` | Tool registry: 29 tools, role-based filtering |
 | `crm/groups/global.md` | Global CLAUDE.md template (schema, queries, rules) |
-| `crm/groups/ae.md` | AE persona template (27 tools) |
-| `crm/groups/manager.md` | Manager persona template (19 tools) |
+| `crm/groups/ae.md` | AE persona template (28 tools) |
+| `crm/groups/manager.md` | Manager persona template (20 tools) |
 
 ### Engine Hook Points (DO NOT modify beyond these 5 files)
 
@@ -111,9 +111,9 @@ WhatsApp → engine (NanoClaw) → Direct tools (25 CRM tools via inference adap
 ## Testing
 
 ```bash
-npm run test         # All tests (385 CRM tests)
+npm run test         # All tests (400 CRM tests)
 ```
 
 Tests live in:
 - `engine/src/*.test.ts` — Engine tests
-- `crm/tests/*.test.ts` — CRM tests (17 test files)
+- `crm/tests/*.test.ts` — CRM tests (18 test files)
