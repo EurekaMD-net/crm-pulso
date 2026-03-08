@@ -91,7 +91,7 @@ export function consultar_pipeline(args: Record<string, unknown>, ctx: ToolConte
       etapa: r.etapa,
       dias_sin_actividad: r.dias_sin_actividad,
       es_mega: r.es_mega === 1,
-      ae: r.ae_nombre,
+      ejecutivo: r.ae_nombre,
     })),
   });
 }
@@ -245,7 +245,7 @@ export function consultar_cuenta(args: Record<string, unknown>, ctx: ToolContext
       monto: contrato.monto_comprometido,
       estatus: contrato.estatus,
     } : null,
-    actividades_recientes: actividades,
+    actividades_recientes: actividades.map((a: any) => ({ ...a, ejecutivo: a.ae, ae: undefined })),
   });
 }
 
@@ -295,7 +295,7 @@ export function consultar_actividades(args: Record<string, unknown>, ctx: ToolCo
       fecha: r.fecha,
       cuenta: r.cuenta,
       propuesta: r.propuesta,
-      ae: r.ae,
+      ejecutivo: r.ae,
       siguiente_accion: r.siguiente_accion,
     })),
   });
