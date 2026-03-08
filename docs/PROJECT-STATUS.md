@@ -1,7 +1,7 @@
 # CRM Azteca — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-03-08 (post sqlite-vec)
+> Last updated: 2026-03-08 (post historical analysis tools)
 
 ## Phase Tracker
 
@@ -34,11 +34,11 @@
 
 | Commit | Description |
 |--------|-------------|
+| `80b86af` | feat: analytics seed script for 4-week historical test data |
+| `3d797f8` | feat: add historical analysis tools (analizar_winloss, analizar_tendencias) |
 | `85a5a55` | feat: sqlite-vec integration for semantic RAG search |
 | `7451b91` | fix: message flow — debounce, compaction, async PDF, streaming fallback |
 | `4e7ee5e` | feat: block streaming + context compaction (OpenClaw-inspired) |
-| `1234922` | fix: eliminate all remaining AE references |
-| `ea4ff0e` | fix: rename AE→Ejecutivo in tool descriptions, alerts, escalations |
 
 ## Key Metrics
 
@@ -52,7 +52,7 @@
 | Active groups | 4 |
 | Seed: personas | 20 |
 | Seed: accounts | 12 |
-| Seed: proposals | 25 |
+| Seed: proposals | 45 |
 
 ## External Dependencies
 
