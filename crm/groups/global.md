@@ -138,6 +138,10 @@ No todas las herramientas estan disponibles para todos los roles.
 ### Web
 - *buscar_web* -- Busca informacion en internet en tiempo real (noticias, datos de mercado, empresas, tendencias).
 
+### Analisis Historico
+- *analizar_winloss* -- Analiza propuestas cerradas (ganadas/perdidas/canceladas) en un periodo configurable. Tasas de conversion, razones de perdida, desglose por tipo_oportunidad, vertical, ejecutivo o cuenta. Filtra por mega-deals.
+- *analizar_tendencias* -- Tendencias semanales de 4 metricas: cuota (logro vs meta con direccion), actividad (por tipo y sentimiento), pipeline (nuevas/ganadas/perdidas), sentimiento (ratio positivo). Gerentes+ pueden filtrar por persona.
+
 ## Patrones de Uso
 
 ### Flujo de registro de actividad

@@ -38,7 +38,7 @@ For a team of 50 salespeople, this creates ~68 WhatsApp groups, each with an iso
 ### Message Flow
 
 ```
-WhatsApp → engine (NanoClaw) → Direct tools (26 CRM tools via inference adapter)
+WhatsApp → engine (NanoClaw) → Direct tools (28 CRM tools via inference adapter)
                                     ├── Role-based tool filtering
                                     ├── Google Workspace (Gmail, Drive, Calendar)
                                     ├── RAG search (sqlite-vec KNN + text-embedding-v3)
@@ -54,12 +54,12 @@ WhatsApp → engine (NanoClaw) → Direct tools (26 CRM tools via inference adap
 
 | Role | Tools | Examples |
 |------|-------|---------|
-| AE | 25 | Log activities, manage deals, send emails, set reminders, search docs, web search |
-| Manager | 17 | Team pipeline, quota rollups, coaching briefings, email, docs, web search |
-| Director | 16 | Regional analytics, event tracking, email, docs, web search |
-| VP | 15 | Executive dashboards, cross-region visibility, docs, web search |
+| AE | 27 | Log activities, manage deals, send emails, set reminders, search docs, web search, analytics |
+| Manager | 19 | Team pipeline, quota rollups, coaching briefings, email, docs, web search, analytics |
+| Director | 18 | Regional analytics, event tracking, email, docs, web search, win/loss trends |
+| VP | 17 | Executive dashboards, cross-region visibility, docs, web search, org-wide analytics |
 
-26 unique tools total across activity logging, pipeline management, Google Workspace (Gmail, Drive, Calendar), event tracking, document search (RAG with sqlite-vec), web search, and follow-up reminders.
+28 unique tools total across activity logging, pipeline management, Google Workspace (Gmail, Drive, Calendar), event tracking, document search (RAG with sqlite-vec), web search, historical analytics, and follow-up reminders.
 
 ### Proactive Workflows
 
@@ -94,7 +94,7 @@ agentic-crm/
 │   │   ├── schema.ts         # 16 CRM tables (incl. sqlite-vec virtual table)
 │   │   ├── bootstrap.ts      # Schema init + hooks
 │   │   ├── hierarchy.ts      # Org chart traversal + access control
-│   │   ├── tools/            # 26 tools across 11 modules
+│   │   ├── tools/            # 28 tools across 12 modules
 │   │   ├── alerts.ts         # 6 alert evaluators + event countdown
 │   │   ├── escalation.ts     # 4 real-time escalation evaluators
 │   │   ├── embedding.ts      # Dashscope text-embedding-v3 API + local fallback
@@ -106,7 +106,7 @@ agentic-crm/
 │   │   └── followup-scheduler.ts  # Business-hours reminder scheduler
 │   ├── container/       # CRM container image (extends engine)
 │   ├── groups/          # CLAUDE.md templates per role (ae, manager, director, vp)
-│   └── tests/           # 363 tests across 16 test files
+│   └── tests/           # 385 tests across 17 test files
 ├── scripts/             # Bootstrap, registration, data import
 ├── docs/                # Architecture, deployment, upstream sync
 └── groups/              # Live group folders (created at runtime)
@@ -155,7 +155,7 @@ agentic-crm/
 npm run dev              # Run with hot reload (tsx watch)
 npm run build            # Compile TypeScript
 npm run typecheck        # Type check
-npm run test             # Run all tests (363 CRM tests)
+npm run test             # Run all tests (385 CRM tests)
 npm run bootstrap        # First-time CRM setup
 npm run register-team    # Register team from CSV/JSON
 npm run build:container  # Build CRM container (extends engine image)

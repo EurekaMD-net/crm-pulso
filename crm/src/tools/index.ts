@@ -27,6 +27,7 @@ import { buscar_documentos } from './rag.js';
 import { buscar_emails, leer_email, crear_borrador_email } from './gmail.js';
 import { listar_archivos_drive, leer_archivo_drive } from './drive.js';
 import { buscar_web } from './web-search.js';
+import { analizar_winloss, analizar_tendencias } from './analytics.js';
 
 // ---------------------------------------------------------------------------
 // Tool context — passed to every tool handler
@@ -498,6 +499,39 @@ const TOOL_BUSCAR_WEB: ToolDefinition = {
   },
 };
 
+const TOOL_ANALIZAR_WINLOSS: ToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'analizar_winloss',
+    description: 'Analiza patrones de propuestas ganadas/perdidas en un periodo. Tasas de conversion, razones de perdida, desglose por dimension.',
+    parameters: {
+      type: 'object',
+      properties: {
+        periodo_dias: { type: 'number', description: 'Periodo de analisis en dias (default 90)' },
+        agrupar_por: { type: 'string', enum: ['tipo_oportunidad', 'vertical', 'ejecutivo', 'cuenta'], description: 'Dimension de agrupacion' },
+        cuenta_nombre: { type: 'string', description: 'Filtrar por cuenta (opcional)' },
+        solo_mega: { type: 'boolean', description: 'Solo mega-deals (>$15M)' },
+      },
+    },
+  },
+};
+
+const TOOL_ANALIZAR_TENDENCIAS: ToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'analizar_tendencias',
+    description: 'Analiza tendencias semanales de rendimiento: cuota, actividad, pipeline, o sentimiento.',
+    parameters: {
+      type: 'object',
+      properties: {
+        periodo_semanas: { type: 'number', description: 'Periodo en semanas (default 12)' },
+        metrica: { type: 'string', enum: ['cuota', 'actividad', 'pipeline', 'sentimiento'], description: 'Metrica a analizar' },
+        persona_nombre: { type: 'string', description: 'Filtrar por persona (solo gerentes+)' },
+      },
+    },
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Role-based tool sets
 // ---------------------------------------------------------------------------
@@ -513,6 +547,7 @@ const AE_TOOLS: ToolDefinition[] = [
   TOOL_BUSCAR_EMAILS, TOOL_LEER_EMAIL, TOOL_CREAR_BORRADOR_EMAIL,
   TOOL_LISTAR_ARCHIVOS_DRIVE, TOOL_LEER_ARCHIVO_DRIVE,
   TOOL_BUSCAR_DOCUMENTOS, TOOL_BUSCAR_WEB,
+  TOOL_ANALIZAR_WINLOSS, TOOL_ANALIZAR_TENDENCIAS,
 ];
 
 const GERENTE_TOOLS: ToolDefinition[] = [
@@ -523,6 +558,7 @@ const GERENTE_TOOLS: ToolDefinition[] = [
   TOOL_BUSCAR_EMAILS, TOOL_LEER_EMAIL,
   TOOL_LISTAR_ARCHIVOS_DRIVE, TOOL_LEER_ARCHIVO_DRIVE,
   TOOL_BUSCAR_DOCUMENTOS, TOOL_BUSCAR_WEB,
+  TOOL_ANALIZAR_WINLOSS, TOOL_ANALIZAR_TENDENCIAS,
 ];
 
 const DIRECTOR_TOOLS: ToolDefinition[] = [
@@ -533,6 +569,7 @@ const DIRECTOR_TOOLS: ToolDefinition[] = [
   TOOL_BUSCAR_EMAILS, TOOL_LEER_EMAIL,
   TOOL_LISTAR_ARCHIVOS_DRIVE, TOOL_LEER_ARCHIVO_DRIVE,
   TOOL_BUSCAR_DOCUMENTOS, TOOL_BUSCAR_WEB,
+  TOOL_ANALIZAR_WINLOSS, TOOL_ANALIZAR_TENDENCIAS,
 ];
 
 const VP_TOOLS: ToolDefinition[] = [
@@ -543,6 +580,7 @@ const VP_TOOLS: ToolDefinition[] = [
   TOOL_BUSCAR_EMAILS, TOOL_LEER_EMAIL,
   TOOL_LISTAR_ARCHIVOS_DRIVE, TOOL_LEER_ARCHIVO_DRIVE,
   TOOL_BUSCAR_DOCUMENTOS, TOOL_BUSCAR_WEB,
+  TOOL_ANALIZAR_WINLOSS, TOOL_ANALIZAR_TENDENCIAS,
 ];
 
 export function getToolsForRole(role: 'ae' | 'gerente' | 'director' | 'vp'): ToolDefinition[] {
@@ -585,6 +623,8 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   leer_archivo_drive,
   buscar_documentos,
   buscar_web,
+  analizar_winloss,
+  analizar_tendencias,
 };
 
 export async function executeTool(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<string> {

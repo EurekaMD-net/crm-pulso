@@ -632,6 +632,28 @@ The RAG MCP server respects the same hierarchy rules as CRM data:
 | `engine/container/agent-runner/src/index.ts` | CRM MCP servers (hook) | 1, 3, 7 |
 | `engine/src/container-runner.ts` | Document mount (hook) | 7 |
 
+## Phase 8: Workspace Abstraction (Google + Microsoft)
+
+**Goal**: Support both Google Workspace and Microsoft 365 as interchangeable backends for mail, files, and calendar. Org-wide toggle via `WORKSPACE_PROVIDER` env var.
+
+**Status**: Planned, on hold pending Azure AD app registration.
+
+Full plan: [WORKSPACE-ABSTRACTION-PLAN.md](WORKSPACE-ABSTRACTION-PLAN.md)
+
+---
+
+## Phase 9: Visual Dashboards
+
+**Goal**: Lightweight web dashboards for VP, Directors, and Managers — quick visual glance at pipeline, quotas, activity, and risk without asking the agent.
+
+**Stack**: Zero-build vanilla HTML + ES modules, D3.js for advanced visualization, Node `http` server co-hosted with engine. Same role-scoped data as agent tools. JWT auth via WhatsApp-delivered tokens.
+
+**Status**: Planned.
+
+Full plan: [DASHBOARD-PLAN.md](DASHBOARD-PLAN.md)
+
+---
+
 ## Verification
 
 - `npm run typecheck` — no type errors
