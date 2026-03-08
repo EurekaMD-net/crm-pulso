@@ -6,6 +6,7 @@
  */
 
 import Database from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCrmSchema } from '../src/schema.js';
 
@@ -31,6 +32,7 @@ const {
 
 function setupDb() {
   testDb = new Database(':memory:');
+    sqliteVec.load(testDb);
   testDb.pragma('foreign_keys = ON');
   createCrmSchema(testDb);
 }

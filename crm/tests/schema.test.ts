@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createCrmSchema, CRM_TABLES } from '../src/schema.js';
 
@@ -6,12 +7,13 @@ let db: InstanceType<typeof Database>;
 
 beforeEach(() => {
   db = new Database(':memory:');
+  sqliteVec.load(db);
   db.pragma('foreign_keys = ON');
   createCrmSchema(db);
 });
 
 describe('CRM Schema — tables', () => {
-  it('creates all 15 CRM tables', () => {
+  it('creates all 16 CRM tables', () => {
     const tables = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`)
       .all()

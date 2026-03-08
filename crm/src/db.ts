@@ -11,6 +11,8 @@
 
 // @ts-ignore - better-sqlite3 resolved from root node_modules
 import Database from 'better-sqlite3';
+// @ts-ignore - sqlite-vec resolved from root node_modules
+import * as sqliteVec from 'sqlite-vec';
 import fs from 'fs';
 import path from 'path';
 
@@ -32,6 +34,7 @@ export function getDatabase(): InstanceType<typeof Database> {
     _db.pragma('temp_store = MEMORY');
     _db.pragma('mmap_size = 268435456');
     _db.pragma('foreign_keys = ON');
+    sqliteVec.load(_db);
   }
   return _db;
 }

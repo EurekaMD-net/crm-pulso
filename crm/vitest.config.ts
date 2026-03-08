@@ -7,7 +7,7 @@ export default defineConfig({
   // better-sqlite3 loads a native .node addon — mark it external so Vite
   // never bundles it and Node's require() can resolve relative paths normally.
   ssr: {
-    external: ['better-sqlite3'],
+    external: ['better-sqlite3', 'sqlite-vec'],
     noExternal: [],
   },
 });

@@ -28,7 +28,7 @@ export const CRM_TABLES = [
   'persona', 'cuenta', 'contacto', 'contrato', 'descarga',
   'propuesta', 'actividad', 'cuota', 'inventario',
   'alerta_log', 'email_log', 'evento_calendario',
-  'crm_events', 'crm_documents', 'crm_embeddings',
+  'crm_events', 'crm_documents', 'crm_embeddings', 'crm_vec_embeddings',
 ] as const;
 
 export type CrmTableName = typeof CRM_TABLES[number];
@@ -293,5 +293,10 @@ export function createCrmSchema(db: Database.Database): void {
       UNIQUE(document_id, chunk_index)
     );
     CREATE INDEX IF NOT EXISTS idx_crm_embed_doc ON crm_embeddings(document_id);
+
+    -- 16. CRM_VEC_EMBEDDINGS (sqlite-vec virtual table for KNN search)
+    CREATE VIRTUAL TABLE IF NOT EXISTS crm_vec_embeddings USING vec0(
+      embedding float[1024]
+    );
   `);
 }

@@ -8,7 +8,7 @@
 import { searchDocuments } from '../doc-sync.js';
 import type { ToolContext } from './index.js';
 
-export function buscar_documentos(args: Record<string, unknown>, ctx: ToolContext): string {
+export async function buscar_documentos(args: Record<string, unknown>, ctx: ToolContext): Promise<string> {
   const consulta = args.consulta as string;
   if (!consulta || typeof consulta !== 'string') {
     return JSON.stringify({ error: 'Se requiere el parametro "consulta".' });
@@ -31,7 +31,7 @@ export function buscar_documentos(args: Record<string, unknown>, ctx: ToolContex
     personaIds = [ctx.persona_id];
   }
 
-  const results = searchDocuments(consulta, personaIds, limite, tipoDoc);
+  const results = await searchDocuments(consulta, personaIds, limite, tipoDoc);
 
   if (results.length === 0) {
     return JSON.stringify({ mensaje: 'No se encontraron documentos relevantes.', resultados: [] });

@@ -4,6 +4,9 @@
  * Syncs documents from Google Drive into the local RAG store.
  * Pipeline: list files → download → extract text → chunk → embed → store.
  *
+ * Embeddings are generated via Dashscope text-embedding-v3 (1024 dims)
+ * and indexed with sqlite-vec for fast KNN search.
+ *
  * Scheduler writes IPC task every 24h at 3 AM (5-min startup delay).
  * Gracefully degrades when Google is not configured.
  */
@@ -12,6 +15,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { getDatabase } from './db.js';
+import { embedBatch, embedText } from './embedding.js';
 import { isGoogleEnabled, getDriveClient } from './google-auth.js';
 import { logger } from './logger.js';
 
@@ -80,73 +84,17 @@ export function chunkText(text: string, chunkSize = 512, overlap = 64): TextChun
 }
 
 // ---------------------------------------------------------------------------
-// Simple embedding (TF-IDF-like bag of words for JS-only fallback)
-// ---------------------------------------------------------------------------
-
-/**
- * Generate a simple embedding vector for text.
- * Uses a deterministic hash-based approach (bag of trigrams → fixed-dim vector).
- * This is a lightweight fallback — replace with HuggingFace transformers for production.
- */
-export function embedText(text: string, dims = 384): Float32Array {
-  const vec = new Float32Array(dims);
-  const normalized = text.toLowerCase().replace(/[^\w\s]/g, '');
-  const words = normalized.split(/\s+/).filter(w => w.length > 1);
-
-  for (const word of words) {
-    // Hash each word to multiple dimensions
-    for (let i = 0; i < Math.min(word.length - 1, 3); i++) {
-      const trigram = word.slice(i, i + 3) || word;
-      const hash = simpleHash(trigram);
-      const dim = Math.abs(hash) % dims;
-      vec[dim] += (hash > 0 ? 1 : -1);
-    }
-  }
-
-  // L2 normalize
-  let norm = 0;
-  for (let i = 0; i < dims; i++) norm += vec[i] * vec[i];
-  norm = Math.sqrt(norm) || 1;
-  for (let i = 0; i < dims; i++) vec[i] /= norm;
-
-  return vec;
-}
-
-function simpleHash(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
-  }
-  return hash;
-}
-
-// ---------------------------------------------------------------------------
-// Cosine similarity
-// ---------------------------------------------------------------------------
-
-export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
-  let dot = 0, normA = 0, normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  return denom > 0 ? dot / denom : 0;
-}
-
-// ---------------------------------------------------------------------------
 // Document storage
 // ---------------------------------------------------------------------------
 
-export function storeDocument(
+export async function storeDocument(
   personaId: string,
   source: 'drive' | 'email' | 'manual',
   sourceId: string | null,
   titulo: string,
   tipoDoc: string | null,
   text: string,
-): { docId: string; chunkCount: number } {
+): Promise<{ docId: string; chunkCount: number }> {
   const db = getDatabase();
   const contentHash = crypto.createHash('sha256').update(text).digest('hex');
 
@@ -163,6 +111,9 @@ export function storeDocument(
   const chunks = chunkText(text);
   const now = new Date().toISOString();
 
+  // Generate embeddings via API (batched)
+  const embeddings = await embedBatch(chunks.map(c => c.content));
+
   const insertDoc = db.prepare(`
     INSERT INTO crm_documents (id, source, source_id, persona_id, titulo, tipo_doc, contenido_hash, chunk_count, fecha_sync, tamano_bytes)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -170,17 +121,22 @@ export function storeDocument(
 
   const insertChunk = db.prepare(`
     INSERT INTO crm_embeddings (id, document_id, chunk_index, contenido, embedding)
-    VALUES (?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, NULL)
+  `);
+
+  const insertVec = db.prepare(`
+    INSERT INTO crm_vec_embeddings (rowid, embedding)
+    VALUES (?, ?)
   `);
 
   const storeAll = db.transaction(() => {
     insertDoc.run(docId, source, sourceId, personaId, titulo, tipoDoc, contentHash, chunks.length, now, text.length);
 
-    for (const chunk of chunks) {
-      const embedding = embedText(chunk.content);
-      const embeddingBlob = Buffer.from(embedding.buffer);
+    for (let i = 0; i < chunks.length; i++) {
       const chunkId = `emb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      insertChunk.run(chunkId, docId, chunk.index, chunk.content, embeddingBlob);
+      const info = insertChunk.run(chunkId, docId, chunks[i].index, chunks[i].content);
+      const rowid = info.lastInsertRowid;
+      insertVec.run(BigInt(rowid as number), embeddings[i]);
     }
   });
 
@@ -189,54 +145,76 @@ export function storeDocument(
 }
 
 // ---------------------------------------------------------------------------
-// Document search (cosine similarity in JS)
+// Document search (sqlite-vec KNN)
 // ---------------------------------------------------------------------------
 
-export function searchDocuments(
+export async function searchDocuments(
   query: string,
   personaIds: string[],
   limite = 5,
   tipoDoc?: string,
-): { titulo: string; fragmento: string; similitud: number; persona_id: string }[] {
+): Promise<{ titulo: string; fragmento: string; similitud: number; persona_id: string }[]> {
   const db = getDatabase();
-  const queryEmbed = embedText(query);
+  const queryEmbedding = await embedText(query);
 
-  // Build persona filter
-  let personaFilter = '';
-  const params: unknown[] = [];
+  // Over-fetch to account for persona/tipo filtering after KNN
+  const overFetchK = Math.max(limite * 5, 50);
+
+  // Step 1: KNN from sqlite-vec
+  const vecRows = db.prepare(`
+    SELECT rowid, distance
+    FROM crm_vec_embeddings
+    WHERE embedding MATCH ?
+    ORDER BY distance
+    LIMIT ?
+  `).all(queryEmbedding, overFetchK) as { rowid: number | bigint; distance: number }[];
+
+  if (vecRows.length === 0) return [];
+
+  // Step 2: JOIN with metadata tables for filtering
+  const rowids = vecRows.map(r => Number(r.rowid));
+  const distanceMap = new Map(vecRows.map(r => [Number(r.rowid), r.distance]));
+
+  const placeholders = rowids.map(() => '?').join(',');
+  let sql = `
+    SELECT e.rowid as rid, e.contenido, d.titulo, d.persona_id
+    FROM crm_embeddings e
+    JOIN crm_documents d ON e.document_id = d.id
+    WHERE e.rowid IN (${placeholders})
+  `;
+  const params: unknown[] = [...rowids];
+
   if (personaIds.length > 0) {
-    personaFilter = `AND d.persona_id IN (${personaIds.map(() => '?').join(',')})`;
+    sql += ` AND d.persona_id IN (${personaIds.map(() => '?').join(',')})`;
     params.push(...personaIds);
   }
-
-  let tipoFilter = '';
   if (tipoDoc) {
-    tipoFilter = 'AND d.tipo_doc = ?';
+    sql += ' AND d.tipo_doc = ?';
     params.push(tipoDoc);
   }
 
-  const rows = db.prepare(`
-    SELECT e.contenido, e.embedding, d.titulo, d.persona_id
-    FROM crm_embeddings e
-    JOIN crm_documents d ON e.document_id = d.id
-    WHERE 1=1 ${personaFilter} ${tipoFilter}
-  `).all(...params) as any[];
+  const metaRows = db.prepare(sql).all(...params) as {
+    rid: number | bigint;
+    contenido: string;
+    titulo: string;
+    persona_id: string;
+  }[];
 
-  // Score each chunk
-  const scored = rows
+  // Step 3: Merge distances, sort, limit
+  return metaRows
     .map(row => {
-      const stored = new Float32Array(new Uint8Array(row.embedding).buffer);
+      const distance = distanceMap.get(Number(row.rid)) ?? Infinity;
+      // Convert L2 distance to 0-1 similarity score
+      const similitud = Math.round((1 / (1 + distance)) * 100) / 100;
       return {
         titulo: row.titulo,
         fragmento: row.contenido.length > 300 ? row.contenido.slice(0, 300) + '...' : row.contenido,
-        similitud: cosineSimilarity(queryEmbed, stored),
+        similitud,
         persona_id: row.persona_id,
       };
     })
     .sort((a, b) => b.similitud - a.similitud)
     .slice(0, limite);
-
-  return scored;
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +274,7 @@ export async function syncPersonaDrive(personaId: string, personaEmail: string):
           : mime.includes('spreadsheet') ? 'google_sheet'
           : 'text';
 
-        const result = storeDocument(personaId, 'drive', file.id, file.name, tipoDoc, text);
+        const result = await storeDocument(personaId, 'drive', file.id, file.name, tipoDoc, text);
         if (result.chunkCount > 0) synced++;
       } catch (err) {
         logger.warn({ err, fileId: file.id, fileName: file.name }, 'Failed to sync Drive file');

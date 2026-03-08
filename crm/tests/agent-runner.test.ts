@@ -16,6 +16,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import Database from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createCrmSchema } from '../src/schema.js';
 import type { ChatMessage } from '../src/inference-adapter.js';
@@ -52,6 +53,7 @@ const { _resetStatementCache } = await import('../src/hierarchy.js');
 
 function setupDb() {
   testDb = new Database(':memory:');
+    sqliteVec.load(testDb);
   testDb.pragma('foreign_keys = ON');
   createCrmSchema(testDb);
 

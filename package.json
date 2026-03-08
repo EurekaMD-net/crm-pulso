@@ -22,6 +22,7 @@
     "googleapis": "^130.0.0",
     "nodemailer": "^6.9.0",
     "sharp": "^0.34.5",
+    "sqlite-vec": "^0.1.7-alpha.2",
     "uuid": "^9.0.0"
   },
   "devDependencies": {

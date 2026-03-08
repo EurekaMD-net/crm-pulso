@@ -58,8 +58,10 @@ const allTemplateNames = ['global.md', 'ae.md', 'manager.md', 'director.md', 'vp
 // ---------------------------------------------------------------------------
 
 describe('global.md -- schema coverage', () => {
-  it('references all 15 CRM table names', () => {
-    for (const table of CRM_TABLES) {
+  it('references all user-facing CRM table names', () => {
+    // crm_vec_embeddings is an internal sqlite-vec index, not queried by agents
+    const agentFacingTables = CRM_TABLES.filter(t => t !== 'crm_vec_embeddings');
+    for (const table of agentFacingTables) {
       expect(globalMd, `Missing table: ${table}`).toContain(table);
     }
   });

@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CRM_TABLES } from '../src/schema.js';
 
@@ -19,6 +20,7 @@ const { bootstrapCrm } = await import('../src/bootstrap.js');
 describe('bootstrapCrm', () => {
   beforeEach(() => {
     testDb = new Database(':memory:');
+    sqliteVec.load(testDb);
   });
 
   it('succeeds on in-memory DB', () => {
@@ -30,7 +32,7 @@ describe('bootstrapCrm', () => {
     expect(() => bootstrapCrm()).not.toThrow();
   });
 
-  it('creates all 12 CRM tables', () => {
+  it('creates all 16 CRM tables', () => {
     bootstrapCrm();
 
     const tables = testDb
