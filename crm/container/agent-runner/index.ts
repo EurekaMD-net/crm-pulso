@@ -303,7 +303,7 @@ async function main(): Promise<void> {
   // Set inference env vars from secrets
   if (containerInput.secrets) {
     for (const [key, value] of Object.entries(containerInput.secrets)) {
-      if (key.startsWith('INFERENCE_') || key === 'BRAVE_SEARCH_API_KEY') {
+      if (key.startsWith('INFERENCE_') || key === 'BRAVE_SEARCH_API_KEY' || key === 'BITLY_API_TOKEN') {
         process.env[key] = value;
       }
     }

@@ -1,27 +1,63 @@
 /**
  * Dashboard tool — generates a personalized dashboard link for the user.
  *
- * Uses TinyURL to shorten the link so WhatsApp renders it as clickable
- * (raw IP + port URLs are not auto-linked by WhatsApp).
+ * URL shortening strategy:
+ * 1. If DASHBOARD_BASE_URL has a domain (not raw IP) → no shortener needed
+ * 2. If BITLY_API_TOKEN is set → use Bitly (professional, no spam)
+ * 3. Fallback → raw URL (WhatsApp may not auto-link IP-based URLs)
  */
 
 import { createToken, createShortLink } from '../dashboard/auth.js';
+import { logger } from '../logger.js';
 import type { ToolContext } from './index.js';
 
 const DASHBOARD_BASE_URL = process.env.DASHBOARD_BASE_URL || 'http://localhost:3000';
 
-async function shortenUrl(longUrl: string): Promise<string> {
+/** Returns true if the base URL is a raw IP (not a domain). */
+function isRawIpUrl(url: string): boolean {
   try {
-    const res = await fetch(
-      `https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`,
-      { signal: AbortSignal.timeout(5000) },
-    );
-    if (!res.ok) return longUrl;
-    const short = (await res.text()).trim();
-    return short.startsWith('http') ? short : longUrl;
+    const host = new URL(url).hostname;
+    return /^[\d.]+$/.test(host) || host === 'localhost';
   } catch {
-    return longUrl; // Fallback to raw URL if shortener is unavailable
+    return true;
   }
+}
+
+async function shortenWithBitly(longUrl: string): Promise<string | null> {
+  const token = process.env.BITLY_API_TOKEN;
+  if (!token) return null;
+
+  try {
+    const res = await fetch('https://api-ssl.bitly.com/v4/shorten', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ long_url: longUrl }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) {
+      logger.warn({ status: res.status }, 'Bitly shorten failed');
+      return null;
+    }
+    const data = await res.json() as { link?: string };
+    return data.link ?? null;
+  } catch (err) {
+    logger.warn({ err }, 'Bitly shorten error');
+    return null;
+  }
+}
+
+async function shortenUrl(longUrl: string): Promise<string> {
+  // If the URL already has a proper domain, no shortening needed
+  if (!isRawIpUrl(longUrl)) return longUrl;
+
+  // Try Bitly
+  const short = await shortenWithBitly(longUrl);
+  if (short) return short;
+
+  return longUrl;
 }
 
 export async function generar_link_dashboard(
