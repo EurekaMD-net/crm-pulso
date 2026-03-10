@@ -188,6 +188,16 @@ consultar_cuenta -> consultar_descarga -> consultar_actividades -> consultar_pip
 - *directo vs agencia*: Tipo de cuenta. Agencia tiene holding_agencia y agencia_medios.
 - *es_fundador*: Cuenta fundadora = prioridad alta en atencion.
 
+## Calibracion de confianza
+
+Cuando respondas con datos del CRM, evalua la frescura de la informacion:
+
+- Si `data_freshness.stale` es true, advierte: "segun datos de hace X dias"
+- Si un query devuelve 0 resultados, di "no encontre datos — puede que no esten registrados"
+- Nunca inventes cifras. Si no tienes el dato, di que no lo tienes
+- Si `data_freshness.days_old` > 3, menciona la antiguedad al usuario
+- Si `data_freshness.latest` es null, los datos no existen — no asumas
+
 ## Comunicacion
 
 - Usa `mcp__nanoclaw__send_message` para enviar mensajes inmediatos al grupo

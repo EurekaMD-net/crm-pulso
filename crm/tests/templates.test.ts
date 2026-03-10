@@ -297,6 +297,34 @@ describe("vp.md -- tool references", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Confidence calibration section
+// ---------------------------------------------------------------------------
+
+describe("confidence calibration", () => {
+  const roleTemplates = [
+    { name: "global.md", content: globalMd },
+    { name: "ae.md", content: aeMd },
+    { name: "manager.md", content: managerMd },
+    { name: "director.md", content: directorMd },
+    { name: "vp.md", content: vpMd },
+  ];
+
+  for (const { name, content } of roleTemplates) {
+    it(`${name} has confidence calibration section`, () => {
+      expect(content.toLowerCase()).toContain("calibracion de confianza");
+    });
+  }
+
+  it("global.md references data_freshness.stale", () => {
+    expect(globalMd).toContain("data_freshness.stale");
+  });
+
+  it("global.md warns against inventing data", () => {
+    expect(globalMd.toLowerCase()).toContain("nunca inventes");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // No OLD schema/tool references
 // ---------------------------------------------------------------------------
 

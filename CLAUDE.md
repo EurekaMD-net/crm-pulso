@@ -114,7 +114,7 @@ WhatsApp → engine (NanoClaw) → Direct tools (29 CRM tools via inference adap
 ## Testing
 
 ```bash
-npm run test         # All tests (490 CRM tests)
+npm run test         # All tests (505 CRM tests)
 ```
 
 Tests live in:

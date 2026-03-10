@@ -161,7 +161,7 @@ If an AE has >3 'negativo' or 'urgente' sentiments in 7 days → coaching alert 
 
 ---
 
-## Session 4: Confidence Calibration (no deps)
+## Session 4: Confidence Calibration (no deps) ✅ DONE
 
 ### What
 Update persona templates so the agent expresses uncertainty when data is stale. Add `data_freshness` metadata to key tool responses.
