@@ -22,7 +22,7 @@
 
 | # | Phase | Status | Summary | Sessions | Weeks |
 |---|-------|--------|---------|----------|-------|
-| 8 | Exoskeleton Core | **Next** | Voice pipeline, EOD wrap-up, sentiment, confidence calibration, enhanced briefings, VP glance dashboard | 1–6 | 1–4 |
+| 8 | Exoskeleton Core | **In Progress** | Voice pipeline, EOD wrap-up, sentiment, confidence calibration, enhanced briefings, VP glance dashboard | 1–6 | 1–4 |
 | 9 | Relationship Intelligence | Planned | Executive relationship tracking (3 new tables), warmth scoring, milestone alerts, contact opportunities | 7–10 | 5–8 |
 | 10 | Workspace Abstraction | Planned | Provider interface + Google refactor (Phase A now). Microsoft 365 via MS Graph (Phase B when Azure AD ready) | 10.A–10.C | 7–9 |
 | 11 | Creative Intelligence | Planned | Overnight analysis → autonomous proposal drafts, package builder, cross-agent pattern detection | 11–13 | 9–14 |
@@ -38,7 +38,7 @@
 
 | Session | Deliverable | Est. Hours | Dependencies | Status |
 |---------|-------------|-----------|--------------|--------|
-| 1 | Voice transcription pipeline — Whisper provider abstraction, Baileys media hook, `actividad` schema extension (`audio_ref`, `transcription`) | 2–3h | None | — |
+| 1 | Voice transcription pipeline — Whisper provider abstraction, Baileys media hook, `actividad` schema extension (`audio_ref`, `transcription`) | 2–3h | None | **Done** |
 | 2 | EOD wrap-up workflow — 6:30 p.m. scheduled task, daily reflection prompt, new `actividad.tipo = 'reflexion'`, carry-over analysis | 1–2h | None | — |
 | 3 | Sentiment extraction — LLM-based classification on AE messages, `actividad` schema extension (`sentiment`, `sentiment_label`), `query_team_mood` manager tool, escalation evaluator | 2–3h | Session 2 | — |
 | 4 | Confidence calibration — Persona updates across 4 CLAUDE.md templates, `data_freshness` metadata on key tool responses | 1h | None | — |
@@ -223,7 +223,7 @@ These rules hold across ALL phases:
 | Brave Search API | Active | Web search tool |
 | Google Workspace | Active | Email, Calendar, Drive |
 | WhatsApp (Baileys) | Active | Main risk — unofficial API |
-| Whisper (transcription) | Not started | Needed for Phase 8 Session 1 |
+| Whisper (transcription) | **Active** | Groq `whisper-large-v3` configured |
 | Azure AD | Not started | Needed for Phase 10.C |
 
 ---
@@ -242,6 +242,8 @@ These rules hold across ALL phases:
 
 | Commit | Description |
 |--------|-------------|
+| `b0162d4` | feat: Phase 8 Session 1 — voice transcription pipeline (Groq Whisper) |
+| `4989428` | feat: add crm-add-tool and crm-deploy Claude Code skills |
 | `8e39a40` | fix: replace TinyURL with Bitly for dashboard link shortening |
 | `7082d1b` | feat: agent swarm + codebase audit fixes (31 tools, 481 CRM tests) |
 | `ad29d4d` | docs: update README with dashboard feature and table count |
