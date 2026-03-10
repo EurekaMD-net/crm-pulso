@@ -242,7 +242,7 @@ These rules hold across ALL phases:
 
 | Commit | Description |
 |--------|-------------|
-| `TBD` | feat: Phase 8 Session 4 — confidence calibration (dataFreshness, 505 tests) |
+| `144c492` | feat: Phase 8 Session 4 — confidence calibration (dataFreshness, 505 tests) |
 | `f7ab07e` | feat: Phase 8 Session 3 — sentiment extraction pipeline (33 tools, 490 tests) |
 | `a91a843` | feat: add daily activity seeder and update Phase 8 status docs |
 | `b7a5cbb` | feat: Phase 8 Session 2 — EOD wrap-up workflow |
