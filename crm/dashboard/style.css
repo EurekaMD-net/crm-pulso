@@ -278,6 +278,43 @@ tr:hover td {
   background: var(--gray-700);
 }
 
+/* Glance layout */
+.glance-layout {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (min-width: 768px) {
+  .glance-layout {
+    max-width: 900px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 16px;
+  }
+}
+
+/* Sentiment bar */
+.sentiment-bar {
+  display: flex;
+  height: 24px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.sentiment-segment {
+  min-width: 2px;
+  transition: width 0.3s;
+}
+
+/* Trend indicators */
+.trend-up { color: var(--green); font-size: 13px; margin-left: 4px; }
+.trend-down { color: var(--red); font-size: 13px; margin-left: 4px; }
+.trend-stable { color: var(--gray-500); font-size: 13px; margin-left: 4px; }
+
 /* Responsive */
 @media (min-width: 768px) {
   .dashboard {

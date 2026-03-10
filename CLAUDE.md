@@ -20,7 +20,7 @@ Agentic CRM for media ad sales. NanoClaw engine at `engine/`, all CRM code at `c
 | `crm/src/alerts.ts` | Alert evaluators (6 types + event countdown) |
 | `crm/src/google-auth.ts` | Google Workspace JWT auth (Gmail, Drive, Calendar) |
 | `crm/src/tools/index.ts` | Tool registry: 34 tools, role-based filtering |
-| `crm/src/dashboard/server.ts` | Dashboard HTTP server + router (6 API endpoints) |
+| `crm/src/dashboard/server.ts` | Dashboard HTTP server + router (7 API endpoints) |
 | `crm/src/dashboard/auth.ts` | Dashboard JWT auth (HMAC-SHA256, no external deps) |
 | `crm/src/dashboard/api.ts` | Dashboard API handlers (reuses scopeFilter pattern) |
 | `crm/groups/global.md` | Global CLAUDE.md template (schema, queries, rules) |
@@ -114,7 +114,7 @@ WhatsApp → engine (NanoClaw) → Direct tools (29 CRM tools via inference adap
 ## Testing
 
 ```bash
-npm run test         # All tests (524 CRM tests)
+npm run test         # All tests (543 CRM tests)
 ```
 
 Tests live in:

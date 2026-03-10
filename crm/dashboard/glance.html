@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pulso VP</title>
+  <link rel="stylesheet" href="/dashboard/style.css">
+</head>
+<body>
+  <div class="header">
+    <h1>Pulso VP</h1>
+    <div class="meta">
+      <span id="ts"></span>
+      <button id="refresh-btn" onclick="loadGlance()">Actualizar</button>
+      <button onclick="window.location.href='/dashboard/vp.html?token='+getToken()">Dashboard</button>
+      <button onclick="logout()">Salir</button>
+    </div>
+  </div>
+
+  <div class="glance-layout" id="root">
+    <div class="loading">Cargando...</div>
+  </div>
+
+  <script type="module">
+    import { api, formatMoney, formatPct, quotaColor, quotaClass, sentimentColor, getToken, clearToken, $, el, timeAgo } from '/dashboard/shared.js';
+
+    window.getToken = getToken;
+    window.logout = () => { clearToken(); window.location.href = '/dashboard/index.html'; };
+
+    const token = getToken();
+    if (!token) window.location.href = '/dashboard/index.html';
+
+    function trendArrow(t) {
+      if (t === 'mejorando') return el('span', { className: 'trend-up', textContent: ' \u25B2 mejorando' });
+      if (t === 'deteriorando') return el('span', { className: 'trend-down', textContent: ' \u25BC deteriorando' });
+      return el('span', { className: 'trend-stable', textContent: ' \u2014 estable' });
+    }
+
+    function buildRevenue(d) {
+      const card = el('div', { className: 'card' });
+      card.appendChild(el('div', { className: 'card-header' }, [el('h2', { textContent: 'Revenue Pulse' })]));
+      const body = el('div', { className: 'card-body' });
+
+      body.appendChild(el('div', { style: 'text-align:center;margin-bottom:8px;' }, [
+        el('span', { style: 'font-size:28px;font-weight:700;font-family:var(--font-mono);', textContent: formatMoney(d.logro) }),
+        el('span', { style: 'font-size:16px;color:var(--gray-500);', textContent: ' / ' + formatMoney(d.meta) }),
+      ]));
+
+      const pct = d.pct;
+      body.appendChild(el('div', { style: 'height:12px;background:var(--gray-100);border-radius:6px;overflow:hidden;margin-bottom:8px;' }, [
+        el('div', { style: `width:${Math.min(pct, 100)}%;height:100%;background:${quotaColor(pct)};border-radius:6px;transition:width 0.5s;` }),
+      ]));
+
+      body.appendChild(el('div', { style: 'text-align:center;' }, [
+        el('span', { className: quotaClass(pct), style: 'font-weight:600;font-family:var(--font-mono);', textContent: formatPct(pct) }),
+        trendArrow(d.tendencia),
+      ]));
+
+      card.appendChild(body);
+      return card;
+    }
+
+    function buildPipeline(d) {
+      const card = el('div', { className: 'card' });
+      card.appendChild(el('div', { className: 'card-header' }, [el('h2', { textContent: 'Pipeline' })]));
+      const body = el('div', { className: 'card-body' });
+
+      const stats = el('div', { className: 'stats' });
+      stats.appendChild(el('div', { className: 'stat' }, [
+        el('div', { className: 'stat-value', textContent: String(d.total) }),
+        el('div', { className: 'stat-label', textContent: 'Propuestas' }),
+      ]));
+      stats.appendChild(el('div', { className: 'stat' }, [
+        el('div', { className: 'stat-value', textContent: formatMoney(d.valor) }),
+        el('div', { className: 'stat-label', textContent: 'Valor' }),
+      ]));
+      stats.appendChild(el('div', { className: 'stat' }, [
+        el('div', { className: `stat-value ${d.mega > 0 ? 'val-warning' : ''}`, textContent: String(d.mega) }),
+        el('div', { className: 'stat-label', textContent: 'Mega' }),
+      ]));
+      stats.appendChild(el('div', { className: 'stat' }, [
+        el('div', { className: `stat-value ${d.stalled > 0 ? 'val-danger' : 'val-positive'}`, textContent: String(d.stalled) }),
+        el('div', { className: 'stat-label', textContent: 'Estancadas' }),
+      ]));
+      body.appendChild(stats);
+
+      const maxVal = Math.max(...d.by_stage.map(s => s.valor), 1);
+      for (const s of d.by_stage) {
+        const pct = (s.valor / maxVal) * 100;
+        body.appendChild(el('div', { style: 'display:flex;align-items:center;gap:6px;margin-bottom:3px;font-size:12px;' }, [
+          el('div', { style: 'width:100px;text-align:right;color:var(--gray-500);', textContent: s.etapa.replace(/_/g, ' ') }),
+          el('div', { style: 'flex:1;height:18px;background:var(--gray-100);border-radius:3px;overflow:hidden;' }, [
+            el('div', { style: `width:${Math.max(pct, 2)}%;height:100%;background:var(--blue);border-radius:3px;` }),
+          ]),
+          el('div', { style: 'width:90px;font-family:var(--font-mono);', textContent: `${s.count} \u00B7 ${formatMoney(s.valor)}` }),
+        ]));
+      }
+
+      card.appendChild(body);
+      return card;
+    }
+
+    function buildSentiment(d) {
+      const card = el('div', { className: 'card' });
+      card.appendChild(el('div', { className: 'card-header' }, [el('h2', { textContent: 'Sentimiento' })]));
+      const body = el('div', { className: 'card-body' });
+
+      if (d.total > 0) {
+        const bar = el('div', { className: 'sentiment-bar' });
+        for (const key of ['positivo', 'neutral', 'negativo', 'urgente']) {
+          const pct = (d[key] / d.total) * 100;
+          if (pct > 0) {
+            bar.appendChild(el('div', {
+              className: 'sentiment-segment',
+              style: `width:${pct}%;background:${sentimentColor(key)};`,
+              title: `${key}: ${d[key]} (${Math.round(pct)}%)`,
+            }));
+          }
+        }
+        body.appendChild(bar);
+
+        const legend = el('div', { style: 'display:flex;gap:12px;justify-content:center;margin-top:8px;font-size:12px;' });
+        for (const key of ['positivo', 'neutral', 'negativo', 'urgente']) {
+          if (d[key] > 0) {
+            legend.appendChild(el('span', {}, [
+              el('span', { className: `dot dot-${key}` }),
+              document.createTextNode(`${key} ${d[key]}`),
+            ]));
+          }
+        }
+        body.appendChild(legend);
+      } else {
+        body.appendChild(el('div', { className: 'val-neutral', style: 'text-align:center;padding:12px;', textContent: 'Sin datos de sentimiento' }));
+      }
+
+      body.appendChild(el('div', { style: 'text-align:center;margin-top:8px;' }, [
+        el('span', { style: 'font-size:13px;color:var(--gray-500);', textContent: `Neg: ${d.neg_pct}%` }),
+        trendArrow(d.tendencia),
+      ]));
+
+      if (d.equipos_riesgo.length > 0) {
+        body.appendChild(el('div', { style: 'margin-top:10px;font-size:12px;color:var(--gray-700);font-weight:600;', textContent: 'Equipos en riesgo (>30% neg):' }));
+        for (const eq of d.equipos_riesgo) {
+          body.appendChild(el('div', { style: 'font-size:12px;color:var(--red);margin-left:8px;', textContent: `${eq.gerente}: ${eq.neg_pct}% negativo` }));
+        }
+      }
+
+      card.appendChild(body);
+      return card;
+    }
+
+    function buildQuota(heatmap) {
+      const card = el('div', { className: 'card' });
+      card.appendChild(el('div', { className: 'card-header' }, [el('h2', { textContent: 'Cuota Heatmap' })]));
+      const body = el('div', { className: 'card-body' });
+
+      if (heatmap.length === 0) {
+        body.appendChild(el('div', { className: 'val-neutral', style: 'text-align:center;padding:12px;', textContent: 'Sin datos de cuota' }));
+        card.appendChild(body);
+        return card;
+      }
+
+      for (const dir of heatmap) {
+        body.appendChild(el('div', { style: 'margin-bottom:12px;' }, [
+          el('div', { style: 'display:flex;justify-content:space-between;font-weight:600;margin-bottom:4px;' }, [
+            el('span', { textContent: dir.nombre + ' (Dir)' }),
+            el('span', { className: quotaClass(dir.pct), style: 'font-family:var(--font-mono);', textContent: formatPct(dir.pct) }),
+          ]),
+          ...dir.gerentes.map(g => el('div', { style: 'margin-left:12px;margin-bottom:6px;' }, [
+            el('div', { style: 'display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-bottom:2px;' }, [
+              el('span', { textContent: g.nombre }),
+              el('span', { className: quotaClass(g.pct), style: 'font-family:var(--font-mono);', textContent: formatPct(g.pct) }),
+            ]),
+            el('div', { className: 'heatmap', style: 'grid-template-columns:repeat(auto-fill,minmax(80px,1fr));margin-left:8px;' },
+              g.aes.map(ae => {
+                const bg = ae.pct >= 100 ? 'var(--green)' : ae.pct >= 70 ? 'var(--yellow)' : 'var(--red)';
+                return el('div', {
+                  className: 'heatmap-cell',
+                  style: `background:${bg}22;border:1px solid ${bg};`,
+                  title: ae.nombre,
+                }, [
+                  el('div', { style: 'font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', textContent: ae.nombre.split(' ')[0] }),
+                  el('div', { style: `font-weight:700;color:${bg};`, textContent: formatPct(ae.pct) }),
+                ]);
+              })
+            ),
+          ])),
+        ]));
+      }
+
+      card.appendChild(body);
+      return card;
+    }
+
+    function buildAlerts(alerts) {
+      const card = el('div', { className: 'card' });
+      card.appendChild(el('div', { className: 'card-header' }, [
+        el('h2', { textContent: 'Alertas' }),
+        el('span', { className: 'val-neutral', textContent: String(alerts.length) }),
+      ]));
+      const body = el('div', { className: 'card-body' });
+
+      if (alerts.length === 0) {
+        body.appendChild(el('div', { className: 'val-positive', style: 'text-align:center;padding:12px;', textContent: 'Sin alertas' }));
+      } else {
+        for (const a of alerts) {
+          body.appendChild(el('div', { style: 'display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--gray-100);font-size:13px;' }, [
+            el('div', {}, [
+              el('span', { className: 'tag tag-stage', textContent: a.tipo }),
+              document.createTextNode(' ' + a.entidad),
+            ]),
+            el('span', { style: 'font-size:11px;color:var(--gray-500);white-space:nowrap;', textContent: timeAgo(a.fecha) }),
+          ]));
+        }
+      }
+
+      card.appendChild(body);
+      return card;
+    }
+
+    function buildInventory(items) {
+      const card = el('div', { className: 'card' });
+      card.appendChild(el('div', { className: 'card-header' }, [el('h2', { textContent: 'Inventario' })]));
+      const body = el('div', { className: 'card-body' });
+
+      if (items.length === 0) {
+        body.appendChild(el('div', { className: 'val-neutral', style: 'text-align:center;padding:12px;', textContent: 'Sin eventos proximos' }));
+      } else {
+        for (const ev of items) {
+          const soldColor = ev.sold_pct >= 80 ? 'var(--green)' : ev.sold_pct >= 50 ? 'var(--yellow)' : 'var(--red)';
+          body.appendChild(el('div', { style: 'margin-bottom:8px;' }, [
+            el('div', { style: 'display:flex;justify-content:space-between;font-size:13px;margin-bottom:2px;' }, [
+              el('span', { style: 'font-weight:600;', textContent: ev.nombre }),
+              el('span', { style: 'font-size:11px;color:var(--gray-500);', textContent: ev.fecha_inicio }),
+            ]),
+            el('div', { style: 'height:8px;background:var(--gray-100);border-radius:4px;overflow:hidden;' }, [
+              el('div', { style: `width:${ev.sold_pct}%;height:100%;background:${soldColor};border-radius:4px;` }),
+            ]),
+            el('div', { style: 'display:flex;justify-content:space-between;font-size:11px;color:var(--gray-500);margin-top:1px;' }, [
+              el('span', { textContent: `${ev.sold_pct}% vendido` }),
+              el('span', { textContent: `${formatMoney(ev.actual)} / ${formatMoney(ev.meta)}` }),
+            ]),
+          ]));
+        }
+      }
+
+      card.appendChild(body);
+      return card;
+    }
+
+    window.loadGlance = async function() {
+      try {
+        const data = await api('/api/v1/vp-glance');
+        if (data.error) {
+          $('#root').innerHTML = `<div class="error-msg">${data.error}</div>`;
+          return;
+        }
+
+        $('#ts').textContent = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+        const root = $('#root');
+        root.innerHTML = '';
+
+        root.appendChild(buildRevenue(data.revenue_pulse));
+        root.appendChild(buildPipeline(data.pipeline_health));
+        root.appendChild(buildSentiment(data.sentiment_pulse));
+        root.appendChild(buildQuota(data.quota_heatmap));
+        root.appendChild(buildAlerts(data.active_alerts));
+        root.appendChild(buildInventory(data.inventory));
+      } catch (err) {
+        $('#root').innerHTML = `<div class="error-msg">${err.message}</div>`;
+      }
+    };
+
+    loadGlance();
+    setInterval(loadGlance, 60000);
+  </script>
+</body>
+</html>

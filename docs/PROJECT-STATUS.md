@@ -1,7 +1,7 @@
 # Pulso — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-03-10 (Phase 8 Sessions 1-5 complete)
+> Last updated: 2026-03-10 (Phase 8 Sessions 1-6 complete)
 > Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`
 
 ## Phase Tracker
@@ -22,7 +22,7 @@
 
 | # | Phase | Status | Summary | Sessions | Weeks |
 |---|-------|--------|---------|----------|-------|
-| 8 | Exoskeleton Core | **In Progress** | Voice pipeline, EOD wrap-up, sentiment, confidence calibration, enhanced briefings, VP glance dashboard | 1–6 | 1–4 |
+| 8 | Exoskeleton Core | **Done** | Voice pipeline, EOD wrap-up, sentiment, confidence calibration, enhanced briefings, VP glance dashboard | 1–6 | 1–4 |
 | 9 | Relationship Intelligence | Planned | Executive relationship tracking (3 new tables), warmth scoring, milestone alerts, contact opportunities | 7–10 | 5–8 |
 | 10 | Workspace Abstraction | Planned | Provider interface + Google refactor (Phase A now). Microsoft 365 via MS Graph (Phase B when Azure AD ready) | 10.A–10.C | 7–9 |
 | 11 | Creative Intelligence | Planned | Overnight analysis → autonomous proposal drafts, package builder, cross-agent pattern detection | 11–13 | 9–14 |
@@ -43,11 +43,13 @@
 | 3 | Sentiment extraction — LLM auto-classification on activities, `sentimiento_score` column, `consultar_sentimiento_equipo` tool (Gerente+), coaching escalation includes urgente | 2–3h | Session 2 | **Done** |
 | 4 | Confidence calibration — `dataFreshness` helper, `data_freshness` metadata on pipeline/descarga/cuota responses, calibration section in all 5 persona templates | 1h | None | **Done** |
 | 5 | Enhanced morning briefings — `generar_briefing` tool (4 role dispatchers), rewritten briefing prompts, carry-over/recency/path-to-close/sentiment/compliance/revenue-at-risk | 2–3h | Sessions 2, 3 | **Done** |
-| 6 | VP glance dashboard — Single-screen mobile-friendly view: revenue pulse, pipeline health, quota heatmap, alerts & risks, inventory utilization. Builds on existing dashboard infra | 3–4h | None | — |
+| 6 | VP glance dashboard — Single-screen mobile-friendly view: revenue pulse, pipeline health, quota heatmap, sentiment pulse, alerts, inventory utilization. Single `/api/v1/vp-glance` endpoint + `glance.html` | 3–4h | None | **Done** |
 
 **Schema changes:** +4 columns on `actividad` (audio_ref, transcripcion, sentimiento_score, tipo_mensaje)
 **New tools:** +3 (consultar_resumen_dia, consultar_sentimiento_equipo, generar_briefing) — 34 total
-**New tests:** +59 so far (524 CRM tests passing)
+**New API endpoints:** +1 (`/api/v1/vp-glance`) — 7 total
+**New dashboard pages:** +1 (`glance.html`) — VP mobile glance view
+**New tests:** +78 so far (543 CRM tests passing)
 
 ---
 
@@ -160,7 +162,7 @@
 | SQLite tables | 17 | 23 | +6 |
 | CRM tools | 34 | ~55 | +21 |
 | Test files | 24 | ~35 | +11 |
-| Tests passing | 524 | 900+ | +376 |
+| Tests passing | 543 | 900+ | +357 |
 | Persona templates | 8 | 8 (dynamic) | — |
 | Claude Code sessions | — | 26 | — |
 | Estimated hours | — | 65–85h | — |
@@ -242,7 +244,8 @@ These rules hold across ALL phases:
 
 | Commit | Description |
 |--------|-------------|
-| (pending) | feat: Phase 8 Session 5 — enhanced briefings (generar_briefing, 34 tools, 524 tests) |
+| (pending) | feat: Phase 8 Session 6 — VP glance dashboard (vp-glance API, glance.html, 543 tests) |
+| `TBD` | feat: Phase 8 Session 5 — enhanced briefings (generar_briefing, 34 tools, 524 tests) |
 | `144c492` | feat: Phase 8 Session 4 — confidence calibration (dataFreshness, 505 tests) |
 | `f7ab07e` | feat: Phase 8 Session 3 — sentiment extraction pipeline (33 tools, 490 tests) |
 | `a91a843` | feat: add daily activity seeder and update Phase 8 status docs |
