@@ -108,7 +108,7 @@ The tool queries today's activities and identifies:
 
 ---
 
-## Session 3: Sentiment Extraction (depends on Session 2)
+## Session 3: Sentiment Extraction (depends on Session 2) ✅ DONE
 
 ### What
 LLM-based sentiment classification on AE messages. Every `registrar_actividad` call auto-classifies sentiment. New `consultar_sentimiento_equipo` tool for managers.

@@ -39,6 +39,7 @@ import { recomendar_crosssell } from "./crosssell.js";
 import { generar_link_dashboard } from "./dashboard.js";
 import { ejecutar_swarm } from "./swarm.js";
 import { consultar_resumen_dia } from "./reflexion.js";
+import { consultar_sentimiento_equipo } from "./sentiment.js";
 
 // ---------------------------------------------------------------------------
 // Tool context — passed to every tool handler
@@ -833,6 +834,24 @@ const TOOL_CONSULTAR_RESUMEN_DIA: ToolDefinition = {
   },
 };
 
+const TOOL_CONSULTAR_SENTIMIENTO_EQUIPO: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "consultar_sentimiento_equipo",
+    description:
+      "Consulta la distribucion de sentimiento del equipo en un periodo. Muestra positivo/neutral/negativo/urgente por Ejecutivo, tendencia vs periodo anterior, y alertas de Ejecutivos con alto % negativo.",
+    parameters: {
+      type: "object",
+      properties: {
+        dias: {
+          type: "number",
+          description: "Dias de historia a analizar (default 7)",
+        },
+      },
+    },
+  },
+};
+
 const TOOL_EJECUTAR_SWARM: ToolDefinition = {
   type: "function",
   function: {
@@ -927,6 +946,7 @@ const GERENTE_TOOLS: ToolDefinition[] = [
   TOOL_RECOMENDAR_CROSSSELL,
   TOOL_GENERAR_LINK_DASHBOARD,
   TOOL_EJECUTAR_SWARM,
+  TOOL_CONSULTAR_SENTIMIENTO_EQUIPO,
 ];
 
 const DIRECTOR_TOOLS: ToolDefinition[] = [
@@ -951,6 +971,7 @@ const DIRECTOR_TOOLS: ToolDefinition[] = [
   TOOL_RECOMENDAR_CROSSSELL,
   TOOL_GENERAR_LINK_DASHBOARD,
   TOOL_EJECUTAR_SWARM,
+  TOOL_CONSULTAR_SENTIMIENTO_EQUIPO,
 ];
 
 const VP_TOOLS: ToolDefinition[] = [
@@ -974,6 +995,7 @@ const VP_TOOLS: ToolDefinition[] = [
   TOOL_RECOMENDAR_CROSSSELL,
   TOOL_GENERAR_LINK_DASHBOARD,
   TOOL_EJECUTAR_SWARM,
+  TOOL_CONSULTAR_SENTIMIENTO_EQUIPO,
 ];
 
 export function getToolsForRole(
@@ -1028,6 +1050,7 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   generar_link_dashboard,
   ejecutar_swarm,
   consultar_resumen_dia,
+  consultar_sentimiento_equipo,
 };
 
 export async function executeTool(

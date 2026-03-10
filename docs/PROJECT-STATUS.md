@@ -40,7 +40,7 @@
 |---------|-------------|-----------|--------------|--------|
 | 1 | Voice transcription pipeline — Whisper provider abstraction, Baileys media hook, `actividad` schema extension (`audio_ref`, `transcription`) | 2–3h | None | **Done** |
 | 2 | EOD wrap-up workflow — 6:30 p.m. scheduled task, daily reflection prompt, consultar_resumen_dia tool, carry-over analysis | 1–2h | None | **Done** |
-| 3 | Sentiment extraction — LLM-based classification on AE messages, `actividad` schema extension (`sentiment`, `sentiment_label`), `query_team_mood` manager tool, escalation evaluator | 2–3h | Session 2 | — |
+| 3 | Sentiment extraction — LLM auto-classification on activities, `sentimiento_score` column, `consultar_sentimiento_equipo` tool (Gerente+), coaching escalation includes urgente | 2–3h | Session 2 | **Done** |
 | 4 | Confidence calibration — Persona updates across 4 CLAUDE.md templates, `data_freshness` metadata on key tool responses | 1h | None | — |
 | 5 | Enhanced morning briefings — Wrap-up integration, contact recency analysis, quota path-to-close, manager mood aggregate, director relationship alerts | 2–3h | Sessions 2, 3 | — |
 | 6 | VP glance dashboard — Single-screen mobile-friendly view: revenue pulse, pipeline health, quota heatmap, alerts & risks, inventory utilization. Builds on existing dashboard infra | 3–4h | None | — |

@@ -154,6 +154,9 @@ No todas las herramientas estan disponibles para todos los roles.
   - `resumen_ejecutivo` (vp): Vision organizacional completa con riesgos
   - `diagnostico_medio` (director/vp): Rendimiento por medio (tv_abierta, ctv, radio, digital)
 
+### Sentimiento
+- *consultar_sentimiento_equipo* -- Distribucion de sentimiento del equipo (positivo/neutral/negativo/urgente por Ejecutivo). Tendencia vs periodo anterior, alertas de alto % negativo. Solo gerentes, directores, VP.
+
 ### Reflexion Diaria
 - *consultar_resumen_dia* -- Resume el dia completo del Ejecutivo: actividades registradas, propuestas movidas, acciones pendientes/vencidas, propuestas estancadas >7 dias, y avance de cuota semanal. Usa al cierre del dia (6:30pm). Solo disponible para Ejecutivos.
 
