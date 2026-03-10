@@ -1,7 +1,7 @@
 # Pulso — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-03-10 (Phase 8 Sessions 1-4 complete)
+> Last updated: 2026-03-10 (Phase 8 Sessions 1-5 complete)
 > Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`
 
 ## Phase Tracker
@@ -42,12 +42,12 @@
 | 2 | EOD wrap-up workflow — 6:30 p.m. scheduled task, daily reflection prompt, consultar_resumen_dia tool, carry-over analysis | 1–2h | None | **Done** |
 | 3 | Sentiment extraction — LLM auto-classification on activities, `sentimiento_score` column, `consultar_sentimiento_equipo` tool (Gerente+), coaching escalation includes urgente | 2–3h | Session 2 | **Done** |
 | 4 | Confidence calibration — `dataFreshness` helper, `data_freshness` metadata on pipeline/descarga/cuota responses, calibration section in all 5 persona templates | 1h | None | **Done** |
-| 5 | Enhanced morning briefings — Wrap-up integration, contact recency analysis, quota path-to-close, manager mood aggregate, director relationship alerts | 2–3h | Sessions 2, 3 | — |
+| 5 | Enhanced morning briefings — `generar_briefing` tool (4 role dispatchers), rewritten briefing prompts, carry-over/recency/path-to-close/sentiment/compliance/revenue-at-risk | 2–3h | Sessions 2, 3 | **Done** |
 | 6 | VP glance dashboard — Single-screen mobile-friendly view: revenue pulse, pipeline health, quota heatmap, alerts & risks, inventory utilization. Builds on existing dashboard infra | 3–4h | None | — |
 
 **Schema changes:** +4 columns on `actividad` (audio_ref, transcripcion, sentimiento_score, tipo_mensaje)
-**New tools:** +2 (consultar_resumen_dia, consultar_sentimiento_equipo) — 33 total
-**New tests:** +40 so far (505 CRM tests passing)
+**New tools:** +3 (consultar_resumen_dia, consultar_sentimiento_equipo, generar_briefing) — 34 total
+**New tests:** +59 so far (524 CRM tests passing)
 
 ---
 
@@ -158,9 +158,9 @@
 | Metric | Phase 8 (Now) | Phase 14 (Target) | Delta |
 |--------|---------------|-------------------|-------|
 | SQLite tables | 17 | 23 | +6 |
-| CRM tools | 33 | ~55 | +22 |
-| Test files | 23 | ~35 | +12 |
-| Tests passing | 505 | 900+ | +395 |
+| CRM tools | 34 | ~55 | +21 |
+| Test files | 24 | ~35 | +11 |
+| Tests passing | 524 | 900+ | +376 |
 | Persona templates | 8 | 8 (dynamic) | — |
 | Claude Code sessions | — | 26 | — |
 | Estimated hours | — | 65–85h | — |
@@ -242,6 +242,7 @@ These rules hold across ALL phases:
 
 | Commit | Description |
 |--------|-------------|
+| (pending) | feat: Phase 8 Session 5 — enhanced briefings (generar_briefing, 34 tools, 524 tests) |
 | `144c492` | feat: Phase 8 Session 4 — confidence calibration (dataFreshness, 505 tests) |
 | `f7ab07e` | feat: Phase 8 Session 3 — sentiment extraction pipeline (33 tools, 490 tests) |
 | `a91a843` | feat: add daily activity seeder and update Phase 8 status docs |

@@ -40,6 +40,7 @@ import { generar_link_dashboard } from "./dashboard.js";
 import { ejecutar_swarm } from "./swarm.js";
 import { consultar_resumen_dia } from "./reflexion.js";
 import { consultar_sentimiento_equipo } from "./sentiment.js";
+import { generar_briefing } from "./briefing.js";
 
 // ---------------------------------------------------------------------------
 // Tool context — passed to every tool handler
@@ -886,6 +887,19 @@ const TOOL_EJECUTAR_SWARM: ToolDefinition = {
   },
 };
 
+const TOOL_GENERAR_BRIEFING: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "generar_briefing",
+    description:
+      "Genera un briefing agregado segun tu rol. Incluye carry-over, cuentas sin contacto, path-to-close, sentimiento, compliance, mega-deals, y revenue at risk. No requiere parametros — todo se infiere de tu contexto.",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Role-based tool sets
 // ---------------------------------------------------------------------------
@@ -921,6 +935,7 @@ const AE_TOOLS: ToolDefinition[] = [
   TOOL_RECOMENDAR_CROSSSELL,
   TOOL_GENERAR_LINK_DASHBOARD,
   TOOL_CONSULTAR_RESUMEN_DIA,
+  TOOL_GENERAR_BRIEFING,
 ];
 
 const GERENTE_TOOLS: ToolDefinition[] = [
@@ -947,6 +962,7 @@ const GERENTE_TOOLS: ToolDefinition[] = [
   TOOL_GENERAR_LINK_DASHBOARD,
   TOOL_EJECUTAR_SWARM,
   TOOL_CONSULTAR_SENTIMIENTO_EQUIPO,
+  TOOL_GENERAR_BRIEFING,
 ];
 
 const DIRECTOR_TOOLS: ToolDefinition[] = [
@@ -972,6 +988,7 @@ const DIRECTOR_TOOLS: ToolDefinition[] = [
   TOOL_GENERAR_LINK_DASHBOARD,
   TOOL_EJECUTAR_SWARM,
   TOOL_CONSULTAR_SENTIMIENTO_EQUIPO,
+  TOOL_GENERAR_BRIEFING,
 ];
 
 const VP_TOOLS: ToolDefinition[] = [
@@ -996,6 +1013,7 @@ const VP_TOOLS: ToolDefinition[] = [
   TOOL_GENERAR_LINK_DASHBOARD,
   TOOL_EJECUTAR_SWARM,
   TOOL_CONSULTAR_SENTIMIENTO_EQUIPO,
+  TOOL_GENERAR_BRIEFING,
 ];
 
 export function getToolsForRole(
@@ -1051,6 +1069,7 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   ejecutar_swarm,
   consultar_resumen_dia,
   consultar_sentimiento_equipo,
+  generar_briefing,
 };
 
 export async function executeTool(

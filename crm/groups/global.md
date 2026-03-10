@@ -157,6 +157,9 @@ No todas las herramientas estan disponibles para todos los roles.
 ### Sentimiento
 - *consultar_sentimiento_equipo* -- Distribucion de sentimiento del equipo (positivo/neutral/negativo/urgente por Ejecutivo). Tendencia vs periodo anterior, alertas de alto % negativo. Solo gerentes, directores, VP.
 
+### Briefing Agregado
+- *generar_briefing* -- Genera briefing agregado segun rol. AE: carry-over, cuentas sin contacto >14d, path-to-close, agenda, estancadas. Gerente: sentimiento equipo, compliance wrap-up, path-to-close por Ejecutivo, estancadas. Director: sentimiento cross-equipo, coaching gerentes, mega-deals, pipeline por equipo, cuota ranking. VP: pulso organizacional, equipos >30% negativo, revenue at risk, mega-deals. No requiere parametros.
+
 ### Reflexion Diaria
 - *consultar_resumen_dia* -- Resume el dia completo del Ejecutivo: actividades registradas, propuestas movidas, acciones pendientes/vencidas, propuestas estancadas >7 dias, y avance de cuota semanal. Usa al cierre del dia (6:30pm). Solo disponible para Ejecutivos.
 

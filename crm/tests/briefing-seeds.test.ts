@@ -356,4 +356,36 @@ describe("briefing stagger order", () => {
       seen.add(key);
     }
   });
+
+  it("morning/weekly prompts mention generar_briefing", () => {
+    // AE morning (9:10)
+    const aeMorning = BRIEFING_SEEDS.find(
+      (s) => s.rol === "ae" && s.cron === "10 9 * * 1-5",
+    )!;
+    expect(aeMorning.prompt).toContain("generar_briefing");
+
+    // AE weekly (Fri 4pm)
+    const aeWeekly = BRIEFING_SEEDS.find(
+      (s) => s.rol === "ae" && s.cron === "0 16 * * 5",
+    )!;
+    expect(aeWeekly.prompt).toContain("generar_briefing");
+
+    // AE EOD should NOT mention generar_briefing
+    const aeEod = BRIEFING_SEEDS.find(
+      (s) => s.rol === "ae" && s.cron === "30 18 * * 1-5",
+    )!;
+    expect(aeEod.prompt).not.toContain("generar_briefing");
+
+    // Gerente weekly
+    const gerente = BRIEFING_SEEDS.find((s) => s.rol === "gerente")!;
+    expect(gerente.prompt).toContain("generar_briefing");
+
+    // Director weekly
+    const director = BRIEFING_SEEDS.find((s) => s.rol === "director")!;
+    expect(director.prompt).toContain("generar_briefing");
+
+    // VP daily
+    const vp = BRIEFING_SEEDS.find((s) => s.rol === "vp")!;
+    expect(vp.prompt).toContain("generar_briefing");
+  });
 });

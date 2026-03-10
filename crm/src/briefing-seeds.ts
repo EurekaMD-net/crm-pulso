@@ -26,13 +26,13 @@ const BRIEFING_SEEDS: BriefingSeed[] = [
     rol: "ae",
     cron: "10 9 * * 1-5", // Staggered: base 9:10, offset by index
     prompt:
-      "Briefing matutino: revisa mi agenda de hoy, deals estancados >7 dias, acciones pendientes con fecha vencida, y mi porcentaje de cuota esta semana. Formato WhatsApp, conciso.",
+      "Briefing matutino: llama generar_briefing para obtener datos agregados. Con los resultados, presenta: 1) acciones pendientes de dias anteriores (carry-over), 2) cuentas sin contacto en >14 dias, 3) path-to-close (gap de cuota vs deals cerrables), 4) agenda del dia, 5) propuestas estancadas >7 dias. Formato WhatsApp, conciso.",
   },
   {
     rol: "ae",
     cron: "0 16 * * 5",
     prompt:
-      "Revision semanal: pipeline por etapa con valores, propuestas estancadas >14 dias, gap de descarga acumulado, y plan de accion para la siguiente semana. Formato WhatsApp.",
+      "Revision semanal: llama generar_briefing para el contexto de path-to-close y cuentas sin contacto. Complementa con consultar_pipeline (por etapa con valores), propuestas estancadas >14 dias, gap de descarga acumulado, y plan de accion para la siguiente semana. Formato WhatsApp.",
   },
   {
     rol: "ae",
@@ -44,19 +44,19 @@ const BRIEFING_SEEDS: BriefingSeed[] = [
     rol: "gerente",
     cron: "0 9 * * 1", // Staggered: base 9:00, offset by index
     prompt:
-      "Resumen semanal de equipo: cuota por Ejecutivo (logro vs meta), propuestas en riesgo (estancadas >14d o valor >5M), actividad por Ejecutivo (ultima semana), gap descarga por cuenta, y top wins/losses. Formato WhatsApp.",
+      "Resumen semanal de equipo: llama generar_briefing para datos agregados. Con los resultados, presenta: 1) sentimiento del equipo y Ejecutivos con tendencia negativa, 2) compliance de wrap-up (quien no registro actividades ayer), 3) path-to-close por Ejecutivo (gap vs cerrables), 4) propuestas estancadas del equipo. Complementa con gap descarga por cuenta y top wins/losses. Formato WhatsApp.",
   },
   {
     rol: "director",
     cron: "52 8 * * 1",
     prompt:
-      "Revision regional: pipeline total por equipo, ranking cuota por gerente, mega-deals activos, varianza descarga por region, alertas escaladas. Formato WhatsApp.",
+      "Revision regional: llama generar_briefing para datos agregados. Con los resultados, presenta: 1) sentimiento cross-equipo (comparar gerentes), 2) frecuencia de coaching de gerentes, 3) trayectoria de mega-deals con sentimiento, 4) pipeline por equipo, 5) ranking de cuota por gerente. Formato WhatsApp.",
   },
   {
     rol: "vp",
     cron: "45 8 * * 1-5",
     prompt:
-      "Brief ejecutivo: agenda del dia, asuntos urgentes, estado mega-deals, alertas pendientes, y recomendacion de accion. Formato WhatsApp.",
+      "Brief ejecutivo: llama generar_briefing para datos agregados. Con los resultados, presenta: 1) pulso de sentimiento organizacional, 2) equipos con >30% negativo (revenue at risk), 3) revenue en riesgo por sentimiento declinando, 4) mega-deals activos con sentimiento reciente. Complementa con consultar_agenda para tu agenda del dia. Incluye recomendacion de accion. Formato WhatsApp.",
   },
 ];
 
