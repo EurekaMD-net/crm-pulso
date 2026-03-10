@@ -22,7 +22,7 @@ CREATE INDEX IF NOT EXISTS idx_actividad_sentimiento ON actividad(sentimiento);
 
 ---
 
-## Session 1: Voice Transcription Pipeline (no deps)
+## Session 1: Voice Transcription Pipeline (no deps) ✅ DONE
 
 ### What
 Download WhatsApp voice notes, save to disk, transcribe via OpenAI Whisper API, inline text into message content.
@@ -69,7 +69,7 @@ if (normalized?.audioMessage) {
 
 ---
 
-## Session 2: EOD Wrap-Up Workflow (no deps)
+## Session 2: EOD Wrap-Up Workflow (no deps) ✅ DONE
 
 ### What
 Scheduled 6:30pm task that reviews the day's activities, generates a daily reflection, identifies carry-over items, and sends a concise wrap-up message to each AE.
