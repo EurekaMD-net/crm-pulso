@@ -1,7 +1,7 @@
 # Pulso — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-03-09 (Pulso vision & technical plan defined)
+> Last updated: 2026-03-10 (Phase 8 Sessions 1-3 complete)
 > Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`
 
 ## Phase Tracker
@@ -45,9 +45,9 @@
 | 5 | Enhanced morning briefings — Wrap-up integration, contact recency analysis, quota path-to-close, manager mood aggregate, director relationship alerts | 2–3h | Sessions 2, 3 | — |
 | 6 | VP glance dashboard — Single-screen mobile-friendly view: revenue pulse, pipeline health, quota heatmap, alerts & risks, inventory utilization. Builds on existing dashboard infra | 3–4h | None | — |
 
-**Schema changes:** +4 columns on `actividad` (audio_ref, transcription, sentiment, sentiment_label)
-**New tools:** ~3 (voice processing, team mood query, sentiment tools)
-**New tests:** ~60–80
+**Schema changes:** +4 columns on `actividad` (audio_ref, transcripcion, sentimiento_score, tipo_mensaje)
+**New tools:** +2 (consultar_resumen_dia, consultar_sentimiento_equipo) — 33 total
+**New tests:** +25 so far (490 CRM tests passing)
 
 ---
 
@@ -155,12 +155,12 @@
 
 ## Cumulative Evolution
 
-| Metric | Phase 7 (Now) | Phase 14 (Target) | Delta |
+| Metric | Phase 8 (Now) | Phase 14 (Target) | Delta |
 |--------|---------------|-------------------|-------|
 | SQLite tables | 17 | 23 | +6 |
-| CRM tools | 31 | ~55 | +24 |
-| Test files | 22 | ~35 | +13 |
-| Tests passing | 481 | 900+ | +420 |
+| CRM tools | 33 | ~55 | +22 |
+| Test files | 23 | ~35 | +12 |
+| Tests passing | 490 | 900+ | +410 |
 | Persona templates | 8 | 8 (dynamic) | — |
 | Claude Code sessions | — | 26 | — |
 | Estimated hours | — | 65–85h | — |
@@ -242,13 +242,10 @@ These rules hold across ALL phases:
 
 | Commit | Description |
 |--------|-------------|
+| `f7ab07e` | feat: Phase 8 Session 3 — sentiment extraction pipeline (33 tools, 490 tests) |
+| `a91a843` | feat: add daily activity seeder and update Phase 8 status docs |
+| `b7a5cbb` | feat: Phase 8 Session 2 — EOD wrap-up workflow |
 | `b0162d4` | feat: Phase 8 Session 1 — voice transcription pipeline (Groq Whisper) |
 | `4989428` | feat: add crm-add-tool and crm-deploy Claude Code skills |
+| `42404dc` | docs: add Pulso vision, technical plan, and updated roadmap (Phases 8-14) |
 | `8e39a40` | fix: replace TinyURL with Bitly for dashboard link shortening |
-| `7082d1b` | feat: agent swarm + codebase audit fixes (31 tools, 481 CRM tests) |
-| `ad29d4d` | docs: update README with dashboard feature and table count |
-| `3469285` | feat: analytics tools, comprehensive seed data, agent runner fixes |
-| `fd580b4` | fix: dashboard public access, short links, hierarchical cuota, clean alerts |
-| `8375926` | feat: manager and director dashboards with role-based routing |
-| `79489cb` | feat: VP dashboard UI with pipeline funnel, cuota bars, risk table |
-| `b57e149` | feat: dashboard REST API with JWT auth and 6 endpoints |
