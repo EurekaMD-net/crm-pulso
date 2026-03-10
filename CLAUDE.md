@@ -120,3 +120,22 @@ npm run test         # All tests (481 CRM tests)
 Tests live in:
 - `engine/src/*.test.ts` — Engine tests
 - `crm/tests/*.test.ts` — CRM tests (22 test files)
+
+## Service Operations
+- Always kill ALL `tsx.*engine` processes before starting fresh.
+- Always rebuild container with `--no-cache` when source files change.
+- After persona/config change, restart engine AND clear session history.
+- `crm-ctl` at `/usr/local/bin/crm-ctl` is the canonical way to manage the service.
+- Check systemd status BEFORE using pgrep (systemd-spawned processes also match).
+
+## Terminology Protocol
+When renaming any user-facing term, always update all 4 layers:
+1. Template files (e.g., `crm/groups/*.md`)
+2. Live generated files (e.g., `groups/*/CLAUDE.md`)
+3. Source code: tool descriptions, response JSON keys, seed data, UI labels
+4. Session history files: PURGE (delete), do not edit — LLM mimics its own prior messages
+
+## Model-Specific Guards
+- **Qwen 3.5**: `enable_thinking: false` only for `qwen3*` models. MiniMax rejects it → HTTP 400.
+- **Qwen 3.5**: Text-only. No `image_url` content blocks. Vision requires a VL model.
+- **Qwen 3.5**: Returns `content: null` with `tool_calls`. Generate acknowledgments locally (pre-written phrases, zero LLM tokens).

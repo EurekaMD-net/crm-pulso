@@ -632,25 +632,18 @@ The RAG MCP server respects the same hierarchy rules as CRM data:
 | `engine/container/agent-runner/src/index.ts` | CRM MCP servers (hook) | 1, 3, 7 |
 | `engine/src/container-runner.ts` | Document mount (hook) | 7 |
 
-## Phase 8: Workspace Abstraction (Google + Microsoft)
+## Pulso Evolution (Phases 8-14)
 
-**Goal**: Support both Google Workspace and Microsoft 365 as interchangeable backends for mail, files, and calendar. Org-wide toggle via `WORKSPACE_PROVIDER` env var.
+The project is evolving into **Pulso** — a cognitive exoskeleton for broadcast ad sales. Phases 1-7 (above) are complete. The next 7 phases add voice-first input, relationship intelligence, creative commercial thinking, data connectors, A2A readiness, and production hardening.
 
-**Status**: Planned, on hold pending Azure AD app registration.
+See:
+- [VISION.md](VISION.md) — The Pulso vision and design principles
+- [TECHNICAL-EVOLUTION-PLAN.md](TECHNICAL-EVOLUTION-PLAN.md) — Full technical plan with session breakdown
+- [PROJECT-STATUS.md](PROJECT-STATUS.md) — Phase tracker with status and dependencies
 
-Full plan: [WORKSPACE-ABSTRACTION-PLAN.md](WORKSPACE-ABSTRACTION-PLAN.md)
+**Dashboards** (previously Phase 9) are complete — implemented as part of Phase 7. Plan detail: [DASHBOARD-PLAN.md](DASHBOARD-PLAN.md)
 
----
-
-## Phase 9: Visual Dashboards
-
-**Goal**: Lightweight web dashboards for VP, Directors, and Managers — quick visual glance at pipeline, quotas, activity, and risk without asking the agent.
-
-**Stack**: Zero-build vanilla HTML + ES modules, D3.js for advanced visualization, Node `http` server co-hosted with engine. Same role-scoped data as agent tools. JWT auth via WhatsApp-delivered tokens.
-
-**Status**: Planned.
-
-Full plan: [DASHBOARD-PLAN.md](DASHBOARD-PLAN.md)
+**Workspace Abstraction** (previously Phase 8) is now Phase 10. Plan detail: [WORKSPACE-ABSTRACTION-PLAN.md](WORKSPACE-ABSTRACTION-PLAN.md)
 
 ---
 

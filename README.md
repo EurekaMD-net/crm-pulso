@@ -1,6 +1,6 @@
-# Agentic CRM
+# Pulso — Agentic CRM
 
-An agentic CRM for media ad sales teams. AI agents that do the CRM work for your sales team.
+The cognitive exoskeleton for broadcast ad sales. AI agents embedded in WhatsApp that do the CRM work for your sales team.
 
 ## How It Works
 
@@ -171,7 +171,9 @@ The engine lives at `engine/` as a git subtree. See [docs/UPSTREAM-SYNC.md](docs
 
 ## Documentation
 
+- [Vision](docs/VISION.md) — The Pulso vision: design principles, day-in-the-life scenarios, adoption strategy
+- [Technical Evolution Plan](docs/TECHNICAL-EVOLUTION-PLAN.md) — 6-phase roadmap from current state to full cognitive exoskeleton
+- [Project Status](docs/PROJECT-STATUS.md) — Phase tracker (Phases 1-7 complete, 8-14 planned), session breakdown, metrics
 - [Architecture](docs/ARCHITECTURE.md) — Full CRM design (17 sections)
-- [Project Status](docs/PROJECT-STATUS.md) — Current phase tracker, blockers, metrics
 - [Deployment](docs/DEPLOYMENT.md) — AWS EC2 setup, systemd, backups
 - [Upstream Sync](docs/UPSTREAM-SYNC.md) — Pulling NanoClaw updates
