@@ -340,6 +340,158 @@ for (const ae of aeRows) {
 }
 
 // ---------------------------------------------------------------------------
+// Seed cuota for current week (if missing)
+// ---------------------------------------------------------------------------
+
+function getCurrentWeek(): number {
+  const d = new Date();
+  const start = new Date(d.getFullYear(), 0, 1);
+  return Math.ceil(
+    ((d.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7,
+  );
+}
+
+const CW = getCurrentWeek();
+const YEAR = today.getFullYear();
+
+// AE IDs and their performance profiles (same as seed-analytics.ts)
+const aeIds = aeRows
+  .map((a) => a.id)
+  .filter((v, i, arr) => arr.indexOf(v) === i);
+const aeProfiles: { meta: number; trend: "up" | "stable" | "down" }[] = [
+  { meta: 1_200_000, trend: "up" },
+  { meta: 1_000_000, trend: "stable" },
+  { meta: 800_000, trend: "down" },
+  { meta: 900_000, trend: "up" },
+  { meta: 700_000, trend: "stable" },
+  { meta: 1_500_000, trend: "up" },
+  { meta: 600_000, trend: "down" },
+  { meta: 1_100_000, trend: "stable" },
+  { meta: 850_000, trend: "up" },
+  { meta: 950_000, trend: "down" },
+  { meta: 750_000, trend: "stable" },
+  { meta: 1_300_000, trend: "up" },
+];
+
+if (!DRY_RUN) {
+  // Check if current week cuotas already exist
+  const existingCuotas = db
+    .prepare("SELECT COUNT(*) as n FROM cuota WHERE año = ? AND semana = ?")
+    .get(YEAR, CW) as { n: number };
+
+  if (existingCuotas.n === 0) {
+    const insertCuota = db.prepare(
+      "INSERT OR IGNORE INTO cuota (id, persona_id, rol, año, semana, meta_total, logro) VALUES (?, ?, 'ae', ?, ?, ?, ?)",
+    );
+
+    let cuotaInserted = 0;
+    for (let a = 0; a < aeIds.length && a < aeProfiles.length; a++) {
+      const profile = aeProfiles[a];
+      const seed = a * 100 + CW;
+      const variance = seededRandom(seed) * 0.09;
+      let attainment: number;
+      switch (profile.trend) {
+        case "up":
+          attainment = 0.78 + variance;
+          break;
+        case "down":
+          attainment = 0.71 + variance;
+          break;
+        default:
+          attainment = 0.8 + variance + 0.05;
+      }
+      // Mid-week: scale logro by day-of-week progress (Mon=0.2, Fri=1.0, Sat/Sun=1.0)
+      const dayOfWeek = today.getUTCDay();
+      const weekProgress =
+        dayOfWeek === 0 ? 1 : dayOfWeek === 6 ? 1 : dayOfWeek / 5;
+      const logro = Math.round(profile.meta * attainment * weekProgress);
+
+      insertCuota.run(
+        `daily-quo-${YEAR}-w${CW}-${aeIds[a]}`,
+        aeIds[a],
+        YEAR,
+        CW,
+        profile.meta,
+        logro,
+      );
+      cuotaInserted++;
+    }
+    console.log(`Inserted ${cuotaInserted} cuota records for week ${CW}`);
+  } else {
+    console.log(`Week ${CW} cuotas already exist (${existingCuotas.n} rows)`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Seed descarga for current week (if missing)
+// ---------------------------------------------------------------------------
+
+if (!DRY_RUN) {
+  const ctaIds = db
+    .prepare("SELECT c.id, c.nombre FROM cuenta c ORDER BY c.id")
+    .all() as { id: string; nombre: string }[];
+
+  const existingDescargas = db
+    .prepare("SELECT COUNT(*) as n FROM descarga WHERE año = ? AND semana = ?")
+    .get(YEAR, CW) as { n: number };
+
+  if (existingDescargas.n === 0) {
+    // Contract amounts (matching seed-analytics.ts profiles)
+    const contratoMontos = [
+      45_000_000, 32_000_000, 28_000_000, 22_000_000, 18_000_000, 40_000_000,
+      15_000_000, 35_000_000, 25_000_000, 20_000_000, 30_000_000, 38_000_000,
+    ];
+
+    const insertDescarga = db.prepare(
+      "INSERT OR IGNORE INTO descarga (id, cuenta_id, semana, año, planificado, facturado, gap_acumulado) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    );
+
+    // Get prior gap_acumulado for each account
+    let descargaInserted = 0;
+    for (let c = 0; c < ctaIds.length && c < contratoMontos.length; c++) {
+      const weeklyPlan = Math.round(contratoMontos[c] / 52);
+      const seed = c * 7 + CW * 13;
+      const variance = (seed % 20) * 0.008;
+      let factor: number;
+      if (c === 0 || c === 1) factor = 1.01 + variance;
+      else if (c === 3) factor = 0.75 + variance;
+      else if (c === 5) factor = 1.02 + variance;
+      else if (c === 6) factor = 0.9 + variance;
+      else factor = 0.92 + variance;
+
+      const billed = Math.round(weeklyPlan * factor);
+
+      // Get prior accumulated gap
+      const priorGap = db
+        .prepare(
+          "SELECT gap_acumulado FROM descarga WHERE cuenta_id = ? AND año = ? AND semana = ? ORDER BY semana DESC LIMIT 1",
+        )
+        .get(ctaIds[c].id, YEAR, CW - 1) as
+        | { gap_acumulado: number }
+        | undefined;
+
+      const gapAcum = (priorGap?.gap_acumulado ?? 0) + (weeklyPlan - billed);
+
+      insertDescarga.run(
+        `daily-desc-${YEAR}-w${CW}-${ctaIds[c].id}`,
+        ctaIds[c].id,
+        CW,
+        YEAR,
+        weeklyPlan,
+        billed,
+        Math.round(gapAcum),
+      );
+      descargaInserted++;
+    }
+    console.log(`Inserted ${descargaInserted} descarga records for week ${CW}`);
+  } else {
+    console.log(
+      `Week ${CW} descargas already exist (${existingDescargas.n} rows)`,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Also update proposal staleness (dias_sin_actividad) for active proposals
 // ---------------------------------------------------------------------------
 
