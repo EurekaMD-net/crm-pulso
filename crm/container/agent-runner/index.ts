@@ -12,16 +12,28 @@
  *   Each result wrapped in ---NANOCLAW_OUTPUT_START/END--- markers.
  */
 
-import fs from 'fs';
-import path from 'path';
-import { bootstrapCrm } from '../../src/bootstrap.js';
-import { getDatabase } from '../../../engine/src/db.js';
-import { getPersonByGroupFolder, getPersonById, getDirectReports, getManager } from '../../src/hierarchy.js';
-import type { Persona } from '../../src/hierarchy.js';
-import { buildToolContext, executeTool, getToolsForRole } from '../../src/tools/index.js';
-import { inferWithTools } from '../../src/inference-adapter.js';
-import type { ChatMessage, ToolDefinition } from '../../src/inference-adapter.js';
-import type { ToolContext } from '../../src/tools/index.js';
+import fs from "fs";
+import path from "path";
+import { bootstrapCrm } from "../../src/bootstrap.js";
+import { getDatabase } from "../../../engine/src/db.js";
+import {
+  getPersonByGroupFolder,
+  getPersonById,
+  getDirectReports,
+  getManager,
+} from "../../src/hierarchy.js";
+import type { Persona } from "../../src/hierarchy.js";
+import {
+  buildToolContext,
+  executeTool,
+  getToolsForRole,
+} from "../../src/tools/index.js";
+import { inferWithTools } from "../../src/inference-adapter.js";
+import type {
+  ChatMessage,
+  ToolDefinition,
+} from "../../src/inference-adapter.js";
+import type { ToolContext } from "../../src/tools/index.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,7 +52,7 @@ interface ContainerInput {
 }
 
 interface ContainerOutput {
-  status: 'success' | 'error';
+  status: "success" | "error";
   result: string | null;
   newSessionId?: string;
   error?: string;
@@ -51,19 +63,19 @@ interface ContainerOutput {
 // Constants
 // ---------------------------------------------------------------------------
 
-const IPC_INPUT_DIR = '/workspace/ipc/input';
-const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
+const IPC_INPUT_DIR = "/workspace/ipc/input";
+const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, "_close");
 const IPC_POLL_MIN_MS = 100;
 const IPC_POLL_MAX_MS = 500;
 const MAX_MESSAGES = 12;
 const MAX_TOOL_ROUNDS = 8;
-const SESSIONS_DIR = '/workspace/group/.crm-sessions';
+const SESSIONS_DIR = "/workspace/group/.crm-sessions";
 
-const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
-const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
+const OUTPUT_START_MARKER = "---NANOCLAW_OUTPUT_START---";
+const OUTPUT_END_MARKER = "---NANOCLAW_OUTPUT_END---";
 
 // Fixed acknowledgment message — no LLM tokens wasted
-const ACK_MESSAGE = 'Un momento...';
+const ACK_MESSAGE = "Un momento...";
 
 // ---------------------------------------------------------------------------
 // I/O helpers
@@ -81,11 +93,13 @@ function writeOutput(output: ContainerOutput): void {
 
 async function readStdin(): Promise<string> {
   return new Promise((resolve, reject) => {
-    let data = '';
-    process.stdin.setEncoding('utf8');
-    process.stdin.on('data', (chunk: string) => { data += chunk; });
-    process.stdin.on('end', () => resolve(data));
-    process.stdin.on('error', reject);
+    let data = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk: string) => {
+      data += chunk;
+    });
+    process.stdin.on("end", () => resolve(data));
+    process.stdin.on("error", reject);
   });
 }
 
@@ -95,7 +109,11 @@ async function readStdin(): Promise<string> {
 
 function shouldClose(): boolean {
   if (fs.existsSync(IPC_INPUT_CLOSE_SENTINEL)) {
-    try { fs.unlinkSync(IPC_INPUT_CLOSE_SENTINEL); } catch { /* ignore */ }
+    try {
+      fs.unlinkSync(IPC_INPUT_CLOSE_SENTINEL);
+    } catch {
+      /* ignore */
+    }
     return true;
   }
   return false;
@@ -104,22 +122,29 @@ function shouldClose(): boolean {
 function drainIpcInput(): string[] {
   try {
     fs.mkdirSync(IPC_INPUT_DIR, { recursive: true });
-    const files = fs.readdirSync(IPC_INPUT_DIR)
-      .filter(f => f.endsWith('.json'))
+    const files = fs
+      .readdirSync(IPC_INPUT_DIR)
+      .filter((f) => f.endsWith(".json"))
       .sort();
 
     const messages: string[] = [];
     for (const file of files) {
       const filePath = path.join(IPC_INPUT_DIR, file);
       try {
-        const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
         fs.unlinkSync(filePath);
-        if (data.type === 'message' && data.text) {
+        if (data.type === "message" && data.text) {
           messages.push(data.text);
         }
       } catch (err) {
-        log(`Failed to process input file ${file}: ${err instanceof Error ? err.message : String(err)}`);
-        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+        log(
+          `Failed to process input file ${file}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        try {
+          fs.unlinkSync(filePath);
+        } catch {
+          /* ignore */
+        }
       }
     }
     return messages;
@@ -139,7 +164,7 @@ function waitForIpcMessage(): Promise<string | null> {
       }
       const messages = drainIpcInput();
       if (messages.length > 0) {
-        resolve(messages.join('\n'));
+        resolve(messages.join("\n"));
         return;
       }
       pollMs = Math.min(pollMs * 1.5, IPC_POLL_MAX_MS);
@@ -157,9 +182,11 @@ function loadSession(sessionId: string): ChatMessage[] | null {
   const filePath = path.join(SESSIONS_DIR, `${sessionId}.json`);
   if (!fs.existsSync(filePath)) return null;
   try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    return JSON.parse(fs.readFileSync(filePath, "utf-8"));
   } catch (err) {
-    log(`Failed to load session ${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
+    log(
+      `Failed to load session ${sessionId}: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return null;
   }
 }
@@ -167,9 +194,9 @@ function loadSession(sessionId: string): ChatMessage[] | null {
 function saveSession(sessionId: string, messages: ChatMessage[]): void {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
   const filePath = path.join(SESSIONS_DIR, `${sessionId}.json`);
-  const tmpPath = filePath + '.tmp';
+  const tmpPath = filePath + ".tmp";
   // Don't persist system prompt — it's rebuilt from templates on load
-  const toSave = messages.filter(m => m.role !== 'system');
+  const toSave = messages.filter((m) => m.role !== "system");
   fs.writeFileSync(tmpPath, JSON.stringify(toSave));
   fs.renameSync(tmpPath, filePath);
 }
@@ -183,7 +210,7 @@ function generateSessionId(): string {
 // ---------------------------------------------------------------------------
 
 function buildOrgContext(persona: Persona): string {
-  const lines: string[] = ['## Tu Equipo'];
+  const lines: string[] = ["## Tu Equipo"];
 
   // Who I report to
   if (persona.reporta_a) {
@@ -193,18 +220,21 @@ function buildOrgContext(persona: Persona): string {
       // Boss's boss (for full chain visibility)
       if (boss.reporta_a) {
         const grandBoss = getPersonById(boss.reporta_a);
-        if (grandBoss) lines.push(`  └ quien reporta a: *${grandBoss.nombre}* (${grandBoss.rol})`);
+        if (grandBoss)
+          lines.push(
+            `  └ quien reporta a: *${grandBoss.nombre}* (${grandBoss.rol})`,
+          );
       }
     }
   } else {
-    lines.push('Eres el nivel mas alto de la jerarquia.');
+    lines.push("Eres el nivel mas alto de la jerarquia.");
   }
 
   // Direct reports — full tree so VP/director can see the complete org
   const directReports = getDirectReports(persona.id);
   if (directReports.length > 0) {
-    lines.push('');
-    lines.push('Reportes directos:');
+    lines.push("");
+    lines.push("Reportes directos:");
     for (const dr of directReports) {
       const subReports = getDirectReports(dr.id);
       if (subReports.length > 0) {
@@ -212,7 +242,9 @@ function buildOrgContext(persona: Persona): string {
         for (const sub of subReports) {
           const leafReports = getDirectReports(sub.id);
           if (leafReports.length > 0) {
-            lines.push(`  └ *${sub.nombre}* (${sub.rol}) → ${leafReports.map(l => l.nombre).join(', ')}`);
+            lines.push(
+              `  └ *${sub.nombre}* (${sub.rol}) → ${leafReports.map((l) => l.nombre).join(", ")}`,
+            );
           } else {
             lines.push(`  └ *${sub.nombre}* (${sub.rol})`);
           }
@@ -225,55 +257,64 @@ function buildOrgContext(persona: Persona): string {
 
   // Peers (same manager)
   if (persona.reporta_a) {
-    const peers = getDirectReports(persona.reporta_a).filter(p => p.id !== persona.id);
+    const peers = getDirectReports(persona.reporta_a).filter(
+      (p) => p.id !== persona.id,
+    );
     if (peers.length > 0) {
-      lines.push('');
-      lines.push(`Pares (mismo jefe): ${peers.map(p => `*${p.nombre}* (${p.rol})`).join(', ')}`);
+      lines.push("");
+      lines.push(
+        `Pares (mismo jefe): ${peers.map((p) => `*${p.nombre}* (${p.rol})`).join(", ")}`,
+      );
     }
   }
 
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 function buildSystemPrompt(groupFolder: string, persona: Persona): string {
   const parts: string[] = [];
 
   // Global CLAUDE.md
-  const globalPath = '/workspace/global/CLAUDE.md';
+  const globalPath = "/workspace/global/CLAUDE.md";
   if (fs.existsSync(globalPath)) {
-    parts.push(fs.readFileSync(globalPath, 'utf-8'));
+    parts.push(fs.readFileSync(globalPath, "utf-8"));
   }
 
   // Per-group CLAUDE.md
-  const groupPath = '/workspace/group/CLAUDE.md';
+  const groupPath = "/workspace/group/CLAUDE.md";
   if (fs.existsSync(groupPath)) {
-    parts.push(fs.readFileSync(groupPath, 'utf-8'));
+    parts.push(fs.readFileSync(groupPath, "utf-8"));
   }
 
   // Identity injection
-  parts.push(`\n## Tu Identidad\nNombre: ${persona.nombre}\nRol: ${persona.rol}\nGrupo: ${groupFolder}`);
+  parts.push(
+    `\n## Tu Identidad\nNombre: ${persona.nombre}\nRol: ${persona.rol}\nGrupo: ${groupFolder}`,
+  );
 
   // Org tree injection
   parts.push(buildOrgContext(persona));
 
-  return parts.join('\n\n---\n\n');
+  return parts.join("\n\n---\n\n");
 }
 
 // ---------------------------------------------------------------------------
 // Context window management
 // ---------------------------------------------------------------------------
 
-function truncateMessages(messages: ChatMessage[], maxMessages: number): ChatMessage[] {
+function truncateMessages(
+  messages: ChatMessage[],
+  maxMessages: number,
+): ChatMessage[] {
   // Always keep system message (first) + last N user/assistant exchanges
   if (messages.length <= maxMessages + 1) return messages;
 
-  const system = messages[0]?.role === 'system' ? [messages[0]] : [];
-  const rest = messages[0]?.role === 'system' ? messages.slice(1) : messages;
+  const system = messages[0]?.role === "system" ? [messages[0]] : [];
+  const rest = messages[0]?.role === "system" ? messages.slice(1) : messages;
   // Keep only the last N messages, but ensure we don't break tool call pairs
   // (an assistant with tool_calls must be followed by tool results)
   let kept = rest.slice(-maxMessages);
   // If first kept message is a tool result, drop orphaned tool messages
-  while (kept.length > 0 && kept[0].role === 'tool') {
+  while (kept.length > 0 && kept[0].role === "tool") {
     kept = kept.slice(1);
   }
   return [...system, ...kept];
@@ -289,11 +330,15 @@ async function main(): Promise<void> {
   try {
     const stdinData = await readStdin();
     containerInput = JSON.parse(stdinData);
-    try { fs.unlinkSync('/tmp/input.json'); } catch { /* may not exist */ }
+    try {
+      fs.unlinkSync("/tmp/input.json");
+    } catch {
+      /* may not exist */
+    }
     log(`Received input for group: ${containerInput.groupFolder}`);
   } catch (err) {
     writeOutput({
-      status: 'error',
+      status: "error",
       result: null,
       error: `Failed to parse input: ${err instanceof Error ? err.message : String(err)}`,
     });
@@ -303,7 +348,12 @@ async function main(): Promise<void> {
   // Set inference env vars from secrets
   if (containerInput.secrets) {
     for (const [key, value] of Object.entries(containerInput.secrets)) {
-      if (key.startsWith('INFERENCE_') || key === 'BRAVE_SEARCH_API_KEY' || key === 'BITLY_API_TOKEN') {
+      if (
+        key.startsWith("INFERENCE_") ||
+        key.startsWith("HINDSIGHT_") ||
+        key === "BRAVE_SEARCH_API_KEY" ||
+        key === "BITLY_API_TOKEN"
+      ) {
         process.env[key] = value;
       }
     }
@@ -312,9 +362,10 @@ async function main(): Promise<void> {
   // Validate inference config
   if (!process.env.INFERENCE_PRIMARY_MODEL) {
     writeOutput({
-      status: 'error',
+      status: "error",
       result: null,
-      error: 'Missing INFERENCE_PRIMARY_MODEL. Configure inference provider in .env.',
+      error:
+        "Missing INFERENCE_PRIMARY_MODEL. Configure inference provider in .env.",
     });
     process.exit(1);
   }
@@ -324,14 +375,16 @@ async function main(): Promise<void> {
     getDatabase();
     bootstrapCrm();
   } catch (err) {
-    log(`Database init warning: ${err instanceof Error ? err.message : String(err)}`);
+    log(
+      `Database init warning: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   // Identify persona
   const persona = getPersonByGroupFolder(containerInput.groupFolder);
   if (!persona) {
     writeOutput({
-      status: 'error',
+      status: "error",
       result: null,
       error: `Unknown persona for group folder: ${containerInput.groupFolder}`,
     });
@@ -344,7 +397,7 @@ async function main(): Promise<void> {
   const toolCtx = buildToolContext(persona.id);
   if (!toolCtx) {
     writeOutput({
-      status: 'error',
+      status: "error",
       result: null,
       error: `Failed to build tool context for persona: ${persona.id}`,
     });
@@ -355,18 +408,24 @@ async function main(): Promise<void> {
   const tools = getToolsForRole(persona.rol);
 
   // Build system prompt
-  const systemPrompt = buildSystemPrompt(
-    containerInput.groupFolder,
-    persona,
-  );
+  const systemPrompt = buildSystemPrompt(containerInput.groupFolder, persona);
 
   // Tool executor: wraps executeTool with ToolContext + timeout
   const TOOL_TIMEOUT_MS = 15_000;
-  const executor = async (name: string, args: Record<string, unknown>): Promise<string> => {
+  const executor = async (
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<string> => {
     return Promise.race([
       executeTool(name, args, toolCtx),
       new Promise<string>((_, reject) =>
-        setTimeout(() => reject(new Error(`Tool "${name}" timed out after ${TOOL_TIMEOUT_MS}ms`)), TOOL_TIMEOUT_MS),
+        setTimeout(
+          () =>
+            reject(
+              new Error(`Tool "${name}" timed out after ${TOOL_TIMEOUT_MS}ms`),
+            ),
+          TOOL_TIMEOUT_MS,
+        ),
       ),
     ]);
   };
@@ -384,15 +443,19 @@ async function main(): Promise<void> {
   }
 
   // Always set/refresh system message (persona may have changed since last session)
-  if (messages.length > 0 && messages[0].role === 'system') {
-    messages[0] = { role: 'system', content: systemPrompt };
+  if (messages.length > 0 && messages[0].role === "system") {
+    messages[0] = { role: "system", content: systemPrompt };
   } else {
-    messages.unshift({ role: 'system', content: systemPrompt });
+    messages.unshift({ role: "system", content: systemPrompt });
   }
 
   // Clean up stale IPC
   fs.mkdirSync(IPC_INPUT_DIR, { recursive: true });
-  try { fs.unlinkSync(IPC_INPUT_CLOSE_SENTINEL); } catch { /* ignore */ }
+  try {
+    fs.unlinkSync(IPC_INPUT_CLOSE_SENTINEL);
+  } catch {
+    /* ignore */
+  }
 
   // Build initial prompt
   let prompt = containerInput.prompt;
@@ -402,7 +465,7 @@ async function main(): Promise<void> {
   const pending = drainIpcInput();
   if (pending.length > 0) {
     log(`Draining ${pending.length} pending IPC messages into initial prompt`);
-    prompt += '\n' + pending.join('\n');
+    prompt += "\n" + pending.join("\n");
   }
 
   // Note: image attachments are referenced in the prompt as [Image: attachments/...]
@@ -413,7 +476,7 @@ async function main(): Promise<void> {
   // while the rest is still generating. Max 3 blocks, split at paragraph boundaries.
   const MAX_BLOCKS = 3;
   const FIRST_BLOCK_MIN = 300; // emit first block after ~300 chars to reduce perceived latency
-  let streamBuffer = '';
+  let streamBuffer = "";
   let firstBlockSent = false;
 
   const FIRST_BLOCK_FALLBACK = 600; // fallback to sentence break if no paragraph break by this point
@@ -422,7 +485,7 @@ async function main(): Promise<void> {
     if (firstBlockSent || streamBuffer.length < FIRST_BLOCK_MIN) return;
     // Find a clean paragraph break near or after FIRST_BLOCK_MIN
     const searchFrom = FIRST_BLOCK_MIN - 50;
-    const breakIdx = streamBuffer.indexOf('\n\n', searchFrom);
+    const breakIdx = streamBuffer.indexOf("\n\n", searchFrom);
     let cutIdx = breakIdx;
     let cutLen = 2; // length of the delimiter to skip
 
@@ -446,7 +509,12 @@ async function main(): Promise<void> {
     streamBuffer = streamBuffer.slice(cutIdx + cutLen);
     firstBlockSent = true;
     if (block) {
-      writeOutput({ status: 'success', result: block, newSessionId: sessionId, streaming: true });
+      writeOutput({
+        status: "success",
+        result: block,
+        newSessionId: sessionId,
+        streaming: true,
+      });
     }
   }
 
@@ -463,14 +531,17 @@ async function main(): Promise<void> {
     const paragraphs = trimmed.split(/\n\n+/);
     if (paragraphs.length <= maxBlocks) {
       // Few paragraphs — send each as its own block
-      return paragraphs.map(p => p.trim()).filter(Boolean);
+      return paragraphs.map((p) => p.trim()).filter(Boolean);
     }
 
     // Distribute paragraphs evenly across blocks
     const blocks: string[] = [];
     const perBlock = Math.ceil(paragraphs.length / maxBlocks);
     for (let i = 0; i < paragraphs.length; i += perBlock) {
-      const chunk = paragraphs.slice(i, i + perBlock).join('\n\n').trim();
+      const chunk = paragraphs
+        .slice(i, i + perBlock)
+        .join("\n\n")
+        .trim();
       if (chunk) blocks.push(chunk);
     }
     return blocks;
@@ -479,24 +550,37 @@ async function main(): Promise<void> {
   // Message loop
   try {
     while (true) {
-      messages.push({ role: 'user', content: prompt });
+      messages.push({ role: "user", content: prompt });
 
       // Truncate for context window
       messages = truncateMessages(messages, MAX_MESSAGES);
 
-      log(`Starting inference (session: ${sessionId}, messages: ${messages.length})...`);
+      log(
+        `Starting inference (session: ${sessionId}, messages: ${messages.length})...`,
+      );
 
       // Emit instant acknowledgment before inference (no LLM tokens spent).
       // Skip for scheduled tasks — no human is waiting for a reply.
       // streaming: true prevents the engine from calling queue.notifyIdle prematurely.
       if (!containerInput.isScheduledTask) {
-        writeOutput({ status: 'success', result: ACK_MESSAGE, newSessionId: sessionId, streaming: true });
+        writeOutput({
+          status: "success",
+          result: ACK_MESSAGE,
+          newSessionId: sessionId,
+          streaming: true,
+        });
       }
 
       // Call inference with tools (streaming text deltas via onTextChunk)
       firstBlockSent = false;
-      streamBuffer = '';
-      const result = await inferWithTools(messages, tools, executor, MAX_TOOL_ROUNDS, onTextChunk);
+      streamBuffer = "";
+      const result = await inferWithTools(
+        messages,
+        tools,
+        executor,
+        MAX_TOOL_ROUNDS,
+        onTextChunk,
+      );
 
       // Update messages with full conversation from inference
       messages = result.messages;
@@ -508,35 +592,54 @@ async function main(): Promise<void> {
       if (remaining) {
         const blocks = splitIntoBlocks(remaining, remainingSlots);
         for (const block of blocks) {
-          writeOutput({ status: 'success', result: block, newSessionId: sessionId, streaming: true });
+          writeOutput({
+            status: "success",
+            result: block,
+            newSessionId: sessionId,
+            streaming: true,
+          });
         }
         // Completion marker
-        writeOutput({ status: 'success', result: null, newSessionId: sessionId });
+        writeOutput({
+          status: "success",
+          result: null,
+          newSessionId: sessionId,
+        });
       } else if (firstBlockSent) {
         // First block was sent during streaming, no remaining text
-        writeOutput({ status: 'success', result: null, newSessionId: sessionId });
+        writeOutput({
+          status: "success",
+          result: null,
+          newSessionId: sessionId,
+        });
       } else {
         // No streaming happened (short response) — send as single message
-        writeOutput({ status: 'success', result: result.content, newSessionId: sessionId });
+        writeOutput({
+          status: "success",
+          result: result.content,
+          newSessionId: sessionId,
+        });
       }
-      streamBuffer = '';
+      streamBuffer = "";
 
       // Save session
       saveSession(sessionId, messages);
 
-      log(`Inference done. Usage: ${result.totalUsage.prompt_tokens}p/${result.totalUsage.completion_tokens}c`);
+      log(
+        `Inference done. Usage: ${result.totalUsage.prompt_tokens}p/${result.totalUsage.completion_tokens}c`,
+      );
 
       // Check for close during inference (non-blocking)
       if (shouldClose()) {
-        log('Close sentinel received after inference, exiting');
+        log("Close sentinel received after inference, exiting");
         break;
       }
 
       // Wait for next IPC message or close
-      log('Waiting for next IPC message...');
+      log("Waiting for next IPC message...");
       const nextMessage = await waitForIpcMessage();
       if (nextMessage === null) {
-        log('Close sentinel received, exiting');
+        log("Close sentinel received, exiting");
         break;
       }
 
@@ -547,7 +650,7 @@ async function main(): Promise<void> {
     const errorMessage = err instanceof Error ? err.message : String(err);
     log(`Agent error: ${errorMessage}`);
     writeOutput({
-      status: 'error',
+      status: "error",
       result: null,
       newSessionId: sessionId,
       error: errorMessage,

@@ -1,7 +1,7 @@
 /**
  * CRM Schema Definitions — Domain-specific for media ad sales
  *
- * 15 tables. All created in the same SQLite database used by the NanoClaw
+ * 18 tables. All created in the same SQLite database used by the NanoClaw
  * engine (via getDatabase() export).
  *
  * Tables:
@@ -41,6 +41,8 @@ export const CRM_TABLES = [
   "crm_documents",
   "crm_embeddings",
   "crm_vec_embeddings",
+  "crm_memories",
+  "crm_fts_embeddings",
 ] as const;
 
 export type CrmTableName = (typeof CRM_TABLES)[number];
@@ -336,5 +338,30 @@ export function createCrmSchema(db: Database.Database): void {
     CREATE VIRTUAL TABLE IF NOT EXISTS crm_vec_embeddings USING vec0(
       embedding float[1024]
     );
+
+    -- 17. CRM_MEMORIES (long-term agent memory, SQLite fallback for Hindsight)
+    CREATE TABLE IF NOT EXISTS crm_memories (
+      id TEXT PRIMARY KEY,
+      persona_id TEXT REFERENCES persona(id),
+      banco TEXT NOT NULL CHECK(banco IN ('crm-sales','crm-accounts','crm-team')),
+      contenido TEXT NOT NULL,
+      etiquetas TEXT,
+      fecha_creacion TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_crm_memories_persona ON crm_memories(persona_id);
+    CREATE INDEX IF NOT EXISTS idx_crm_memories_banco ON crm_memories(banco);
+
+    -- 18. CRM_FTS_EMBEDDINGS (FTS5 keyword search alongside vector KNN)
+    CREATE VIRTUAL TABLE IF NOT EXISTS crm_fts_embeddings USING fts5(
+      contenido,
+      content='crm_embeddings',
+      content_rowid='rowid',
+      tokenize='unicode61 remove_diacritics 2'
+    );
   `);
+
+  // Note: No FTS5 delete trigger. External content FTS5 tables corrupt when
+  // the delete command fires for rows that were never indexed (e.g. test data).
+  // Orphaned FTS5 entries are harmless — the JOIN in searchDocumentsKeyword
+  // filters them out since the source crm_embeddings row no longer exists.
 }

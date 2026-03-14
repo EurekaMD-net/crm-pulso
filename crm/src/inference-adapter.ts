@@ -9,9 +9,30 @@
  *   - Latency and token usage logging
  */
 
-import { logger as parentLogger } from './logger.js';
+import { logger as parentLogger } from "./logger.js";
+import { CircuitBreaker } from "./circuit-breaker.js";
 
-const logger = parentLogger.child({ component: 'inference' });
+const logger = parentLogger.child({ component: "inference" });
+
+// ---------------------------------------------------------------------------
+// Per-provider circuit breakers
+// ---------------------------------------------------------------------------
+
+const providerBreakers = new Map<string, CircuitBreaker>();
+
+function getBreakerForProvider(name: string): CircuitBreaker {
+  let breaker = providerBreakers.get(name);
+  if (!breaker) {
+    breaker = new CircuitBreaker({ name: `inference:${name}` });
+    providerBreakers.set(name, breaker);
+  }
+  return breaker;
+}
+
+/** @internal — exposed for testing only */
+export function _resetProviderBreakers(): void {
+  providerBreakers.clear();
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,7 +47,7 @@ export interface InferenceProvider {
 }
 
 export interface ToolDefinition {
-  type: 'function';
+  type: "function";
   function: {
     name: string;
     description: string;
@@ -36,7 +57,7 @@ export interface ToolDefinition {
 
 export interface ToolCall {
   id: string;
-  type: 'function';
+  type: "function";
   function: {
     name: string;
     arguments: string;
@@ -44,10 +65,13 @@ export interface ToolCall {
 }
 
 /** Content can be a string or multimodal array (OpenAI vision format). */
-export type ChatContent = string | null | Array<{ type: string; [key: string]: unknown }>;
+export type ChatContent =
+  | string
+  | null
+  | Array<{ type: string; [key: string]: unknown }>;
 
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
+  role: "system" | "user" | "assistant" | "tool";
   content: ChatContent;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
@@ -63,7 +87,11 @@ export interface InferenceRequest {
 export interface InferenceResponse {
   content: string | null;
   tool_calls?: ToolCall[];
-  usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
   provider: string;
   latency_ms: number;
 }
@@ -85,9 +113,9 @@ function loadProviders(): InferenceProvider[] {
 
   if (primaryUrl && primaryModel) {
     providers.push({
-      name: 'primary',
-      baseUrl: primaryUrl.replace(/\/+$/, ''),
-      apiKey: primaryKey ?? '',
+      name: "primary",
+      baseUrl: primaryUrl.replace(/\/+$/, ""),
+      apiKey: primaryKey ?? "",
       model: primaryModel,
       priority: 0,
     });
@@ -99,9 +127,9 @@ function loadProviders(): InferenceProvider[] {
 
   if (fallbackUrl && fallbackModel) {
     providers.push({
-      name: 'fallback',
-      baseUrl: fallbackUrl.replace(/\/+$/, ''),
-      apiKey: fallbackKey ?? '',
+      name: "fallback",
+      baseUrl: fallbackUrl.replace(/\/+$/, ""),
+      apiKey: fallbackKey ?? "",
       model: fallbackModel,
       priority: 1,
     });
@@ -114,8 +142,8 @@ function loadProviders(): InferenceProvider[] {
 // HTTP call to a single provider
 // ---------------------------------------------------------------------------
 
-const TIMEOUT_MS = parseInt(process.env.INFERENCE_TIMEOUT_MS ?? '30000', 10);
-const MAX_TOKENS = parseInt(process.env.INFERENCE_MAX_TOKENS ?? '2048', 10);
+const TIMEOUT_MS = parseInt(process.env.INFERENCE_TIMEOUT_MS ?? "30000", 10);
+const MAX_TOKENS = parseInt(process.env.INFERENCE_MAX_TOKENS ?? "2048", 10);
 
 interface OpenAIResponse {
   choices: Array<{
@@ -144,9 +172,11 @@ async function callProvider(
   const start = Date.now();
   const streaming = !!onTextChunk;
 
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
   if (provider.apiKey) {
-    headers['Authorization'] = `Bearer ${provider.apiKey}`;
+    headers["Authorization"] = `Bearer ${provider.apiKey}`;
   }
 
   const body: Record<string, unknown> = {
@@ -160,10 +190,10 @@ async function callProvider(
   }
   if (request.tools && request.tools.length > 0) {
     body.tools = request.tools;
-    body.tool_choice = 'auto';
+    body.tool_choice = "auto";
   }
   // Disable reasoning/thinking mode for faster responses (Qwen 3.5+ only)
-  if (provider.model.startsWith('qwen3')) {
+  if (provider.model.startsWith("qwen3")) {
     body.enable_thinking = false;
   }
 
@@ -172,14 +202,14 @@ async function callProvider(
 
   try {
     const response = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       headers,
       body: JSON.stringify(body),
       signal: controller.signal,
     });
 
     if (!response.ok) {
-      const text = await response.text().catch(() => '');
+      const text = await response.text().catch(() => "");
       throw new Error(`HTTP ${response.status}: ${text.slice(0, 200)}`);
     }
 
@@ -187,28 +217,40 @@ async function callProvider(
 
     if (streaming && response.body) {
       // Parse SSE stream, emit text deltas, accumulate full response
-      result = await parseSSEStream(response.body, provider, start, onTextChunk);
+      result = await parseSSEStream(
+        response.body,
+        provider,
+        start,
+        onTextChunk,
+      );
     } else {
       const data = (await response.json()) as OpenAIResponse;
       const choice = data.choices?.[0];
-      if (!choice) throw new Error('Empty response: no choices returned');
+      if (!choice) throw new Error("Empty response: no choices returned");
       result = {
         content: choice.message.content,
         tool_calls: choice.message.tool_calls,
-        usage: data.usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        usage: data.usage ?? {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+        },
         provider: provider.name,
         latency_ms: Date.now() - start,
       };
     }
 
-    logger.info({
-      provider: provider.name,
-      model: provider.model,
-      latency_ms: result.latency_ms,
-      prompt_tokens: result.usage.prompt_tokens,
-      completion_tokens: result.usage.completion_tokens,
-      tool_calls: result.tool_calls?.length ?? 0,
-    }, 'inference request completed');
+    logger.info(
+      {
+        provider: provider.name,
+        model: provider.model,
+        latency_ms: result.latency_ms,
+        prompt_tokens: result.usage.prompt_tokens,
+        completion_tokens: result.usage.completion_tokens,
+        tool_calls: result.tool_calls?.length ?? 0,
+      },
+      "inference request completed",
+    );
 
     return result;
   } finally {
@@ -224,8 +266,8 @@ async function parseSSEStream(
   onTextChunk: OnTextChunk,
 ): Promise<InferenceResponse> {
   const decoder = new TextDecoder();
-  let buffer = '';
-  let content = '';
+  let buffer = "";
+  let content = "";
   const toolCalls: Map<number, ToolCall> = new Map();
   let usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
 
@@ -238,14 +280,14 @@ async function parseSSEStream(
 
       // Process complete SSE events
       let newlineIdx: number;
-      while ((newlineIdx = buffer.indexOf('\n\n')) !== -1) {
+      while ((newlineIdx = buffer.indexOf("\n\n")) !== -1) {
         const event = buffer.slice(0, newlineIdx);
         buffer = buffer.slice(newlineIdx + 2);
 
-        for (const line of event.split('\n')) {
-          if (!line.startsWith('data: ')) continue;
+        for (const line of event.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
           const data = line.slice(6);
-          if (data === '[DONE]') continue;
+          if (data === "[DONE]") continue;
 
           try {
             const chunk = JSON.parse(data);
@@ -265,21 +307,28 @@ async function parseSSEStream(
                 const existing = toolCalls.get(idx);
                 if (!existing) {
                   toolCalls.set(idx, {
-                    id: tc.id ?? '',
-                    type: 'function',
-                    function: { name: tc.function?.name ?? '', arguments: tc.function?.arguments ?? '' },
+                    id: tc.id ?? "",
+                    type: "function",
+                    function: {
+                      name: tc.function?.name ?? "",
+                      arguments: tc.function?.arguments ?? "",
+                    },
                   });
                 } else {
                   if (tc.id) existing.id = tc.id;
-                  if (tc.function?.name) existing.function.name += tc.function.name;
-                  if (tc.function?.arguments) existing.function.arguments += tc.function.arguments;
+                  if (tc.function?.name)
+                    existing.function.name += tc.function.name;
+                  if (tc.function?.arguments)
+                    existing.function.arguments += tc.function.arguments;
                 }
               }
             }
 
             // Capture usage from final chunk
             if (chunk.usage) usage = chunk.usage;
-          } catch { /* skip malformed chunks */ }
+          } catch {
+            /* skip malformed chunks */
+          }
         }
       }
     }
@@ -287,9 +336,8 @@ async function parseSSEStream(
     reader.releaseLock();
   }
 
-  const assembledToolCalls = toolCalls.size > 0
-    ? Array.from(toolCalls.values())
-    : undefined;
+  const assembledToolCalls =
+    toolCalls.size > 0 ? Array.from(toolCalls.values()) : undefined;
 
   return {
     content: content || null,
@@ -315,32 +363,61 @@ export async function infer(
 ): Promise<InferenceResponse> {
   const providers = loadProviders();
   if (providers.length === 0) {
-    throw new Error('No inference providers configured. Set INFERENCE_PRIMARY_URL and INFERENCE_PRIMARY_MODEL.');
+    throw new Error(
+      "No inference providers configured. Set INFERENCE_PRIMARY_URL and INFERENCE_PRIMARY_MODEL.",
+    );
   }
 
   let lastError: Error | undefined;
 
   for (const provider of providers) {
+    const breaker = getBreakerForProvider(provider.name);
+
+    // Skip provider entirely if circuit is open
+    if (breaker.isOpen()) {
+      logger.warn(
+        { provider: provider.name },
+        "circuit open, skipping provider",
+      );
+      continue;
+    }
+
+    let providerSucceeded = false;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        return await callProvider(provider, request, onTextChunk);
+        const result = await callProvider(provider, request, onTextChunk);
+        breaker.recordSuccess();
+        providerSucceeded = true;
+        return result;
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
         const statusMatch = lastError.message.match(/HTTP (\d+)/);
         const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
         if (status === 429 || (status >= 500 && status < 600)) {
           const delay = Math.min(1000 * Math.pow(2, attempt), 8000);
-          logger.warn({ provider: provider.name, attempt, status, delay }, 'retryable error, backing off');
-          await new Promise(r => setTimeout(r, delay));
+          logger.warn(
+            { provider: provider.name, attempt, status, delay },
+            "retryable error, backing off",
+          );
+          await new Promise((r) => setTimeout(r, delay));
           continue;
         }
         break; // non-retryable error, try next provider
       }
     }
-    logger.warn({ provider: provider.name, error: lastError?.message }, 'provider failed, trying next');
+
+    if (!providerSucceeded) {
+      breaker.recordFailure(lastError);
+      logger.warn(
+        { provider: provider.name, error: lastError?.message },
+        "provider failed, trying next",
+      );
+    }
   }
 
-  throw new Error(`All inference providers failed. Last error: ${lastError?.message}`);
+  throw new Error(
+    `All inference providers failed. Last error: ${lastError?.message}`,
+  );
 }
 
 /**
@@ -362,7 +439,11 @@ export async function inferWithTools(
   executor: ToolExecutor,
   maxRounds = 10,
   onTextChunk?: OnTextChunk,
-): Promise<{ content: string; messages: ChatMessage[]; totalUsage: { prompt_tokens: number; completion_tokens: number } }> {
+): Promise<{
+  content: string;
+  messages: ChatMessage[];
+  totalUsage: { prompt_tokens: number; completion_tokens: number };
+}> {
   const conversation = [...messages];
   let totalPrompt = 0;
   let totalCompletion = 0;
@@ -370,24 +451,30 @@ export async function inferWithTools(
   for (let round = 0; round < maxRounds; round++) {
     // Stream text on every call — Qwen returns content: null with tool_calls,
     // so text chunks only arrive on the final (non-tool) response.
-    const response = await infer({ messages: conversation, tools }, onTextChunk);
+    const response = await infer(
+      { messages: conversation, tools },
+      onTextChunk,
+    );
     totalPrompt += response.usage.prompt_tokens;
     totalCompletion += response.usage.completion_tokens;
 
     // No tool calls — final text response
     if (!response.tool_calls || response.tool_calls.length === 0) {
-      const content = response.content ?? '';
-      conversation.push({ role: 'assistant', content });
+      const content = response.content ?? "";
+      conversation.push({ role: "assistant", content });
       return {
         content,
         messages: conversation,
-        totalUsage: { prompt_tokens: totalPrompt, completion_tokens: totalCompletion },
+        totalUsage: {
+          prompt_tokens: totalPrompt,
+          completion_tokens: totalCompletion,
+        },
       };
     }
 
     // Append assistant message with tool calls
     conversation.push({
-      role: 'assistant',
+      role: "assistant",
       content: response.content,
       tool_calls: response.tool_calls,
     });
@@ -402,8 +489,14 @@ export async function inferWithTools(
           const opens = (rawArgs.match(/[{[]/g) || []).length;
           const closes = (rawArgs.match(/[}\]]/g) || []).length;
           if (opens > closes) {
-            result = JSON.stringify({ error: 'Tool call truncated (max_tokens hit). Try a simpler query.' });
-            logger.warn({ tool: toolCall.function.name, argsLen: rawArgs.length }, 'tool call JSON truncated');
+            result = JSON.stringify({
+              error:
+                "Tool call truncated (max_tokens hit). Try a simpler query.",
+            });
+            logger.warn(
+              { tool: toolCall.function.name, argsLen: rawArgs.length },
+              "tool call JSON truncated",
+            );
           } else {
             const args = JSON.parse(rawArgs) as Record<string, unknown>;
             result = await executor(toolCall.function.name, args);
@@ -411,19 +504,34 @@ export async function inferWithTools(
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           result = JSON.stringify({ error: message });
-          logger.error({ tool: toolCall.function.name, error: message }, 'tool execution failed');
+          logger.error(
+            { tool: toolCall.function.name, error: message },
+            "tool execution failed",
+          );
         }
-        return { role: 'tool' as const, content: result, tool_call_id: toolCall.id };
+        return {
+          role: "tool" as const,
+          content: result,
+          tool_call_id: toolCall.id,
+        };
       }),
     );
     conversation.push(...toolResults);
   }
 
   // Safety: hit max rounds — return last content or empty
-  const lastAssistant = [...conversation].reverse().find(m => m.role === 'assistant');
+  const lastAssistant = [...conversation]
+    .reverse()
+    .find((m) => m.role === "assistant");
   return {
-    content: (typeof lastAssistant?.content === 'string' ? lastAssistant.content : null) ?? '[max tool rounds reached]',
+    content:
+      (typeof lastAssistant?.content === "string"
+        ? lastAssistant.content
+        : null) ?? "[max tool rounds reached]",
     messages: conversation,
-    totalUsage: { prompt_tokens: totalPrompt, completion_tokens: totalCompletion },
+    totalUsage: {
+      prompt_tokens: totalPrompt,
+      completion_tokens: totalCompletion,
+    },
   };
 }

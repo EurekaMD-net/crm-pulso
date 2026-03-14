@@ -49,6 +49,12 @@ usage() {
   echo -e "  ${GREEN}set-persona${NC} ID Set persona for 'main' group folder"
   echo -e "  ${GREEN}install${NC}        Install systemd service (first time)"
   echo ""
+  echo -e "  ${CYAN}Hindsight (long-term memory)${NC}"
+  echo -e "  ${GREEN}hindsight-start${NC}  Start Hindsight memory server"
+  echo -e "  ${GREEN}hindsight-stop${NC}   Stop Hindsight memory server"
+  echo -e "  ${GREEN}hindsight-status${NC} Show Hindsight status + health"
+  echo -e "  ${GREEN}hindsight-logs${NC} [N] Show Hindsight logs"
+  echo ""
 }
 
 cmd_install() {
@@ -242,6 +248,73 @@ cmd_set_persona() {
   echo -e "${YELLOW}Sessions cleared and container killed. New persona takes effect on next message.${NC}"
 }
 
+# --- Hindsight (long-term memory sidecar) ---
+
+HINDSIGHT_CONTAINER="crm-hindsight"
+HINDSIGHT_IMAGE="ghcr.io/vectorize-io/hindsight:latest"
+HINDSIGHT_DATA_DIR="${PROJECT_DIR}/data/hindsight"
+
+cmd_hindsight_start() {
+  if docker ps --format '{{.Names}}' | grep -q "^${HINDSIGHT_CONTAINER}$"; then
+    echo -e "${YELLOW}Hindsight already running.${NC}"
+    cmd_hindsight_status
+    return
+  fi
+
+  # Remove stopped container if exists
+  docker rm "$HINDSIGHT_CONTAINER" 2>/dev/null || true
+
+  # Read LLM config from .env
+  local llm_key llm_model llm_base_url
+  llm_key=$(grep '^HINDSIGHT_LLM_API_KEY=' "${PROJECT_DIR}/.env" 2>/dev/null | cut -d'=' -f2- || true)
+  [ -z "$llm_key" ] && llm_key=$(grep '^INFERENCE_PRIMARY_KEY=' "${PROJECT_DIR}/.env" 2>/dev/null | cut -d'=' -f2- || true)
+  llm_model=$(grep '^HINDSIGHT_LLM_MODEL=' "${PROJECT_DIR}/.env" 2>/dev/null | cut -d'=' -f2- || true)
+  [ -z "$llm_model" ] && llm_model=$(grep '^INFERENCE_PRIMARY_MODEL=' "${PROJECT_DIR}/.env" 2>/dev/null | cut -d'=' -f2- || true)
+  llm_base_url=$(grep '^HINDSIGHT_LLM_BASE_URL=' "${PROJECT_DIR}/.env" 2>/dev/null | cut -d'=' -f2- || true)
+  [ -z "$llm_base_url" ] && llm_base_url=$(grep '^INFERENCE_PRIMARY_URL=' "${PROJECT_DIR}/.env" 2>/dev/null | cut -d'=' -f2- || true)
+
+  mkdir -p "$HINDSIGHT_DATA_DIR"
+
+  docker run -d \
+    --name "$HINDSIGHT_CONTAINER" \
+    --restart unless-stopped \
+    -p 8888:8888 \
+    -p 9999:9999 \
+    -v "${HINDSIGHT_DATA_DIR}:/home/hindsight/.pg0" \
+    -e "HINDSIGHT_API_LLM_PROVIDER=openai" \
+    -e "HINDSIGHT_API_LLM_API_KEY=${llm_key}" \
+    -e "HINDSIGHT_API_LLM_MODEL=${llm_model}" \
+    -e "HINDSIGHT_API_LLM_BASE_URL=${llm_base_url}" \
+    -e "HINDSIGHT_API_MCP_ENABLED=true" \
+    --health-cmd 'curl -sf http://localhost:8888/v1/default/health || exit 1' \
+    --health-interval 30s \
+    --health-timeout 5s \
+    --health-retries 3 \
+    "$HINDSIGHT_IMAGE"
+
+  echo -e "${GREEN}Hindsight started.${NC} API: http://localhost:8888  UI: http://localhost:9999"
+}
+
+cmd_hindsight_stop() {
+  docker stop "$HINDSIGHT_CONTAINER" 2>/dev/null && docker rm "$HINDSIGHT_CONTAINER" 2>/dev/null
+  echo -e "${GREEN}Hindsight stopped.${NC}"
+}
+
+cmd_hindsight_status() {
+  docker ps --filter "name=$HINDSIGHT_CONTAINER" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+  echo ""
+  if curl -sf http://localhost:8888/v1/default/health 2>/dev/null; then
+    echo -e "${GREEN}API healthy${NC}"
+  else
+    echo -e "${RED}API unreachable${NC}"
+  fi
+}
+
+cmd_hindsight_logs() {
+  local n="${1:-$LOG_LINES}"
+  docker logs --tail "$n" "$HINDSIGHT_CONTAINER" 2>&1
+}
+
 # --- Main ---
 if [ $# -eq 0 ]; then
   usage
@@ -264,5 +337,9 @@ case "$1" in
   personas)       cmd_personas ;;
   groups)         cmd_groups ;;
   set-persona)    shift; cmd_set_persona "$@" ;;
+  hindsight-start)   cmd_hindsight_start ;;
+  hindsight-stop)    cmd_hindsight_stop ;;
+  hindsight-status)  cmd_hindsight_status ;;
+  hindsight-logs)    shift; cmd_hindsight_logs "$@" ;;
   *)              echo -e "${RED}Unknown command: $1${NC}"; usage; exit 1 ;;
 esac

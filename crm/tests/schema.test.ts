@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 
 describe("CRM Schema — tables", () => {
-  it("creates all 16 CRM tables", () => {
+  it("creates all 18 CRM tables", () => {
     const tables = db
       .prepare(
         `SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`,

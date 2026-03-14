@@ -5,10 +5,11 @@
  * Creates CRM schema tables in the shared SQLite database.
  */
 
-import { getDatabase } from './db.js';
-import { logger } from './logger.js';
-import { createCrmSchema, CRM_TABLES } from './schema.js';
-import { initShortLinks } from './dashboard/auth.js';
+import { getDatabase } from "./db.js";
+import { logger } from "./logger.js";
+import { createCrmSchema, CRM_TABLES } from "./schema.js";
+import { initShortLinks } from "./dashboard/auth.js";
+import { initMemoryService } from "./memory/index.js";
 
 export function bootstrapCrm(): void {
   const db = getDatabase();
@@ -18,9 +19,18 @@ export function bootstrapCrm(): void {
     createCrmSchema(db);
     initShortLinks(getDatabase);
 
-    logger.info({ tables: CRM_TABLES.length }, 'CRM schema initialized');
+    logger.info({ tables: CRM_TABLES.length }, "CRM schema initialized");
+
+    // Fire-and-forget: memory service init is async (Hindsight health check).
+    // getMemoryService() returns SQLite fallback until this resolves.
+    initMemoryService().catch((err) => {
+      logger.warn(
+        { err },
+        "Memory service init failed — using SQLite fallback",
+      );
+    });
   } catch (err) {
-    logger.error({ err }, 'CRM bootstrap failed');
+    logger.error({ err }, "CRM bootstrap failed");
     throw err;
   }
 }

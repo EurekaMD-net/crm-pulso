@@ -5,9 +5,17 @@
  * deterministic trigram hash when the API is unavailable.
  */
 
-import { logger as parentLogger } from './logger.js';
+import { logger as parentLogger } from "./logger.js";
+import { CircuitBreaker } from "./circuit-breaker.js";
 
-const logger = parentLogger.child({ component: 'embedding' });
+const logger = parentLogger.child({ component: "embedding" });
+
+const embeddingBreaker = new CircuitBreaker({ name: "embedding" });
+
+/** @internal — exposed for testing only */
+export function _resetEmbeddingBreaker(): void {
+  embeddingBreaker.reset();
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -33,12 +41,11 @@ function getEndpoint(): EmbeddingEndpoint | null {
   if (!key) return null;
 
   const baseUrl =
-    process.env.EMBEDDING_URL ||
-    process.env.INFERENCE_PRIMARY_URL;
+    process.env.EMBEDDING_URL || process.env.INFERENCE_PRIMARY_URL;
   if (!baseUrl) return null;
 
-  const model = process.env.EMBEDDING_MODEL || 'text-embedding-v3';
-  return { url: `${baseUrl.replace(/\/+$/, '')}/embeddings`, key, model };
+  const model = process.env.EMBEDDING_MODEL || "text-embedding-v3";
+  return { url: `${baseUrl.replace(/\/+$/, "")}/embeddings`, key, model };
 }
 
 // ---------------------------------------------------------------------------
@@ -60,9 +67,9 @@ async function callEmbeddingApi(
 
   try {
     const res = await fetch(endpoint.url, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         Authorization: `Bearer ${endpoint.key}`,
       },
       body,
@@ -70,7 +77,7 @@ async function callEmbeddingApi(
     });
 
     if (!res.ok) {
-      const errText = await res.text().catch(() => '');
+      const errText = await res.text().catch(() => "");
       throw new Error(`Embedding API ${res.status}: ${errText.slice(0, 200)}`);
     }
 
@@ -104,7 +111,13 @@ export async function embedText(text: string): Promise<Float32Array> {
 export async function embedBatch(texts: string[]): Promise<Float32Array[]> {
   const endpoint = getEndpoint();
   if (!endpoint) {
-    logger.warn('No embedding API configured — using local fallback');
+    logger.warn("No embedding API configured — using local fallback");
+    return texts.map((t) => embedTextLocal(t));
+  }
+
+  // Skip all batches to local fallback if circuit is open
+  if (embeddingBreaker.isOpen()) {
+    logger.warn("Embedding circuit open — using local fallback for all");
     return texts.map((t) => embedTextLocal(t));
   }
 
@@ -117,10 +130,26 @@ export async function embedBatch(texts: string[]): Promise<Float32Array[]> {
       for (let j = 0; j < embeddings.length; j++) {
         results[i + j] = embeddings[j];
       }
+      embeddingBreaker.recordSuccess();
     } catch (err) {
-      logger.warn({ err, batchStart: i, batchSize: batch.length }, 'Embedding API failed — falling back to local');
+      embeddingBreaker.recordFailure(err);
+      logger.warn(
+        { err, batchStart: i, batchSize: batch.length },
+        "Embedding API failed — falling back to local",
+      );
       for (let j = 0; j < batch.length; j++) {
         results[i + j] = embedTextLocal(batch[j]);
+      }
+
+      // If breaker just opened, fast-forward remaining batches to local
+      if (embeddingBreaker.isOpen()) {
+        logger.warn(
+          "Embedding circuit opened mid-batch — remaining batches use local",
+        );
+        for (let k = i + EMBEDDING_BATCH_SIZE; k < texts.length; k++) {
+          results[k] = embedTextLocal(texts[k]);
+        }
+        break;
       }
     }
   }
@@ -144,9 +173,12 @@ function simpleHash(str: string): number {
  * Deterministic trigram-based embedding. Not semantic — used only as a
  * fallback when the embedding API is unavailable.
  */
-export function embedTextLocal(text: string, dims = EMBEDDING_DIMS): Float32Array {
+export function embedTextLocal(
+  text: string,
+  dims = EMBEDDING_DIMS,
+): Float32Array {
   const vec = new Float32Array(dims);
-  const normalized = text.toLowerCase().replace(/[^\w\s]/g, '');
+  const normalized = text.toLowerCase().replace(/[^\w\s]/g, "");
   const words = normalized.split(/\s+/).filter((w) => w.length > 1);
 
   for (const word of words) {

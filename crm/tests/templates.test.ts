@@ -94,9 +94,9 @@ const allTemplateNames = [
 
 describe("global.md -- schema coverage", () => {
   it("references all user-facing CRM table names", () => {
-    // crm_vec_embeddings is an internal sqlite-vec index, not queried by agents
+    // Internal index tables not queried by agents directly
     const agentFacingTables = CRM_TABLES.filter(
-      (t) => t !== "crm_vec_embeddings",
+      (t) => t !== "crm_vec_embeddings" && t !== "crm_fts_embeddings",
     );
     for (const table of agentFacingTables) {
       expect(globalMd, `Missing table: ${table}`).toContain(table);
@@ -213,8 +213,8 @@ describe("global.md -- tool coverage", () => {
     }
   }
 
-  it("references all 34 tool names", () => {
-    expect(allToolNames.size).toBe(34);
+  it("references all 37 tool names", () => {
+    expect(allToolNames.size).toBe(37);
     for (const name of allToolNames) {
       expect(globalMd, `Missing tool: ${name}`).toContain(name);
     }
@@ -228,7 +228,7 @@ describe("global.md -- tool coverage", () => {
 describe("ae.md -- tool references", () => {
   const aeTools = getToolsForRole("ae").map((t) => t.function.name);
 
-  it("references all 31 AE tools", () => {
+  it("references all 33 AE tools", () => {
     for (const name of aeTools) {
       expect(aeMd, `Missing AE tool: ${name}`).toContain(name);
     }
@@ -242,7 +242,7 @@ describe("ae.md -- tool references", () => {
 describe("manager.md -- tool references", () => {
   const gerenteTools = getToolsForRole("gerente").map((t) => t.function.name);
 
-  it("references all 24 gerente tools", () => {
+  it("references all 27 gerente tools", () => {
     for (const name of gerenteTools) {
       expect(managerMd, `Missing gerente tool: ${name}`).toContain(name);
     }
@@ -270,7 +270,7 @@ describe("manager.md -- tool references", () => {
 describe("director.md -- tool references", () => {
   const directorTools = getToolsForRole("director").map((t) => t.function.name);
 
-  it("references all 23 director tools", () => {
+  it("references all 26 director tools", () => {
     for (const name of directorTools) {
       expect(directorMd, `Missing director tool: ${name}`).toContain(name);
     }
@@ -284,7 +284,7 @@ describe("director.md -- tool references", () => {
 describe("vp.md -- tool references", () => {
   const vpTools = getToolsForRole("vp").map((t) => t.function.name);
 
-  it("references all 22 VP tools", () => {
+  it("references all 24 VP tools", () => {
     for (const name of vpTools) {
       expect(vpMd, `Missing VP tool: ${name}`).toContain(name);
     }

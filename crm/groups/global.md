@@ -52,10 +52,15 @@ Formato WhatsApp:
 ### Eventos Comerciales
 *crm_events*: id, nombre, tipo (tentpole|deportivo|estacional|industria), fecha_inicio, fecha_fin, inventario_total (JSON), inventario_vendido (JSON), meta_ingresos, ingresos_actual, prioridad (alta|media|baja), notas
 
+### Memoria
+*crm_memories*: id, persona_id, banco, contenido, etiquetas, fecha_creacion
+
 ### RAG (Documentos)
 *crm_documents*: id, source (drive|email|manual), source_id, persona_id, titulo, tipo_doc, contenido_hash, chunk_count, fecha_sync, fecha_modificacion, tamano_bytes
 
 *crm_embeddings*: id, document_id (FK crm_documents CASCADE), chunk_index, contenido, embedding (BLOB)
+
+*crm_fts_embeddings*: FTS5 virtual table for keyword search (external content from crm_embeddings). Tokenizer: unicode61 remove_diacritics 2
 
 ## Enums Clave
 
@@ -140,6 +145,11 @@ No todas las herramientas estan disponibles para todos los roles.
 
 ### Dashboard
 - *generar_link_dashboard* -- Genera un enlace personalizado al dashboard web del CRM. Incluye pipeline, cuota, descarga, actividad en tiempo real. Enlace valido 30 dias.
+
+### Memoria
+- *guardar_observacion* -- Guarda una observacion o aprendizaje en la memoria persistente del agente
+- *buscar_memoria* -- Busca en la memoria persistente por texto o etiquetas
+- *reflexionar_memoria* -- Sintetiza y reflexiona sobre memorias acumuladas para generar insights
 
 ### Analisis Historico
 - *analizar_winloss* -- Analiza propuestas cerradas (ganadas/perdidas/canceladas) en un periodo configurable. Tasas de conversion, razones de perdida, desglose por tipo_oportunidad, vertical, ejecutivo o cuenta. Filtra por mega-deals.

@@ -41,6 +41,11 @@ import { ejecutar_swarm } from "./swarm.js";
 import { consultar_resumen_dia } from "./reflexion.js";
 import { consultar_sentimiento_equipo } from "./sentiment.js";
 import { generar_briefing } from "./briefing.js";
+import {
+  guardar_observacion,
+  buscar_memoria,
+  reflexionar_memoria,
+} from "./memoria.js";
 
 // ---------------------------------------------------------------------------
 // Tool context — passed to every tool handler
@@ -900,6 +905,120 @@ const TOOL_GENERAR_BRIEFING: ToolDefinition = {
   },
 };
 
+const TOOL_GUARDAR_OBSERVACION: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "guardar_observacion",
+    description:
+      "Guarda una observacion o aprendizaje en la memoria a largo plazo para futuras consultas.\n\n" +
+      "USAR CUANDO:\n" +
+      "- Descubres algo importante durante una interaccion con un cliente (preferencia, objecion recurrente, estilo de negociacion)\n" +
+      "- Una estrategia de venta funciono o fallo y quieres recordar por que\n" +
+      "- Identificas un patron de comportamiento de una cuenta o contacto\n\n" +
+      "NO USAR CUANDO:\n" +
+      "- La informacion ya queda registrada en una actividad (registrar_actividad la captura automaticamente)\n" +
+      "- Es un dato transaccional (monto, fecha) que pertenece a propuesta o contrato\n\n" +
+      "TIPS:\n" +
+      "- Se especifico y accionable: 'Coca-Cola prefiere propuestas con desglose por trimestre, no anual'\n" +
+      "- Incluye contexto: que paso, por que importa, que hacer diferente la proxima vez",
+    parameters: {
+      type: "object",
+      properties: {
+        contenido: {
+          type: "string",
+          description:
+            "La observacion o aprendizaje a guardar. Debe ser especifico, accionable y auto-contenido.",
+        },
+        banco: {
+          type: "string",
+          enum: ["ventas", "cuentas", "equipo"],
+          description:
+            "En que banco guardar. Default: ventas. 'cuentas' para inteligencia de cuentas, 'equipo' para patrones de gestion (solo gerentes+).",
+        },
+        etiquetas: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            'Etiquetas opcionales para categorizar. Ejemplos: ["objecion","precio"], ["cierre","tentpole"].',
+        },
+      },
+      required: ["contenido"],
+    },
+  },
+};
+
+const TOOL_BUSCAR_MEMORIA: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "buscar_memoria",
+    description:
+      "Busca en la memoria a largo plazo observaciones y aprendizajes pasados relevantes a una consulta.\n\n" +
+      "USAR CUANDO:\n" +
+      "- Necesitas recordar como se manejo una objecion similar en el pasado\n" +
+      "- Quieres consultar preferencias conocidas de un cliente o contacto\n" +
+      "- Buscas patrones de lo que ha funcionado en cuentas similares\n\n" +
+      "NO USAR CUANDO:\n" +
+      "- La informacion esta en el CRM (usa consultar_cuenta, consultar_actividades, etc.)\n" +
+      "- Necesitas datos en tiempo real (usa buscar_web)\n\n" +
+      "BANCOS:\n" +
+      "- 'ventas' — Patrones de venta, objeciones, cierres, preferencias de clientes\n" +
+      "- 'cuentas' — Inteligencia de cuentas, relaciones, stakeholders\n" +
+      "- 'equipo' — Patrones de rendimiento, coaching (solo gerentes+)",
+    parameters: {
+      type: "object",
+      properties: {
+        consulta: {
+          type: "string",
+          description:
+            "Consulta de busqueda en lenguaje natural. Se especifico — 'manejo objecion precio TV' funciona mejor que 'objeciones'.",
+        },
+        banco: {
+          type: "string",
+          enum: ["ventas", "cuentas", "equipo"],
+          description: "En que banco buscar. Default: ventas.",
+        },
+        limite: {
+          type: "number",
+          description: "Maximo de memorias a retornar (1-20). Default: 5.",
+        },
+      },
+      required: ["consulta"],
+    },
+  },
+};
+
+const TOOL_REFLEXIONAR_MEMORIA: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "reflexionar_memoria",
+    description:
+      "Sintetiza una reflexion a partir de memorias almacenadas sobre un tema. Retorna un resumen coherente en vez de memorias individuales.\n\n" +
+      "USAR CUANDO:\n" +
+      "- Necesitas una vision general de experiencias pasadas con un tema\n" +
+      "- Quieres entender patrones en multiples observaciones relacionadas\n" +
+      "- Necesitas contexto estrategico (ej: 'Que ha funcionado para cerrar cuentas de telecomunicaciones?')\n\n" +
+      "NO USAR CUANDO:\n" +
+      "- Necesitas memorias individuales especificas (usa buscar_memoria)\n" +
+      "- Necesitas datos cuantitativos (usa analizar_winloss o analizar_tendencias)",
+    parameters: {
+      type: "object",
+      properties: {
+        tema: {
+          type: "string",
+          description:
+            "Tema o pregunta sobre la cual reflexionar. Se especifico para mejor sintesis.",
+        },
+        banco: {
+          type: "string",
+          enum: ["ventas", "cuentas", "equipo"],
+          description: "En que banco reflexionar. Default: ventas.",
+        },
+      },
+      required: ["tema"],
+    },
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Role-based tool sets
 // ---------------------------------------------------------------------------
@@ -936,6 +1055,8 @@ const AE_TOOLS: ToolDefinition[] = [
   TOOL_GENERAR_LINK_DASHBOARD,
   TOOL_CONSULTAR_RESUMEN_DIA,
   TOOL_GENERAR_BRIEFING,
+  TOOL_GUARDAR_OBSERVACION,
+  TOOL_BUSCAR_MEMORIA,
 ];
 
 const GERENTE_TOOLS: ToolDefinition[] = [
@@ -963,6 +1084,9 @@ const GERENTE_TOOLS: ToolDefinition[] = [
   TOOL_EJECUTAR_SWARM,
   TOOL_CONSULTAR_SENTIMIENTO_EQUIPO,
   TOOL_GENERAR_BRIEFING,
+  TOOL_GUARDAR_OBSERVACION,
+  TOOL_BUSCAR_MEMORIA,
+  TOOL_REFLEXIONAR_MEMORIA,
 ];
 
 const DIRECTOR_TOOLS: ToolDefinition[] = [
@@ -989,6 +1113,9 @@ const DIRECTOR_TOOLS: ToolDefinition[] = [
   TOOL_EJECUTAR_SWARM,
   TOOL_CONSULTAR_SENTIMIENTO_EQUIPO,
   TOOL_GENERAR_BRIEFING,
+  TOOL_GUARDAR_OBSERVACION,
+  TOOL_BUSCAR_MEMORIA,
+  TOOL_REFLEXIONAR_MEMORIA,
 ];
 
 const VP_TOOLS: ToolDefinition[] = [
@@ -1014,6 +1141,8 @@ const VP_TOOLS: ToolDefinition[] = [
   TOOL_EJECUTAR_SWARM,
   TOOL_CONSULTAR_SENTIMIENTO_EQUIPO,
   TOOL_GENERAR_BRIEFING,
+  TOOL_BUSCAR_MEMORIA,
+  TOOL_REFLEXIONAR_MEMORIA,
 ];
 
 export function getToolsForRole(
@@ -1070,6 +1199,9 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   consultar_resumen_dia,
   consultar_sentimiento_equipo,
   generar_briefing,
+  guardar_observacion,
+  buscar_memoria,
+  reflexionar_memoria,
 };
 
 export async function executeTool(
