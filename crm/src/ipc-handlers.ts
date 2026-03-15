@@ -7,42 +7,72 @@
  * Tables referenced: actividad, propuesta, cuenta, persona
  */
 
-import { getDatabase } from './db.js';
-import { getPersonByGroupFolder, hasAccessTo } from './hierarchy.js';
-import { evaluateAlerts, logAlerts } from './alerts.js';
-import { logger } from './logger.js';
-import type { IpcDeps } from '../../engine/src/ipc.js';
+import { getDatabase } from "./db.js";
+import { getPersonByGroupFolder, hasAccessTo } from "./hierarchy.js";
+import { evaluateAlerts, logAlerts } from "./alerts.js";
+import { logger } from "./logger.js";
+import type { IpcDeps } from "../../engine/src/ipc.js";
 
 // --- Input validation helpers ---
 
 const VALID_ACTIVIDAD_TIPOS = new Set([
-  'llamada', 'whatsapp', 'comida', 'email', 'reunion', 'visita', 'envio_propuesta', 'otro',
+  "llamada",
+  "whatsapp",
+  "comida",
+  "email",
+  "reunion",
+  "visita",
+  "envio_propuesta",
+  "otro",
 ]);
-const VALID_SENTIMIENTOS = new Set(['positivo', 'neutral', 'negativo', 'urgente']);
+const VALID_SENTIMIENTOS = new Set([
+  "positivo",
+  "neutral",
+  "negativo",
+  "urgente",
+]);
 const VALID_ETAPAS = new Set([
-  'en_preparacion', 'enviada', 'en_discusion', 'en_negociacion',
-  'confirmada_verbal', 'orden_recibida', 'en_ejecucion',
-  'completada', 'perdida', 'cancelada',
+  "en_preparacion",
+  "enviada",
+  "en_discusion",
+  "en_negociacion",
+  "confirmada_verbal",
+  "orden_recibida",
+  "en_ejecucion",
+  "completada",
+  "perdida",
+  "cancelada",
 ]);
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T[\d:.Z+-]+)?$/;
 
-function validateEnum(value: unknown, allowed: Set<string>, fallback: string): string {
-  return typeof value === 'string' && allowed.has(value) ? value : fallback;
+function validateEnum(
+  value: unknown,
+  allowed: Set<string>,
+  fallback: string,
+): string {
+  return typeof value === "string" && allowed.has(value) ? value : fallback;
 }
 
 function validateDate(value: unknown): string | null {
-  return typeof value === 'string' && ISO_DATE_RE.test(value) ? value : null;
+  return typeof value === "string" && ISO_DATE_RE.test(value) ? value : null;
 }
 
-function validateNumber(value: unknown, min: number, max = Infinity): number | null {
+function validateNumber(
+  value: unknown,
+  min: number,
+  max = Infinity,
+): number | null {
   const n = Number(value);
   return Number.isFinite(n) && n >= min && n <= max ? n : null;
 }
 
 const MAX_TEXT_LENGTH = 10_000;
 
-function asString(value: unknown, maxLength = MAX_TEXT_LENGTH): string | undefined {
-  if (typeof value !== 'string') return undefined;
+function asString(
+  value: unknown,
+  maxLength = MAX_TEXT_LENGTH,
+): string | undefined {
+  if (typeof value !== "string") return undefined;
   return value.length > maxLength ? value.slice(0, maxLength) : value;
 }
 
@@ -66,9 +96,7 @@ function buildStatements() {
       UPDATE propuesta SET fecha_ultima_actividad = ?, dias_sin_actividad = 0
       WHERE id = ?
     `),
-    getPropuestaAe: db.prepare(
-      'SELECT ae_id FROM propuesta WHERE id = ?',
-    ),
+    getPropuestaAe: db.prepare("SELECT ae_id FROM propuesta WHERE id = ?"),
     updatePropuesta: db.prepare(`
       UPDATE propuesta SET
         etapa = COALESCE(?, etapa),
@@ -90,14 +118,21 @@ export function _resetStatementCache(): void {
   _stmts = null;
 }
 
-function handleIpcError(err: unknown, sourceGroup: string, type: unknown): true {
+function handleIpcError(
+  err: unknown,
+  sourceGroup: string,
+  type: unknown,
+): true {
   const code = (err as any)?.code;
-  if (code === 'SQLITE_BUSY' || code === 'SQLITE_LOCKED') {
-    logger.error({ err, sourceGroup, type }, 'CRM IPC transient DB error (message lost)');
-  } else if (typeof code === 'string' && code.startsWith('SQLITE_CONSTRAINT')) {
-    logger.warn({ err, sourceGroup, type }, 'CRM IPC constraint violation');
+  if (code === "SQLITE_BUSY" || code === "SQLITE_LOCKED") {
+    logger.error(
+      { err, sourceGroup, type },
+      "CRM IPC transient DB error (message lost)",
+    );
+  } else if (typeof code === "string" && code.startsWith("SQLITE_CONSTRAINT")) {
+    logger.warn({ err, sourceGroup, type }, "CRM IPC constraint violation");
   } else {
-    logger.error({ err, sourceGroup, type }, 'CRM IPC handler error');
+    logger.error({ err, sourceGroup, type }, "CRM IPC handler error");
   }
   return true;
 }
@@ -111,36 +146,36 @@ export async function processCrmIpc(
   const db = getDatabase();
 
   switch (data.type) {
-    case 'crm_evaluate_alerts': {
+    case "crm_evaluate_alerts": {
       try {
         const alerts = evaluateAlerts();
         if (alerts.length === 0) {
-          logger.info('Alert evaluation: no new alerts');
+          logger.info("Alert evaluation: no new alerts");
           return true;
         }
 
         const groups = deps.registeredGroups();
         for (const alert of alerts) {
           const jid = Object.keys(groups).find(
-            k => groups[k].folder === alert.grupo_destino_folder,
+            (k) => groups[k].folder === alert.grupo_destino_folder,
           );
           if (jid) {
             await deps.sendMessage(jid, alert.mensaje);
           }
         }
         logAlerts(alerts);
-        logger.info({ count: alerts.length }, 'Alerts evaluated and sent');
+        logger.info({ count: alerts.length }, "Alerts evaluated and sent");
         return true;
       } catch (err) {
         return handleIpcError(err, sourceGroup, data.type);
       }
     }
 
-    case 'crm_registrar_actividad': {
+    case "crm_registrar_actividad": {
       try {
         const person = getPersonByGroupFolder(sourceGroup);
         if (!person) {
-          logger.warn({ sourceGroup }, 'Unknown persona for group');
+          logger.warn({ sourceGroup }, "Unknown persona for group");
           return true;
         }
 
@@ -154,9 +189,9 @@ export async function processCrmIpc(
           asString(data.cuenta_id) ?? null,
           propuestaId,
           asString(data.contrato_id) ?? null,
-          validateEnum(data.tipo, VALID_ACTIVIDAD_TIPOS, 'otro'),
-          asString(data.resumen) ?? '',
-          validateEnum(data.sentimiento, VALID_SENTIMIENTOS, 'neutral'),
+          validateEnum(data.tipo, VALID_ACTIVIDAD_TIPOS, "otro"),
+          asString(data.resumen) ?? "",
+          validateEnum(data.sentimiento, VALID_SENTIMIENTOS, "neutral"),
           asString(data.siguiente_accion) ?? null,
           validateDate(data.fecha_siguiente_accion),
           now,
@@ -167,11 +202,11 @@ export async function processCrmIpc(
           stmts().updatePropuestaActividad.run(now, propuestaId);
         }
 
-        logger.info({ id, persona: person.nombre }, 'Actividad registered');
+        logger.info({ id, persona: person.nombre }, "Actividad registered");
 
         // Non-blocking escalation check
         try {
-          const { evaluateEscalation } = await import('./escalation.js');
+          const { evaluateEscalation } = await import("./escalation.js");
           await evaluateEscalation(person.id, deps);
         } catch {
           // Never let escalation failure break activity registration
@@ -183,47 +218,71 @@ export async function processCrmIpc(
       }
     }
 
-    case 'crm_actualizar_propuesta': {
+    case "crm_actualizar_propuesta": {
       try {
         const person = getPersonByGroupFolder(sourceGroup);
         if (!person) {
-          logger.warn({ sourceGroup }, 'Unknown persona for group');
+          logger.warn({ sourceGroup }, "Unknown persona for group");
           return true;
         }
 
         const propuestaId = asString(data.propuesta_id);
         if (!propuestaId) {
-          logger.warn({ sourceGroup }, 'Missing propuesta_id in crm_actualizar_propuesta');
+          logger.warn(
+            { sourceGroup },
+            "Missing propuesta_id in crm_actualizar_propuesta",
+          );
           return true;
         }
 
-        const prop = stmts().getPropuestaAe.get(propuestaId) as { ae_id: string } | undefined;
+        const prop = stmts().getPropuestaAe.get(propuestaId) as
+          | { ae_id: string }
+          | undefined;
         if (!prop) {
-          logger.warn({ propuestaId, sourceGroup }, 'Propuesta not found');
+          logger.warn({ propuestaId, sourceGroup }, "Propuesta not found");
           return true;
         }
         if (!hasAccessTo(person, prop.ae_id)) {
-          logger.warn({ sourceGroup, propuestaId }, 'Access denied: cannot update propuesta');
+          logger.warn(
+            { sourceGroup, propuestaId },
+            "Access denied: cannot update propuesta",
+          );
           return true;
         }
 
-        const etapa = typeof data.etapa === 'string' && VALID_ETAPAS.has(data.etapa) ? data.etapa : null;
+        const etapa =
+          typeof data.etapa === "string" && VALID_ETAPAS.has(data.etapa)
+            ? data.etapa
+            : null;
         const valor = validateNumber(data.valor_estimado, 0);
         const notas = asString(data.notas);
         const razon = asString(data.razon_perdida);
         const now = new Date().toISOString();
 
-        if (etapa === null && valor === null && notas === undefined && razon === undefined) {
+        if (
+          etapa === null &&
+          valor === null &&
+          notas === undefined &&
+          razon === undefined
+        ) {
           return true;
         }
 
         const updateFn = db.transaction(() => {
           stmts().updatePropuesta.run(
-            etapa, valor, notas ?? null, razon ?? null, now, propuestaId,
+            etapa,
+            valor,
+            notas ?? null,
+            razon ?? null,
+            now,
+            propuestaId,
           );
         });
         updateFn();
-        logger.info({ propuestaId, persona: person.nombre }, 'Propuesta updated');
+        logger.info(
+          { propuestaId, persona: person.nombre },
+          "Propuesta updated",
+        );
 
         return true;
       } catch (err) {
@@ -231,11 +290,11 @@ export async function processCrmIpc(
       }
     }
 
-    case 'crm_crear_propuesta': {
+    case "crm_crear_propuesta": {
       try {
         const person = getPersonByGroupFolder(sourceGroup);
         if (!person) {
-          logger.warn({ sourceGroup }, 'Unknown persona for group');
+          logger.warn({ sourceGroup }, "Unknown persona for group");
           return true;
         }
 
@@ -246,7 +305,7 @@ export async function processCrmIpc(
           id,
           asString(data.cuenta_id) ?? null,
           person.id,
-          asString(data.titulo) ?? 'Nueva propuesta',
+          asString(data.titulo) ?? "Nueva propuesta",
           validateNumber(data.valor_estimado, 0),
           asString(data.medios) ?? null,
           asString(data.tipo_oportunidad) ?? null,
@@ -257,21 +316,25 @@ export async function processCrmIpc(
           now,
         );
 
-        logger.info({ id, persona: person.nombre }, 'Propuesta created');
+        logger.info({ id, persona: person.nombre }, "Propuesta created");
         return true;
       } catch (err) {
         return handleIpcError(err, sourceGroup, data.type);
       }
     }
 
-    case 'crm_check_followups': {
+    case "crm_check_followups": {
       try {
         const now = new Date();
-        const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString();
+        const twoHoursLater = new Date(
+          now.getTime() + 2 * 60 * 60 * 1000,
+        ).toISOString();
         const nowStr = now.toISOString();
 
         // Find activities with upcoming follow-ups (within next 2 hours)
-        const rows = db.prepare(`
+        const rows = db
+          .prepare(
+            `
           SELECT a.id, a.ae_id, a.siguiente_accion, a.fecha_siguiente_accion,
                  c.nombre AS cuenta_nombre,
                  per.whatsapp_group_folder
@@ -283,10 +346,12 @@ export async function processCrmIpc(
             AND a.fecha_siguiente_accion <= ?
             AND per.whatsapp_group_folder IS NOT NULL
             AND per.activo = 1
-        `).all(nowStr, twoHoursLater) as any[];
+        `,
+          )
+          .all(nowStr, twoHoursLater) as any[];
 
         if (rows.length === 0) {
-          logger.info('Follow-up check: no pending follow-ups');
+          logger.info("Follow-up check: no pending follow-ups");
           return true;
         }
 
@@ -303,38 +368,59 @@ export async function processCrmIpc(
         let sent = 0;
 
         for (const row of rows) {
-          if (checkDedup.get(row.id, row.whatsapp_group_folder, today)) continue;
+          if (checkDedup.get(row.id, row.whatsapp_group_folder, today))
+            continue;
 
           const jid = Object.keys(groups).find(
-            k => groups[k].folder === row.whatsapp_group_folder,
+            (k) => groups[k].folder === row.whatsapp_group_folder,
           );
           if (!jid) continue;
 
-          const fechaDisplay = new Date(row.fecha_siguiente_accion).toLocaleString('es-MX', {
-            hour: '2-digit', minute: '2-digit', hour12: true,
+          const fechaDisplay = new Date(
+            row.fecha_siguiente_accion,
+          ).toLocaleString("es-MX", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
           });
-          const msg = `*Recordatorio: Accion Pendiente*\n\n`
-            + `\u2022 ${row.siguiente_accion}\n`
-            + (row.cuenta_nombre ? `\u2022 Cuenta: ${row.cuenta_nombre}\n` : '')
-            + `\u2022 Hora: ${fechaDisplay}\n`;
+          const msg =
+            `*Recordatorio: Accion Pendiente*\n\n` +
+            `\u2022 ${row.siguiente_accion}\n` +
+            (row.cuenta_nombre ? `\u2022 Cuenta: ${row.cuenta_nombre}\n` : "") +
+            `\u2022 Hora: ${fechaDisplay}\n`;
 
           await deps.sendMessage(jid, msg);
-          insertLog.run(`fup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, row.id, row.whatsapp_group_folder);
+          insertLog.run(
+            `fup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            row.id,
+            row.whatsapp_group_folder,
+          );
           sent++;
         }
 
-        logger.info({ sent }, 'Follow-up reminders sent');
+        logger.info({ sent }, "Follow-up reminders sent");
         return true;
       } catch (err) {
         return handleIpcError(err, sourceGroup, data.type);
       }
     }
 
-    case 'crm_doc_sync': {
+    case "crm_doc_sync": {
       try {
-        const { syncDocuments } = await import('./doc-sync.js');
+        const { syncDocuments } = await import("./doc-sync.js");
         const count = await syncDocuments();
-        logger.info({ count }, 'Document sync completed');
+        logger.info({ count }, "Document sync completed");
+        return true;
+      } catch (err) {
+        return handleIpcError(err, sourceGroup, data.type);
+      }
+    }
+
+    case "crm_warmth_recompute": {
+      try {
+        const { recomputeAllWarmth } = await import("./warmth-scheduler.js");
+        const updated = recomputeAllWarmth();
+        logger.info({ updated }, "Warmth recomputation completed");
         return true;
       } catch (err) {
         return handleIpcError(err, sourceGroup, data.type);

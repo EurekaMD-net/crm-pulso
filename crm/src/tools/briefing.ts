@@ -11,6 +11,7 @@
 import { getDatabase } from "../db.js";
 import type { ToolContext } from "./index.js";
 import { scopeFilter, getCurrentWeek, dateCutoff } from "./helpers.js";
+import { warmthLabel } from "../warmth.js";
 
 // ---------------------------------------------------------------------------
 // Main dispatcher
@@ -572,6 +573,66 @@ function briefingDirector(ctx: ToolContext): string {
     .filter(Boolean)
     .sort((a: any, b: any) => b.porcentaje - a.porcentaje);
 
+  // 6. Relationship health (Dir/VP only)
+  const relFrias = db
+    .prepare(
+      `SELECT re.warmth_score, c.nombre as contacto, cu.nombre as cuenta,
+              (SELECT MAX(ie.fecha) FROM interaccion_ejecutiva ie WHERE ie.relacion_id = re.id) as ultimo_contacto
+       FROM relacion_ejecutiva re
+       JOIN contacto c ON c.id = re.contacto_id
+       LEFT JOIN cuenta cu ON cu.id = c.cuenta_id
+       WHERE re.persona_id = ? AND re.warmth_score < 40
+       ORDER BY re.warmth_score ASC LIMIT 5`,
+    )
+    .all(ctx.persona_id) as any[];
+
+  const relHitos7d = db
+    .prepare(
+      `SELECT h.titulo, h.tipo, h.fecha, c.nombre as contacto
+       FROM hito_contacto h
+       JOIN contacto c ON c.id = h.contacto_id
+       JOIN relacion_ejecutiva re ON re.contacto_id = c.id AND re.persona_id = ?
+       WHERE (h.recurrente = 0 AND h.fecha >= date('now') AND h.fecha <= date('now', '+7 days'))
+       ORDER BY h.fecha ASC LIMIT 5`,
+    )
+    .all(ctx.persona_id) as any[];
+
+  const relTotals = db
+    .prepare(
+      `SELECT COUNT(*) as total,
+              SUM(CASE WHEN warmth_score >= 70 THEN 1 ELSE 0 END) as caliente,
+              SUM(CASE WHEN warmth_score >= 40 AND warmth_score < 70 THEN 1 ELSE 0 END) as tibia,
+              SUM(CASE WHEN warmth_score >= 15 AND warmth_score < 40 THEN 1 ELSE 0 END) as fria,
+              SUM(CASE WHEN warmth_score < 15 THEN 1 ELSE 0 END) as congelada
+       FROM relacion_ejecutiva WHERE persona_id = ?`,
+    )
+    .get(ctx.persona_id) as any;
+
+  const relaciones_ejecutivas =
+    relTotals?.total > 0
+      ? {
+          relaciones_frias: relFrias.map((r: any) => ({
+            contacto: r.contacto,
+            cuenta: r.cuenta,
+            warmth_label: warmthLabel(r.warmth_score),
+            dias_sin_contacto: r.ultimo_contacto
+              ? Math.floor(
+                  (Date.now() - new Date(r.ultimo_contacto).getTime()) /
+                    86_400_000,
+                )
+              : null,
+          })),
+          hitos_proximos_7d: relHitos7d,
+          resumen: {
+            total: relTotals.total,
+            caliente: relTotals.caliente ?? 0,
+            tibia: relTotals.tibia ?? 0,
+            fria: relTotals.fria ?? 0,
+            congelada: relTotals.congelada ?? 0,
+          },
+        }
+      : undefined;
+
   return JSON.stringify({
     rol: "director",
     fecha: new Date().toISOString().split("T")[0],
@@ -580,6 +641,7 @@ function briefingDirector(ctx: ToolContext): string {
     mega_deals: megaWithSentiment,
     pipeline_por_equipo: pipelineByTeam,
     cuota_ranking_gerentes: quotaRanking,
+    relaciones_ejecutivas,
   });
 }
 
@@ -760,6 +822,49 @@ function briefingVP(ctx: ToolContext): string {
     };
   });
 
+  // 5. Org-wide relationship pulse
+  const relCongeladas = db
+    .prepare(
+      `SELECT COUNT(*) as n FROM relacion_ejecutiva WHERE warmth_score < 15`,
+    )
+    .get() as any;
+
+  const relHitosSemana = db
+    .prepare(
+      `SELECT h.titulo, h.tipo, c.nombre as contacto
+       FROM hito_contacto h
+       JOIN contacto c ON c.id = h.contacto_id
+       JOIN relacion_ejecutiva re ON re.contacto_id = c.id
+       WHERE h.recurrente = 0 AND h.fecha >= date('now') AND h.fecha <= date('now', '+7 days')
+       ORDER BY h.fecha ASC LIMIT 10`,
+    )
+    .all() as any[];
+
+  const dirInteracciones = db
+    .prepare(
+      `SELECT p.nombre as director,
+              COUNT(ie.id) as total_interacciones,
+              (SELECT COUNT(*) FROM relacion_ejecutiva re2 WHERE re2.persona_id = p.id) as relaciones_rastreadas
+       FROM persona p
+       LEFT JOIN relacion_ejecutiva re ON re.persona_id = p.id
+       LEFT JOIN interaccion_ejecutiva ie ON ie.relacion_id = re.id AND ie.fecha >= ?
+       WHERE p.rol = 'director'
+       GROUP BY p.id
+       ORDER BY total_interacciones ASC`,
+    )
+    .all(dateCutoff(30)) as any[];
+
+  const pulso_relacional =
+    relCongeladas?.n > 0 ||
+    relHitosSemana.length > 0 ||
+    dirInteracciones.length > 0
+      ? {
+          relaciones_congeladas_org: relCongeladas?.n ?? 0,
+          hitos_esta_semana: relHitosSemana,
+          directores_interacciones_30d: dirInteracciones,
+        }
+      : undefined;
+
   return JSON.stringify({
     rol: "vp",
     fecha: new Date().toISOString().split("T")[0],
@@ -777,5 +882,6 @@ function briefingVP(ctx: ToolContext): string {
       aes_con_sentimiento_declinando: decliningAeIds.length,
     },
     mega_deals: megaWithSentiment,
+    pulso_relacional,
   });
 }

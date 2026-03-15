@@ -5,6 +5,7 @@ import { startAlertScheduler } from '../../crm/src/alert-scheduler.js';
 import { seedBriefings } from '../../crm/src/briefing-seeds.js';
 import { startFollowupScheduler } from '../../crm/src/followup-scheduler.js';
 import { startDocSyncScheduler } from '../../crm/src/doc-sync.js';
+import { startWarmthScheduler } from '../../crm/src/warmth-scheduler.js';
 import { startDashboardServer } from '../../crm/src/dashboard/server.js';
 
 import {
@@ -46,7 +47,12 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
-import { compactMessages, findChannel, formatMessages, formatOutbound } from './router.js';
+import {
+  compactMessages,
+  findChannel,
+  formatMessages,
+  formatOutbound,
+} from './router.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
@@ -205,34 +211,43 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   let hadError = false;
   let outputSentToUser = false;
 
-  const output = await runAgent(group, prompt, chatJid, imageAttachments, async (result) => {
-    // Streaming output callback — called for each agent result
-    if (result.result) {
-      const raw =
-        typeof result.result === 'string'
-          ? result.result
-          : JSON.stringify(result.result);
-      // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
-      const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
-      logger.info({ group: group.name, streaming: !!result.streaming }, `Agent output: ${raw.slice(0, 200)}`);
-      if (text) {
-        await channel.sendMessage(chatJid, text);
-        outputSentToUser = true;
+  const output = await runAgent(
+    group,
+    prompt,
+    chatJid,
+    imageAttachments,
+    async (result) => {
+      // Streaming output callback — called for each agent result
+      if (result.result) {
+        const raw =
+          typeof result.result === 'string'
+            ? result.result
+            : JSON.stringify(result.result);
+        // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
+        const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
+        logger.info(
+          { group: group.name, streaming: !!result.streaming },
+          `Agent output: ${raw.slice(0, 200)}`,
+        );
+        if (text) {
+          await channel.sendMessage(chatJid, text);
+          outputSentToUser = true;
+        }
+        // Only reset idle timer on final results, not streaming chunks or session-update markers
+        if (!result.streaming) {
+          resetIdleTimer();
+        }
       }
-      // Only reset idle timer on final results, not streaming chunks or session-update markers
-      if (!result.streaming) {
-        resetIdleTimer();
+
+      if (result.status === 'success' && !result.streaming) {
+        queue.notifyIdle(chatJid);
       }
-    }
 
-    if (result.status === 'success' && !result.streaming) {
-      queue.notifyIdle(chatJid);
-    }
-
-    if (result.status === 'error') {
-      hadError = true;
-    }
-  });
+      if (result.status === 'error') {
+        hadError = true;
+      }
+    },
+  );
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
@@ -419,7 +434,10 @@ async function startMessageLoop(): Promise<void> {
             groupsWithNewMessages.add(chatJid);
             if (!pendingDispatch.has(chatJid)) {
               pendingDispatch.add(chatJid);
-              logger.debug({ chatJid }, 'Debouncing — waiting one cycle for more messages');
+              logger.debug(
+                { chatJid },
+                'Debouncing — waiting one cycle for more messages',
+              );
             }
           }
         }
@@ -449,8 +467,7 @@ function dispatchToGroup(
     lastAgentTimestamp[chatJid] || '',
     ASSISTANT_NAME,
   );
-  const messagesToSend =
-    allPending.length > 0 ? allPending : groupMessages;
+  const messagesToSend = allPending.length > 0 ? allPending : groupMessages;
   const { messages: compacted, truncatedCount } = compactMessages(
     messagesToSend,
     MAX_CONTEXT_MESSAGES,
@@ -502,16 +519,17 @@ async function main(): Promise<void> {
   ensureContainerSystemRunning();
   initDatabase();
   try {
-    bootstrapCrm();  // CRM hook: initialize CRM schema and hooks
+    bootstrapCrm(); // CRM hook: initialize CRM schema and hooks
   } catch (err) {
     logger.fatal({ err }, 'CRM bootstrap failed — aborting startup');
     process.exit(1);
   }
-  startAlertScheduler(DATA_DIR);  // CRM hook: alert evaluation every 2h
-  startFollowupScheduler(DATA_DIR);  // CRM hook: follow-up reminders hourly
-  startDocSyncScheduler(DATA_DIR);   // CRM hook: document sync daily at 3 AM
-  seedBriefings();                // CRM hook: idempotent briefing task seeding
-  startDashboardServer();          // CRM hook: dashboard REST API
+  startAlertScheduler(DATA_DIR); // CRM hook: alert evaluation every 2h
+  startFollowupScheduler(DATA_DIR); // CRM hook: follow-up reminders hourly
+  startDocSyncScheduler(DATA_DIR); // CRM hook: document sync daily at 3 AM
+  startWarmthScheduler(DATA_DIR); // CRM hook: warmth recompute at 4 AM MX
+  seedBriefings(); // CRM hook: idempotent briefing task seeding
+  startDashboardServer(); // CRM hook: dashboard REST API
   logger.info('Database initialized');
   loadState();
 
