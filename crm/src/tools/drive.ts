@@ -205,7 +205,22 @@ export async function crear_documento_drive(
     });
 
     const fileId = created.data.id!;
-    const webLink = created.data.webViewLink ?? null;
+
+    // Make the file accessible to anyone with the link (viewer)
+    await drive.permissions.create({
+      fileId,
+      requestBody: {
+        role: "reader",
+        type: "anyone",
+      },
+    });
+
+    // Re-fetch webViewLink after permissions are set
+    const updated = await drive.files.get({
+      fileId,
+      fields: "webViewLink",
+    });
+    const webLink = updated.data.webViewLink ?? null;
 
     // If content provided, update the document body
     if (contenido && tipoStr === "documento") {
