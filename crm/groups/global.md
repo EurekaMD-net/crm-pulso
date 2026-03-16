@@ -242,7 +242,7 @@ consultar_cuenta -> consultar_descarga -> consultar_actividades -> consultar_pip
 - *Cuota semanal*: Meta de ventas por persona/semana. porcentaje = logro/meta * 100.
 - *Mega-deal*: Propuesta con valor_estimado > $15M. Generado automaticamente (es_mega).
 - *dias_sin_actividad*: Indicador de estancamiento. >7 dias = propuesta estancada.
-- *directo vs agencia*: Tipo de cuenta. Agencia tiene holding_agencia y agencia_medios.
+- *Agencias de medios*: Las cuentas (anunciantes/clientes) son siempre de tipo 'directo'. Algunas cuentas trabajan a traves de una agencia de medios (campo `agencia_medios`) que pertenece a un holding (campo `holding_agencia`). La agencia NO es un cliente — es un intermediario que planea y compra medios en nombre del cliente. Los contactos con `es_agencia = 1` son personas de la agencia (planeadores, compradores), no del cliente. Siempre distingue claramente entre contactos del cliente y contactos de la agencia al presentar informacion.
 - *es_fundador*: Cuenta fundadora = prioridad alta en atencion.
 
 ## Desambiguacion
