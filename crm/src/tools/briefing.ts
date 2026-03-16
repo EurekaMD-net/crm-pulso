@@ -193,6 +193,38 @@ function briefingAE(ctx: ToolContext): string {
       dias_sin_actividad: e.dias_sin_actividad,
       etapa: e.etapa,
     })),
+    insights_nocturnos: (() => {
+      try {
+        const insights = db
+          .prepare(
+            `SELECT i.id, i.tipo, i.titulo, i.confianza, i.valor_potencial,
+                    c.nombre AS cuenta_nombre
+             FROM insight_comercial i
+             LEFT JOIN cuenta c ON i.cuenta_id = c.id
+             WHERE i.ae_id = ? AND i.estado IN ('nuevo','briefing') AND i.confianza >= 0.6
+             ORDER BY i.confianza DESC LIMIT 3`,
+          )
+          .all(ctx.persona_id) as any[];
+        const total = db
+          .prepare(
+            "SELECT COUNT(*) as c FROM insight_comercial WHERE ae_id = ? AND estado IN ('nuevo','briefing')",
+          )
+          .get(ctx.persona_id) as any;
+        return {
+          total: total?.c ?? 0,
+          top_3: insights.map((r: any) => ({
+            id: r.id,
+            tipo: r.tipo,
+            titulo: r.titulo,
+            cuenta: r.cuenta_nombre,
+            confianza: r.confianza,
+            valor_potencial: r.valor_potencial,
+          })),
+        };
+      } catch {
+        return { total: 0, top_3: [] };
+      }
+    })(),
   });
 }
 
@@ -404,6 +436,45 @@ function briefingGerente(ctx: ToolContext): string {
       dias_sin_actividad: e.dias_sin_actividad,
       etapa: e.etapa,
     })),
+    insights_equipo: (() => {
+      try {
+        const teamIds = [ctx.persona_id, ...ctx.team_ids];
+        const ph = teamIds.map(() => "?").join(",");
+        const stats = db
+          .prepare(
+            `SELECT i.estado, COUNT(*) as c
+             FROM insight_comercial i
+             WHERE i.ae_id IN (${ph}) AND i.fecha_generacion >= date('now', '-7 days')
+             GROUP BY i.estado`,
+          )
+          .all(...teamIds) as any[];
+        const statMap: Record<string, number> = {};
+        for (const s of stats) statMap[s.estado] = s.c;
+        const total = Object.values(statMap).reduce((a, b) => a + b, 0);
+        const aceptados = statMap["aceptado"] || 0;
+        const descartados = statMap["descartado"] || 0;
+        const nuevos = (statMap["nuevo"] || 0) + (statMap["briefing"] || 0);
+        const acted = aceptados + descartados;
+        return {
+          total_generados_7d: total,
+          pendientes: nuevos,
+          aceptados,
+          descartados,
+          tasa_aceptacion:
+            acted > 0
+              ? `${Math.round((aceptados / acted) * 100)}%`
+              : "sin datos",
+        };
+      } catch {
+        return {
+          total_generados_7d: 0,
+          pendientes: 0,
+          aceptados: 0,
+          descartados: 0,
+          tasa_aceptacion: "sin datos",
+        };
+      }
+    })(),
   });
 }
 

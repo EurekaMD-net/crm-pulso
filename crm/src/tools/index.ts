@@ -68,6 +68,11 @@ import {
   consultar_pendientes,
   impugnar_registro,
 } from "./aprobaciones.js";
+import {
+  consultar_insights,
+  actuar_insight,
+  consultar_insights_equipo,
+} from "./insight-tools.js";
 
 // ---------------------------------------------------------------------------
 // Tool context — passed to every tool handler
@@ -1543,8 +1548,125 @@ const TOOL_IMPUGNAR_REGISTRO: ToolDefinition = {
 };
 
 // ---------------------------------------------------------------------------
+// Insight tools (overnight commercial intelligence)
+// ---------------------------------------------------------------------------
+
+const TOOL_CONSULTAR_INSIGHTS: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "consultar_insights",
+    description:
+      "Muestra los insights comerciales generados por el analisis nocturno para tus cuentas.\n\n" +
+      "Cada noche, el sistema analiza todas las cuentas contra eventos, inventario, billing gaps, " +
+      "peers de la vertical, y senales de mercado. Los insights se presentan con nivel de confianza " +
+      "y datos de soporte.\n\n" +
+      "USAR CUANDO:\n" +
+      "- En tu briefing matutino para ver oportunidades detectadas\n" +
+      "- Quieres revisar insights pendientes de accion\n" +
+      "- Buscas oportunidades por tipo (calendario, inventario, gap, cross-sell, mercado)",
+    parameters: {
+      type: "object",
+      properties: {
+        tipo: {
+          type: "string",
+          enum: [
+            "oportunidad_calendario",
+            "oportunidad_inventario",
+            "oportunidad_gap",
+            "oportunidad_crosssell",
+            "oportunidad_mercado",
+            "riesgo",
+            "patron",
+            "recomendacion",
+          ],
+          description: "Filtrar por tipo de insight (opcional)",
+        },
+        estado: {
+          type: "string",
+          enum: [
+            "nuevo",
+            "briefing",
+            "aceptado",
+            "convertido",
+            "descartado",
+            "expirado",
+          ],
+          description:
+            "Filtrar por estado (default: nuevo y briefing — los pendientes)",
+        },
+        limite: {
+          type: "number",
+          description: "Maximo de resultados (default 10)",
+        },
+      },
+    },
+  },
+};
+
+const TOOL_ACTUAR_INSIGHT: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "actuar_insight",
+    description:
+      "Actua sobre un insight comercial: aceptarlo o descartarlo.\n\n" +
+      "- 'aceptar': Marca el insight como aceptado. El Ejecutivo tomara accion.\n" +
+      "- 'descartar': Requiere razon obligatoria. La razon ayuda al sistema a mejorar.\n\n" +
+      "IMPORTANTE: Cuando el Ejecutivo quiere descartar un insight, pregunta la razon " +
+      "antes de llamar esta herramienta. Razones comunes: 'ya tengo propuesta en vuelo', " +
+      "'relacion fria, no es buen momento', 'el cliente cambio de prioridades'.",
+    parameters: {
+      type: "object",
+      properties: {
+        insight_id: {
+          type: "string",
+          description: "ID del insight (obtenido de consultar_insights)",
+        },
+        accion: {
+          type: "string",
+          enum: ["aceptar", "descartar"],
+          description: "Que hacer con el insight",
+        },
+        razon: {
+          type: "string",
+          description: "Razon del descarte (requerida si accion = descartar)",
+        },
+      },
+      required: ["insight_id", "accion"],
+    },
+  },
+};
+
+const TOOL_CONSULTAR_INSIGHTS_EQUIPO: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "consultar_insights_equipo",
+    description:
+      "Resumen de insights comerciales del equipo: total generados, pendientes, " +
+      "tasa de aceptacion, desglose por tipo y por Ejecutivo.\n\n" +
+      "USAR CUANDO:\n" +
+      "- En el briefing semanal para medir adopcion de inteligencia comercial\n" +
+      "- Quieres ver que Ejecutivos estan aprovechando los insights\n" +
+      "- Necesitas coaching signals: Ejecutivos que ignoran insights de alta confianza",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Role-based tool sets
 // ---------------------------------------------------------------------------
+
+const INSIGHT_TOOLS: ToolDefinition[] = [
+  TOOL_CONSULTAR_INSIGHTS,
+  TOOL_ACTUAR_INSIGHT,
+];
+
+const INSIGHT_TEAM_TOOLS: ToolDefinition[] = [
+  ...INSIGHT_TOOLS,
+  TOOL_CONSULTAR_INSIGHTS_EQUIPO,
+];
 
 const AE_TOOLS: ToolDefinition[] = [
   TOOL_REGISTRAR_ACTIVIDAD,
@@ -1585,6 +1707,7 @@ const AE_TOOLS: ToolDefinition[] = [
   TOOL_SOLICITAR_CUENTA,
   TOOL_SOLICITAR_CONTACTO,
   TOOL_IMPUGNAR_REGISTRO,
+  ...INSIGHT_TOOLS,
 ];
 
 const APPROVAL_TOOLS: ToolDefinition[] = [
@@ -1627,6 +1750,7 @@ const GERENTE_TOOLS: ToolDefinition[] = [
   TOOL_BUSCAR_MEMORIA,
   TOOL_REFLEXIONAR_MEMORIA,
   ...APPROVAL_TOOLS,
+  ...INSIGHT_TEAM_TOOLS,
 ];
 
 const RELATIONSHIP_TOOLS: ToolDefinition[] = [
@@ -1674,6 +1798,7 @@ const DIRECTOR_TOOLS: ToolDefinition[] = [
   TOOL_REFLEXIONAR_MEMORIA,
   ...RELATIONSHIP_TOOLS,
   ...APPROVAL_TOOLS,
+  ...INSIGHT_TEAM_TOOLS,
 ];
 
 const VP_TOOLS: ToolDefinition[] = [
@@ -1709,6 +1834,7 @@ const VP_TOOLS: ToolDefinition[] = [
   TOOL_REFLEXIONAR_MEMORIA,
   ...RELATIONSHIP_TOOLS,
   ...APPROVAL_TOOLS,
+  ...INSIGHT_TEAM_TOOLS,
 ];
 
 export function getToolsForRole(
@@ -1783,6 +1909,9 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   rechazar_registro,
   consultar_pendientes,
   impugnar_registro,
+  consultar_insights,
+  actuar_insight,
+  consultar_insights_equipo,
 };
 
 export async function executeTool(

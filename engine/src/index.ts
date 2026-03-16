@@ -6,6 +6,7 @@ import { seedBriefings } from '../../crm/src/briefing-seeds.js';
 import { startFollowupScheduler } from '../../crm/src/followup-scheduler.js';
 import { startDocSyncScheduler } from '../../crm/src/doc-sync.js';
 import { startWarmthScheduler } from '../../crm/src/warmth-scheduler.js';
+import { startOvernightScheduler } from '../../crm/src/overnight-scheduler.js';
 import { startDashboardServer } from '../../crm/src/dashboard/server.js';
 
 import {
@@ -528,6 +529,7 @@ async function main(): Promise<void> {
   startFollowupScheduler(DATA_DIR); // CRM hook: follow-up reminders hourly
   startDocSyncScheduler(DATA_DIR); // CRM hook: document sync daily at 3 AM
   startWarmthScheduler(DATA_DIR); // CRM hook: warmth recompute at 4 AM MX
+  startOvernightScheduler(DATA_DIR); // CRM hook: overnight analysis at 2 AM MX
   seedBriefings(); // CRM hook: idempotent briefing task seeding
   startDashboardServer(); // CRM hook: dashboard REST API
   logger.info('Database initialized');

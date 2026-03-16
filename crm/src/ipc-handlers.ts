@@ -457,6 +457,17 @@ export async function processCrmIpc(
       }
     }
 
+    case "crm_overnight_analysis": {
+      try {
+        const { runOvernightAnalysis } = await import("./overnight-engine.js");
+        const result = runOvernightAnalysis();
+        logger.info(result, "Overnight analysis completed");
+        return true;
+      } catch (err) {
+        return handleIpcError(err, sourceGroup, data.type);
+      }
+    }
+
     case "crm_warmth_recompute": {
       try {
         const { recomputeAllWarmth } = await import("./warmth-scheduler.js");

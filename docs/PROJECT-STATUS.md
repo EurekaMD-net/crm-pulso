@@ -1,7 +1,7 @@
 # Pulso — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-03-16 (Approval workflow live — 52 tools, 22 tables, 660 CRM tests)
+> Last updated: 2026-03-16 (Session 11.1 live — overnight analysis engine, 55 tools, 23 tables, 681 CRM tests)
 > Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`
 
 ## Phase Tracker
@@ -26,7 +26,7 @@
 | — | Hindsight Adaptations | **Done** | Circuit breaker (inference + embedding), Hindsight long-term memory (3 banks, 3 tools), hybrid RAG (FTS5 + reciprocal rank fusion) | — | — |
 | 9 | Relationship Intelligence | **Done** | 3 tables, 6 contacto columns, 7 Dir/VP tools, warmth engine, briefing integration, nightly recomputation | 7–10 | 5–8 |
 | 10 | Workspace Abstraction | Planned | Provider interface + Google refactor (Phase A now). Microsoft 365 via MS Graph (Phase B when Azure AD ready) | 10.A–10.C | 7–9 |
-| 11 | Creative Intelligence | Planned | Overnight analysis → autonomous proposal drafts, package builder, cross-agent pattern detection | 11–13 | 9–14 |
+| 11 | Creative Intelligence | **11.1 Done** | Overnight analysis engine (5 analyzers), insight table, 3 tools, briefing integration. Next: 11.2–11.5 | 11–13 | 9–14 |
 | 12 | Data Connectors | Planned | Cubo, inventory, contracts, programming schedule, SharePoint. Parallel with Phase 11 | 14–20 | 10–16 |
 | 13 | A2A Foundation | Planned | Structured action layer + approval flow, REST API expansion, A2A protocol readiness | 21–23 | 15–20 |
 | 14 | Polish & Scale | Planned | Adaptive personality, LLM migration (self-hosted Qwen 3.5), performance hardening, load testing | 24–26 | 18–24 |

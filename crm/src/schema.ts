@@ -1,7 +1,7 @@
 /**
  * CRM Schema Definitions — Domain-specific for media ad sales
  *
- * 22 tables. All created in the same SQLite database used by the NanoClaw
+ * 23 tables. All created in the same SQLite database used by the NanoClaw
  * engine (via getDatabase() export).
  *
  * Tables:
@@ -21,6 +21,7 @@
  *   - crm_documents: Document metadata for RAG pipeline
  *   - crm_embeddings: Document chunk embeddings for RAG search
  *   - aprobacion_registro: Approval workflow audit trail
+ *   - insight_comercial: Overnight commercial insight engine
  */
 
 import type Database from "better-sqlite3";
@@ -48,6 +49,7 @@ export const CRM_TABLES = [
   "interaccion_ejecutiva",
   "hito_contacto",
   "aprobacion_registro",
+  "insight_comercial",
 ] as const;
 
 export type CrmTableName = (typeof CRM_TABLES)[number];
@@ -477,6 +479,40 @@ export function createCrmSchema(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_cuenta_estado ON cuenta(estado);
     CREATE INDEX IF NOT EXISTS idx_contacto_estado ON contacto(estado);
+
+    -- 23. INSIGHT_COMERCIAL (overnight commercial intelligence)
+    CREATE TABLE IF NOT EXISTS insight_comercial (
+      id TEXT PRIMARY KEY,
+      tipo TEXT NOT NULL CHECK(tipo IN (
+        'oportunidad_calendario','oportunidad_inventario','oportunidad_gap',
+        'oportunidad_crosssell','oportunidad_mercado','riesgo','patron','recomendacion'
+      )),
+      cuenta_id TEXT REFERENCES cuenta(id),
+      ae_id TEXT REFERENCES persona(id),
+      propuesta_id TEXT REFERENCES propuesta(id),
+      evento_id TEXT,
+      titulo TEXT NOT NULL,
+      descripcion TEXT NOT NULL,
+      accion_recomendada TEXT,
+      datos_soporte TEXT,
+      confianza REAL NOT NULL CHECK(confianza BETWEEN 0 AND 1),
+      sample_size INTEGER,
+      valor_potencial REAL,
+      estado TEXT DEFAULT 'nuevo' CHECK(estado IN (
+        'nuevo','briefing','aceptado','convertido','descartado','expirado'
+      )),
+      razon_descarte TEXT,
+      propuesta_generada_id TEXT REFERENCES propuesta(id),
+      fecha_generacion TEXT DEFAULT (datetime('now')),
+      fecha_expiracion TEXT,
+      fecha_accion TEXT,
+      lote_nocturno TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_insight_ae ON insight_comercial(ae_id);
+    CREATE INDEX IF NOT EXISTS idx_insight_cuenta ON insight_comercial(cuenta_id);
+    CREATE INDEX IF NOT EXISTS idx_insight_estado ON insight_comercial(estado);
+    CREATE INDEX IF NOT EXISTS idx_insight_tipo ON insight_comercial(tipo);
+    CREATE INDEX IF NOT EXISTS idx_insight_lote ON insight_comercial(lote_nocturno);
   `);
 
   // Note: No FTS5 delete trigger. External content FTS5 tables corrupt when
