@@ -250,7 +250,7 @@ export function consultar_cuenta(
 
   const contactos = db
     .prepare(
-      "SELECT nombre, rol, seniority, email, telefono FROM contacto WHERE cuenta_id = ?",
+      "SELECT nombre, rol, seniority, email, telefono, es_agencia, titulo, organizacion, notas_personales FROM contacto WHERE cuenta_id = ?",
     )
     .all(cuenta.id) as any[];
   const propuestas = db
@@ -283,11 +283,21 @@ export function consultar_cuenta(
       nombre: cuenta.nombre,
       tipo: cuenta.tipo,
       vertical: cuenta.vertical,
+      holding_agencia: cuenta.holding_agencia,
       agencia_medios: cuenta.agencia_medios,
       años_relacion: cuenta.años_relacion,
       es_fundador: cuenta.es_fundador === 1,
     },
-    contactos,
+    contactos: contactos.map((c: any) => ({
+      nombre: c.nombre,
+      rol: c.rol,
+      seniority: c.seniority,
+      email: c.email,
+      telefono: c.telefono,
+      es_agencia: c.es_agencia === 1,
+      titulo: c.titulo,
+      organizacion: c.organizacion,
+    })),
     propuestas_activas: propuestas,
     contrato_vigente: contrato
       ? {
