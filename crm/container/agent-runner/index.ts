@@ -67,7 +67,7 @@ const IPC_INPUT_DIR = "/workspace/ipc/input";
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, "_close");
 const IPC_POLL_MIN_MS = 100;
 const IPC_POLL_MAX_MS = 500;
-const MAX_MESSAGES = 12;
+const MAX_MESSAGES = 30;
 const MAX_TOOL_ROUNDS = 15;
 const SESSIONS_DIR = "/workspace/group/.crm-sessions";
 
