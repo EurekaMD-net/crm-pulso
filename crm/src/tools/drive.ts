@@ -243,9 +243,9 @@ export async function crear_documento_drive(
             const lines = sections[i].split("\n");
             const slideTitle = lines[0]?.trim() || `Slide ${i + 1}`;
             const slideBody = lines.slice(1).join("\n").trim();
-            const slideId = `slide_${i}`;
-            const titleId = `title_${i}`;
-            const bodyId = `body_${i}`;
+            const slideId = `crm_slide_${i}`;
+            const titleId = `crm_title_${i}`;
+            const bodyId = `crm_body_${i}`;
 
             requests.push({
               createSlide: {
