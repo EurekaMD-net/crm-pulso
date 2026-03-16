@@ -9,7 +9,8 @@
 import { google } from "googleapis";
 import { JWT } from "google-auth-library";
 
-const GMAIL_SCOPES = [
+const GMAIL_SEND_SCOPES = ["https://www.googleapis.com/auth/gmail.send"];
+const GMAIL_COMPOSE_SCOPES = [
   "https://www.googleapis.com/auth/gmail.send",
   "https://www.googleapis.com/auth/gmail.compose",
 ];
@@ -38,13 +39,25 @@ function getServiceAccountKey(): { client_email: string; private_key: string } {
   return JSON.parse(raw);
 }
 
-/** Get an authenticated Gmail client impersonating the given email. */
+/** Get a Gmail client for sending messages (gmail.send scope only). */
 export function getGmailClient(impersonateEmail: string) {
   const key = getServiceAccountKey();
   const auth = new JWT({
     email: key.client_email,
     key: key.private_key,
-    scopes: GMAIL_SCOPES,
+    scopes: GMAIL_SEND_SCOPES,
+    subject: impersonateEmail,
+  });
+  return google.gmail({ version: "v1", auth });
+}
+
+/** Get a Gmail client for creating drafts (requires gmail.compose scope). */
+export function getGmailComposeClient(impersonateEmail: string) {
+  const key = getServiceAccountKey();
+  const auth = new JWT({
+    email: key.client_email,
+    key: key.private_key,
+    scopes: GMAIL_COMPOSE_SCOPES,
     subject: impersonateEmail,
   });
   return google.gmail({ version: "v1", auth });
