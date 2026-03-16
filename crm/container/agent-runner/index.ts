@@ -370,6 +370,7 @@ async function main(): Promise<void> {
       if (
         key.startsWith("INFERENCE_") ||
         key.startsWith("HINDSIGHT_") ||
+        key.startsWith("GOOGLE_") ||
         key === "BRAVE_SEARCH_API_KEY" ||
         key === "BITLY_API_TOKEN"
       ) {

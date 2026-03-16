@@ -266,6 +266,8 @@ function readSecrets(): Record<string, string> {
     'HINDSIGHT_ENABLED',
     'HINDSIGHT_URL',
     'HINDSIGHT_API_KEY',
+    'GOOGLE_SERVICE_ACCOUNT_KEY',
+    'GOOGLE_CALENDAR_ENABLED',
   ]);
 }
 
