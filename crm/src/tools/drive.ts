@@ -268,10 +268,26 @@ export async function crear_documento_drive(
             }
           }
           if (requests.length > 0) {
+            // Get the default empty slide ID before adding content
+            const pres = await slides.presentations.get({
+              presentationId: fileId,
+            });
+            const defaultSlideId = pres.data.slides?.[0]?.objectId;
+
             await slides.presentations.batchUpdate({
               presentationId: fileId,
               requestBody: { requests },
             });
+
+            // Delete the default empty title slide
+            if (defaultSlideId) {
+              await slides.presentations.batchUpdate({
+                presentationId: fileId,
+                requestBody: {
+                  requests: [{ deleteObject: { objectId: defaultSlideId } }],
+                },
+              });
+            }
           }
         } else if (tipoStr === "hoja_de_calculo") {
           // Google Sheets: write rows from content (tab or comma separated)
