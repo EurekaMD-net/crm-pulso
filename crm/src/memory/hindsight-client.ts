@@ -150,7 +150,7 @@ export class HindsightClient {
   async health(): Promise<HindsightHealthResponse> {
     return this.request<HindsightHealthResponse>(
       "GET",
-      "/v1/default/health",
+      "/health",
       undefined,
       3000,
     );
