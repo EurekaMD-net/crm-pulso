@@ -1,7 +1,7 @@
 # Pulso — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-03-16 (Google Workspace integration + agent hardening)
+> Last updated: 2026-03-16 (Phase 9 complete, Google Workspace live, Hindsight active, agency data model fixed)
 > Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`
 
 ## Phase Tracker
@@ -180,11 +180,11 @@
 | Metric | Current (Now) | Phase 14 (Target) | Remaining |
 |--------|--------------|-------------------|-----------|
 | SQLite tables | 21 | 23 | +2 |
-| CRM tools | 45 | ~55 | +10 |
+| CRM tools | 46 | ~55 | +9 |
 | Test files | 29 | ~35 | +6 |
 | Tests passing | 608 | 900+ | +292 |
 | Persona templates | 8 | 8 (dynamic) | — |
-| Claude Code sessions | 10 | 26 | 16 |
+| Claude Code sessions | ~14 | 26 | ~12 |
 | Estimated hours | — | 65–85h | — |
 
 ### New Tables by Phase
@@ -204,7 +204,7 @@
 
 | Adoption Phase (VISION.md) | Technical Phases | What Users Get |
 |---------------------------|-----------------|----------------|
-| **Pilot (Months 1–3)** | 8 + Hindsight complete, 9 next | Voice input, smart briefings, EOD wrap-ups, sentiment, confidence calibration, VP dashboard, long-term agent memory, hybrid RAG |
+| **Pilot (Months 1–3)** | 8 + Hindsight + 9 complete | Voice, briefings, sentiment, VP dashboard, long-term memory (Hindsight), hybrid RAG, relationship intelligence, Google Workspace (Gmail+Drive+Slides+Sheets+Calendar), agency data model |
 | **Evangelists (Months 3–6)** | 9–11 complete, 12 in progress | Relationship intelligence, overnight proposals, creative packages, cross-agent patterns |
 | **Standard (Months 6–9)** | 10, 12–13 complete | Full data integration, workspace abstraction, action layer, approval flow, API foundation |
 | **Ecosystem (Months 9–12+)** | 14 complete | Adaptive personality, self-hosted LLM, production hardening, A2A readiness |
@@ -246,7 +246,7 @@ These rules hold across ALL phases:
 | Google Workspace | **Active** | Email (send+read), Calendar (events+read), Drive (full), Slides API, Sheets API. Service account: crm-azteca-agent@crm-azteca.iam.gserviceaccount.com. Test user: fede@eurekamd.net |
 | WhatsApp (Baileys) | Active | Main risk — unofficial API |
 | Whisper (transcription) | **Active** | Groq `whisper-large-v3` configured |
-| Hindsight | **Available** | Long-term memory sidecar. `crm-ctl hindsight-start` to activate |
+| Hindsight | **Active** | Long-term memory sidecar running on crm-net Docker network. 3 banks (crm-sales, crm-accounts, crm-team). 29+ memories seeded |
 | Azure AD | Not started | Needed for Phase 10.C |
 
 ---
@@ -256,7 +256,7 @@ These rules hold across ALL phases:
 - **Server**: Test VPS, Node 22.22.0, Docker 29.3.0
 - **Service**: `agentic-crm.service` (systemd), managed via `crm-ctl`
 - **Container**: `agentic-crm-agent:latest` (rebuilt 2026-03-16)
-- **Hindsight**: `crm-hindsight` Docker sidecar (port 8888 API, 9999 UI), persistent volume at `data/hindsight/`
+- **Hindsight**: `crm-hindsight` Docker sidecar on `crm-net` network (port 8888 API, 9998 UI), persistent volume at `data/hindsight/`. Qwen LLM + local embeddings
 - **WhatsApp**: Authenticated (5215530331051)
 - **Dashboard**: Port 3000 open (UFW), short links via Bitly
 
@@ -266,6 +266,12 @@ These rules hold across ALL phases:
 
 | Commit | Description |
 |--------|-------------|
+| `7eefde3` | feat: consultar_cuentas tool — account overview with agency info (46 tools) |
+| `f5e08cd` | fix: agencies are NOT clients — fix data model and system prompt |
+| `928a5ba` | feat: HTML email template — proper paragraph spacing, clean layout |
+| `8024bd1` | fix: Hindsight client API paths + seeded 29 memories |
+| `7683cfe` | fix: Docker network for container→Hindsight connectivity |
+| `37a8e6f` | fix: agent memory — context window 12→30, active memory protocol |
 | `1833241` | feat: disambiguation protocol in agent system prompt |
 | `e3fe247` | fix: Slides object IDs >= 5 chars (Google API requirement) |
 | `a9af920` | fix: split Gmail scopes — send-only vs compose, fallback on draft fail |

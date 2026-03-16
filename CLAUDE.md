@@ -19,7 +19,7 @@ Agentic CRM for media ad sales. NanoClaw engine at `engine/`, all CRM code at `c
 | `crm/src/warmth.ts` | Executive relationship warmth scoring (recency + frequency + quality) |
 | `crm/src/warmth-scheduler.ts` | Nightly warmth recomputation (4 AM MX via IPC) |
 | `crm/src/memory/` | Pluggable memory service (Hindsight sidecar or SQLite fallback) |
-| `crm/src/tools/index.ts` | Tool registry: 45 tools, role-based filtering |
+| `crm/src/tools/index.ts` | Tool registry: 46 tools, role-based filtering |
 | `crm/src/tools/relaciones.ts` | 7 Dir/VP relationship tools (warmth, milestones, interactions) |
 | `crm/src/tools/memoria.ts` | 3 memory tools (guardar, buscar, reflexionar) |
 | `crm/src/tools/drive.ts` | Drive tools: list, read, create docs/sheets/slides with content |
@@ -91,8 +91,8 @@ git subtree pull --prefix=engine https://github.com/qwibitai/nanoclaw.git main -
 ### Message Flow
 
 ```
-WhatsApp → engine (NanoClaw) → Direct tools (45 CRM tools via inference adapter)
-                                    ├── Role-based tool filtering (AE:34, Ger:28, Dir:38, VP:36)
+WhatsApp → engine (NanoClaw) → Direct tools (46 CRM tools via inference adapter)
+                                    ├── Role-based tool filtering (AE:35, Ger:29, Dir:39, VP:37)
                                     ├── Google Workspace (Gmail, Drive, Calendar)
                                     ├── Hybrid RAG (vector + FTS5 keyword + RRF fusion)
                                     ├── Long-term memory (Hindsight or SQLite fallback)
