@@ -447,8 +447,48 @@ export async function inferWithTools(
   const conversation = [...messages];
   let totalPrompt = 0;
   let totalCompletion = 0;
+  const startTime = Date.now();
+  const totalTimeoutMs = parseInt(
+    process.env.INFERENCE_TOTAL_TIMEOUT_MS ?? "120000",
+    10,
+  );
+  const TOOL_CHAIN_WARNING = 8;
 
   for (let round = 0; round < maxRounds; round++) {
+    // Fix #1: Check total elapsed time before each round — return partial results instead of crashing
+    if (Date.now() - startTime > totalTimeoutMs) {
+      logger.warn(
+        { round, elapsed: Date.now() - startTime, totalTimeoutMs },
+        "total tool-loop timeout reached, returning partial results",
+      );
+      const lastAssistant = [...conversation]
+        .reverse()
+        .find((m) => m.role === "assistant");
+      return {
+        content:
+          (typeof lastAssistant?.content === "string"
+            ? lastAssistant.content
+            : null) ??
+          "[Tiempo limite alcanzado. Se devuelven los resultados parciales obtenidos.]",
+        messages: conversation,
+        totalUsage: {
+          prompt_tokens: totalPrompt,
+          completion_tokens: totalCompletion,
+        },
+      };
+    }
+
+    // Fix #2: After 8 consecutive tool rounds, hint the LLM to summarize and respond
+    if (round === TOOL_CHAIN_WARNING) {
+      conversation.push({
+        role: "system" as const,
+        content:
+          "AVISO DEL SISTEMA: Has hecho muchas llamadas de herramientas consecutivas. " +
+          "Resume lo que has encontrado hasta ahora y responde al usuario con la informacion disponible. " +
+          "No hagas mas llamadas de herramientas a menos que sea estrictamente necesario.",
+      });
+    }
+
     // Stream text on every call — Qwen returns content: null with tool_calls,
     // so text chunks only arrive on the final (non-tool) response.
     const response = await infer(
