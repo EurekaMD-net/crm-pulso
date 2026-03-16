@@ -285,10 +285,11 @@ function buildContainerArgs(
   if (DASHBOARD_BASE_URL) {
     args.push('-e', `DASHBOARD_BASE_URL=${DASHBOARD_BASE_URL}`);
   }
-  // Hindsight: allow container to reach host services (Hindsight sidecar)
+  // Hindsight: connect to shared Docker network so container can reach Hindsight sidecar
+  args.push('--network', 'crm-net');
   args.push('--add-host=host.docker.internal:host-gateway');
-  // Override HINDSIGHT_URL for container context (host uses localhost, container uses gateway)
-  args.push('-e', 'HINDSIGHT_URL=http://host.docker.internal:8888');
+  // Override HINDSIGHT_URL for container context (use Docker network hostname)
+  args.push('-e', 'HINDSIGHT_URL=http://crm-hindsight:8888');
 
   // Run as host user so bind-mounted files are accessible.
   // When running as root (uid 0), also run the container as root so
