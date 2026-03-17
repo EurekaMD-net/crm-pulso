@@ -69,7 +69,7 @@ export function createCrmSchema(db: Database.Database): void {
       reporta_a TEXT REFERENCES persona(id),
       whatsapp_group_folder TEXT,
       email TEXT,
-      google_calendar_id TEXT,
+      calendar_id TEXT,
       telefono TEXT,
       activo INTEGER DEFAULT 1
     );
@@ -402,7 +402,7 @@ export function createCrmSchema(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS evento_calendario (
       id TEXT PRIMARY KEY,
       persona_id TEXT REFERENCES persona(id),
-      google_event_id TEXT,
+      external_event_id TEXT,
       titulo TEXT NOT NULL,
       descripcion TEXT,
       fecha_inicio TEXT NOT NULL,
@@ -646,6 +646,35 @@ export function createCrmSchema(db: Database.Database): void {
       fecha_actualizacion TEXT DEFAULT (datetime('now'))
     );
   `);
+
+  // -------------------------------------------------------------------------
+  // Migration: rename google-specific columns to generic names
+  // -------------------------------------------------------------------------
+  const personaSql = (
+    db
+      .prepare(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='persona'",
+      )
+      .get() as { sql: string } | undefined
+  )?.sql;
+  if (personaSql && personaSql.includes("google_calendar_id")) {
+    db.exec(
+      "ALTER TABLE persona RENAME COLUMN google_calendar_id TO calendar_id",
+    );
+  }
+
+  const evtSql = (
+    db
+      .prepare(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='evento_calendario'",
+      )
+      .get() as { sql: string } | undefined
+  )?.sql;
+  if (evtSql && evtSql.includes("google_event_id")) {
+    db.exec(
+      "ALTER TABLE evento_calendario RENAME COLUMN google_event_id TO external_event_id",
+    );
+  }
 
   // -------------------------------------------------------------------------
   // Migration: add 'crm-user' to crm_memories banco CHECK constraint

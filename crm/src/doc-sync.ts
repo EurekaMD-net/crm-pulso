@@ -16,7 +16,7 @@ import fs from "fs";
 import path from "path";
 import { getDatabase } from "./db.js";
 import { embedBatch, embedText } from "./embedding.js";
-import { isGoogleEnabled, getDriveClient } from "./google-auth.js";
+import { isWorkspaceEnabled, getProvider } from "./workspace/provider.js";
 import { logger } from "./logger.js";
 
 // ---------------------------------------------------------------------------
@@ -422,13 +422,13 @@ export async function syncPersonaDrive(
   personaId: string,
   personaEmail: string,
 ): Promise<number> {
-  if (!isGoogleEnabled()) return 0;
+  if (!isWorkspaceEnabled()) return 0;
 
   const db = getDatabase();
   let synced = 0;
 
   try {
-    const drive = getDriveClient(personaEmail);
+    const provider = getProvider();
 
     // Get last sync time for this persona
     const lastSync = db
@@ -437,47 +437,29 @@ export async function syncPersonaDrive(
       )
       .get(personaId, "drive") as any;
 
-    let query =
-      "mimeType != 'application/vnd.google-apps.folder' and trashed = false";
-    if (lastSync?.last) {
-      query += ` and modifiedTime > '${lastSync.last}'`;
-    }
-
-    const res = await drive.files.list({
-      q: query,
-      pageSize: 50,
-      fields: "files(id,name,mimeType,modifiedTime,size)",
-    });
-
-    const files = res.data.files ?? [];
+    const files = await provider.listModifiedFiles(
+      personaEmail,
+      lastSync?.last || undefined,
+    );
 
     for (const file of files) {
       if (!file.id || !file.name) continue;
 
       try {
-        let text = "";
-        const mime = file.mimeType ?? "";
+        const mime = file.mimeType;
 
-        if (mime === "application/vnd.google-apps.document") {
-          // Export Google Docs as plain text
-          const exported = await drive.files.export({
-            fileId: file.id,
-            mimeType: "text/plain",
-          });
-          text = String(exported.data ?? "");
-        } else if (mime === "text/plain" || mime.startsWith("text/")) {
-          const downloaded = await drive.files.get({
-            fileId: file.id,
-            alt: "media",
-          });
-          text = String(downloaded.data ?? "");
-        } else {
-          // Skip binary files (PDF, images, etc.) — would need officeparser
+        // Only sync text-extractable files
+        if (
+          mime !== "application/vnd.google-apps.document" &&
+          !mime.startsWith("text/")
+        ) {
           continue;
         }
 
-        if (text.length < 50) continue; // Skip very small files
-        if (text.length > 500_000) text = text.slice(0, 500_000); // Cap at 500KB
+        let text = await provider.exportFileText(personaEmail, file.id, mime);
+
+        if (text.length < 50) continue;
+        if (text.length > 500_000) text = text.slice(0, 500_000);
 
         const tipoDoc = mime.includes("document")
           ? "google_doc"

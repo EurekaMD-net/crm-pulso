@@ -2,56 +2,17 @@
  * Email Tools
  *
  * enviar_email_seguimiento — save draft, AE confirms before sending
- * confirmar_envio_email — actually send via SMTP
+ * confirmar_envio_email — actually send via provider
  * enviar_email_briefing — manager/VP briefing emails
  *
- * MVP: If EMAIL_ENABLED=false or SMTP not configured, emails are saved
- * as drafts in email_log and a message indicates SMTP is not configured.
+ * MVP: If workspace not configured or SMTP not set, emails are saved
+ * as drafts in email_log and a message indicates it's not configured.
  */
 
 import { getDatabase } from "../db.js";
-import { isGoogleEnabled, getGmailClient } from "../google-auth.js";
+import { isWorkspaceEnabled, getProvider } from "../workspace/provider.js";
+import { wrapEmailHtml } from "../workspace/google/mail.js";
 import type { ToolContext } from "./index.js";
-
-/**
- * Wrap plain text or partial HTML in a professional email template.
- * Converts \n\n into paragraph breaks, \n into line breaks.
- * Adds consistent font, spacing, and a clean layout.
- */
-function wrapEmailHtml(body: string): string {
-  // If the body already has substantial HTML tags, use as-is but wrap in template
-  const hasHtml = /<(p|div|table|h[1-6]|ul|ol|br)\b/i.test(body);
-
-  let htmlBody: string;
-  if (hasHtml) {
-    htmlBody = body;
-  } else {
-    // Convert plain text to HTML paragraphs
-    htmlBody = body
-      .split(/\n\n+/)
-      .map(
-        (para) =>
-          `<p style="margin: 0 0 16px 0; line-height: 1.6;">${para.replace(/\n/g, "<br>")}</p>`,
-      )
-      .join("\n");
-  }
-
-  return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body style="margin: 0; padding: 0; background-color: #f5f5f5;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px 0;">
-    <tr><td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-        <tr><td style="padding: 32px 40px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 15px; color: #333333;">
-          ${htmlBody}
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
-}
 
 function genId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -70,7 +31,7 @@ function isEmailEnabled(): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// enviar_email_seguimiento
+// enviar_email_seguimiento (DB-only — no provider call)
 // ---------------------------------------------------------------------------
 
 export function enviar_email_seguimiento(
@@ -84,7 +45,6 @@ export function enviar_email_seguimiento(
   const propuestaId = args.propuesta_id as string | undefined;
   const programarPara = args.programar_para as string | undefined;
 
-  // Look up contact email
   const contacto = db
     .prepare("SELECT nombre, email, cuenta_id FROM contacto WHERE id = ?")
     .get(contactoId) as any;
@@ -101,10 +61,8 @@ export function enviar_email_seguimiento(
 
   const id = genId("eml");
   db.prepare(
-    `
-    INSERT INTO email_log (id, persona_id, destinatario, asunto, cuerpo, tipo, propuesta_id, cuenta_id, enviado, fecha_programado)
-    VALUES (?, ?, ?, ?, ?, 'seguimiento', ?, ?, 0, ?)
-  `,
+    `INSERT INTO email_log (id, persona_id, destinatario, asunto, cuerpo, tipo, propuesta_id, cuenta_id, enviado, fecha_programado)
+    VALUES (?, ?, ?, ?, ?, 'seguimiento', ?, ?, 0, ?)`,
   ).run(
     id,
     ctx.persona_id,
@@ -151,40 +109,41 @@ export async function confirmar_envio_email(
     return JSON.stringify({ error: "Este email ya fue enviado." });
   }
 
-  // Priority 1: Google Gmail API
-  if (isGoogleEnabled()) {
+  // Priority 1: Workspace provider
+  if (isWorkspaceEnabled()) {
     const persona = db
       .prepare("SELECT email FROM persona WHERE id = ?")
       .get(ctx.persona_id) as any;
     if (persona?.email) {
       try {
-        const gmail = getGmailClient(persona.email);
         const htmlBody = wrapEmailHtml(email.cuerpo);
-        const raw = Buffer.from(
-          `From: ${persona.email}\r\nTo: ${email.destinatario}\r\nSubject: ${email.asunto}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${htmlBody}`,
-        ).toString("base64url");
-        await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+        await getProvider().sendMail(
+          persona.email,
+          email.destinatario,
+          email.asunto,
+          htmlBody,
+        );
         const timestamp = now();
         db.prepare(
           "UPDATE email_log SET enviado = 1, fecha_enviado = ? WHERE id = ?",
         ).run(timestamp, emailId);
         return JSON.stringify({
           ok: true,
-          mensaje: `Email enviado via Gmail a ${email.destinatario}: "${email.asunto}"`,
+          mensaje: `Email enviado a ${email.destinatario}: "${email.asunto}"`,
         });
       } catch (err: any) {
         db.prepare("UPDATE email_log SET error = ? WHERE id = ?").run(
-          `Gmail error: ${err.message?.slice(0, 200) ?? "unknown"}`,
+          `Send error: ${err.message?.slice(0, 200) ?? "unknown"}`,
           emailId,
         );
         return JSON.stringify({
-          error: `Error enviando via Gmail: ${err.message?.slice(0, 200) ?? "unknown"}`,
+          error: `Error enviando email: ${err.message?.slice(0, 200) ?? "unknown"}`,
         });
       }
     }
   }
 
-  // Priority 2: SMTP (stub — transport not implemented yet)
+  // Priority 2: SMTP (stub)
   if (isEmailEnabled()) {
     db.prepare("UPDATE email_log SET error = ? WHERE id = ?").run(
       "SMTP transport not implemented — saved as draft",
@@ -220,7 +179,6 @@ export async function enviar_email_briefing(
   const cuerpoHtml = args.cuerpo_html as string;
   const incluirEquipo = (args.incluir_equipo as boolean) ?? false;
 
-  // Get manager's email
   const persona = db
     .prepare("SELECT email FROM persona WHERE id = ?")
     .get(ctx.persona_id) as any;
@@ -228,39 +186,38 @@ export async function enviar_email_briefing(
 
   const id = genId("eml");
   db.prepare(
-    `
-    INSERT INTO email_log (id, persona_id, destinatario, asunto, cuerpo, tipo, enviado)
-    VALUES (?, ?, ?, ?, ?, 'briefing', 0)
-  `,
+    `INSERT INTO email_log (id, persona_id, destinatario, asunto, cuerpo, tipo, enviado)
+    VALUES (?, ?, ?, ?, ?, 'briefing', 0)`,
   ).run(id, ctx.persona_id, destinatario, asunto, cuerpoHtml);
 
-  // Priority 1: Google Gmail API
-  if (isGoogleEnabled() && persona?.email) {
+  // Priority 1: Workspace provider
+  if (isWorkspaceEnabled() && persona?.email) {
     try {
-      const gmail = getGmailClient(persona.email);
-      const raw = Buffer.from(
-        `From: ${persona.email}\r\nTo: ${destinatario}\r\nSubject: ${asunto}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${wrapEmailHtml(cuerpoHtml)}`,
-      ).toString("base64url");
-      await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+      await getProvider().sendMail(
+        persona.email,
+        destinatario,
+        asunto,
+        wrapEmailHtml(cuerpoHtml),
+      );
       const timestamp = now();
       db.prepare(
         "UPDATE email_log SET enviado = 1, fecha_enviado = ? WHERE id = ?",
       ).run(timestamp, id);
-      let mensaje = `Briefing enviado via Gmail a ${destinatario}`;
+      let mensaje = `Briefing enviado a ${destinatario}`;
       if (incluirEquipo) mensaje += " y equipo";
       return JSON.stringify({ ok: true, email_id: id, mensaje });
     } catch (err: any) {
       db.prepare("UPDATE email_log SET error = ? WHERE id = ?").run(
-        `Gmail error: ${err.message?.slice(0, 200) ?? "unknown"}`,
+        `Send error: ${err.message?.slice(0, 200) ?? "unknown"}`,
         id,
       );
       return JSON.stringify({
-        error: `Error enviando briefing via Gmail: ${err.message?.slice(0, 200) ?? "unknown"}`,
+        error: `Error enviando briefing: ${err.message?.slice(0, 200) ?? "unknown"}`,
       });
     }
   }
 
-  // Priority 2: SMTP (stub — transport not implemented yet)
+  // Priority 2: SMTP (stub)
   if (isEmailEnabled()) {
     db.prepare("UPDATE email_log SET error = ? WHERE id = ?").run(
       "SMTP transport not implemented — saved as draft",

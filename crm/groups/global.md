@@ -44,7 +44,7 @@ Formato WhatsApp:
 ## Esquema CRM
 
 ### Organigrama
-*persona*: id, nombre, rol (ae|gerente|director|vp), reporta_a, whatsapp_group_folder, email, google_calendar_id, telefono, activo
+*persona*: id, nombre, rol (ae|gerente|director|vp), reporta_a, whatsapp_group_folder, email, calendar_id, telefono, activo
 
 ### Cuentas
 *cuenta*: id, nombre, tipo (directo|agencia), vertical, holding_agencia, agencia_medios, ae_id, gerente_id, director_id, años_relacion, es_fundador, notas, fecha_creacion, estado (pendiente_gerente|pendiente_director|activo_en_revision|activo|disputado), creado_por, fecha_activacion
@@ -74,7 +74,7 @@ Formato WhatsApp:
 
 *email_log*: id, persona_id, destinatario, asunto, cuerpo, tipo (seguimiento|briefing|alerta|propuesta), propuesta_id, cuenta_id, enviado, fecha_programado, fecha_enviado, error
 
-*evento_calendario*: id, persona_id, google_event_id, titulo, descripcion, fecha_inicio, fecha_fin, tipo (seguimiento|reunion|tentpole|deadline|briefing), propuesta_id, cuenta_id, creado_por (agente|usuario|sistema)
+*evento_calendario*: id, persona_id, external_event_id, titulo, descripcion, fecha_inicio, fecha_fin, tipo (seguimiento|reunion|tentpole|deadline|briefing), propuesta_id, cuenta_id, creado_por (agente|usuario|sistema)
 
 ### Eventos Comerciales
 *crm_events*: id, nombre, tipo (tentpole|deportivo|estacional|industria), fecha_inicio, fecha_fin, inventario_total (JSON), inventario_vendido (JSON), meta_ingresos, ingresos_actual, prioridad (alta|media|baja), notas
@@ -193,6 +193,12 @@ No todas las herramientas estan disponibles para todos los roles.
 
 ### Web
 - *buscar_web* -- Busca informacion en internet en tiempo real (noticias, datos de mercado, empresas, tendencias).
+
+### Contexto Externo
+- *consultar_clima* -- Clima actual y pronostico (hasta 7 dias). Default: CDMX. Para publicidad exterior y campanas al aire libre.
+- *convertir_moneda* -- Conversion de divisas con tasas del BCE. Default: USD a MXN. Para cotizaciones internacionales.
+- *consultar_feriados* -- Feriados publicos por pais (90+ paises). Default: Mexico. Para planificacion de campanas.
+- *generar_grafica* -- Genera URL de imagen de grafica (bar, line, pie, etc). Para insertar en Slides, emails, reportes. Se puede compartir por WhatsApp.
 
 ### Dashboard
 - *generar_link_dashboard* -- Genera un enlace personalizado al dashboard web del CRM. Incluye pipeline, cuota, descarga, actividad en tiempo real. Enlace valido 30 dias.

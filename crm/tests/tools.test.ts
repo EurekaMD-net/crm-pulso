@@ -849,7 +849,7 @@ describe("Gmail tools graceful degradation", () => {
     const result = JSON.parse(
       await executeTool("buscar_emails", { query: "test" }, ctx),
     );
-    expect(result.error).toContain("Gmail no configurado");
+    expect(result.error).toContain("Correo no configurado");
   });
 
   it("leer_email returns error without Google configured", async () => {
@@ -858,7 +858,7 @@ describe("Gmail tools graceful degradation", () => {
     const result = JSON.parse(
       await executeTool("leer_email", { email_id: "abc123" }, ctx),
     );
-    expect(result.error).toContain("Gmail no configurado");
+    expect(result.error).toContain("Correo no configurado");
   });
 
   it("crear_borrador_email returns error without Google configured", async () => {
@@ -875,7 +875,7 @@ describe("Gmail tools graceful degradation", () => {
         ctx,
       ),
     );
-    expect(result.error).toContain("Gmail no configurado");
+    expect(result.error).toContain("Correo no configurado");
   });
 });
 
@@ -886,7 +886,7 @@ describe("Drive tools graceful degradation", () => {
     const result = JSON.parse(
       await executeTool("listar_archivos_drive", {}, ctx),
     );
-    expect(result.error).toContain("Google Drive no configurado");
+    expect(result.error).toContain("Archivos no configurados");
   });
 
   it("leer_archivo_drive returns error without Google configured", async () => {
@@ -895,6 +895,6 @@ describe("Drive tools graceful degradation", () => {
     const result = JSON.parse(
       await executeTool("leer_archivo_drive", { archivo_id: "abc123" }, ctx),
     );
-    expect(result.error).toContain("Google Drive no configurado");
+    expect(result.error).toContain("Archivos no configurados");
   });
 });
