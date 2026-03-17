@@ -1,7 +1,7 @@
 /**
  * CRM Schema Definitions — Domain-specific for media ad sales
  *
- * 24 tables. All created in the same SQLite database used by the NanoClaw
+ * 25 tables. All created in the same SQLite database used by the NanoClaw
  * engine (via getDatabase() export).
  *
  * Tables:
@@ -23,6 +23,7 @@
  *   - aprobacion_registro: Approval workflow audit trail
  *   - insight_comercial: Overnight commercial insight engine
  *   - patron_detectado: Cross-agent lateral pattern detection
+ *   - feedback_propuesta: Draft-vs-final delta tracking for learning
  */
 
 import type Database from "better-sqlite3";
@@ -52,6 +53,8 @@ export const CRM_TABLES = [
   "aprobacion_registro",
   "insight_comercial",
   "patron_detectado",
+  "feedback_propuesta",
+  "perfil_usuario",
 ] as const;
 
 export type CrmTableName = (typeof CRM_TABLES)[number];
@@ -464,7 +467,7 @@ export function createCrmSchema(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS crm_memories (
       id TEXT PRIMARY KEY,
       persona_id TEXT REFERENCES persona(id),
-      banco TEXT NOT NULL CHECK(banco IN ('crm-sales','crm-accounts','crm-team')),
+      banco TEXT NOT NULL CHECK(banco IN ('crm-sales','crm-accounts','crm-team','crm-user')),
       contenido TEXT NOT NULL,
       etiquetas TEXT,
       fecha_creacion TEXT DEFAULT (datetime('now'))
@@ -597,10 +600,86 @@ export function createCrmSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_patron_tipo ON patron_detectado(tipo);
     CREATE INDEX IF NOT EXISTS idx_patron_nivel ON patron_detectado(nivel_minimo);
     CREATE INDEX IF NOT EXISTS idx_patron_activo ON patron_detectado(activo);
+
+    -- 25. FEEDBACK_PROPUESTA (draft-vs-final delta tracking)
+    CREATE TABLE IF NOT EXISTS feedback_propuesta (
+      id TEXT PRIMARY KEY,
+      propuesta_id TEXT NOT NULL REFERENCES propuesta(id),
+      insight_id TEXT,
+      ae_id TEXT NOT NULL REFERENCES persona(id),
+      borrador_titulo TEXT,
+      borrador_valor REAL,
+      borrador_medios TEXT,
+      borrador_razonamiento TEXT,
+      final_titulo TEXT,
+      final_valor REAL,
+      final_medios TEXT,
+      delta_valor REAL,
+      delta_descripcion TEXT,
+      resultado TEXT CHECK(resultado IN (
+        'aceptado_sin_cambios','aceptado_con_cambios','descartado'
+      )),
+      fecha_borrador TEXT,
+      fecha_accion TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_feedback_ae ON feedback_propuesta(ae_id);
+    CREATE INDEX IF NOT EXISTS idx_feedback_resultado ON feedback_propuesta(resultado);
   `);
 
   // Note: No FTS5 delete trigger. External content FTS5 tables corrupt when
   // the delete command fires for rows that were never indexed (e.g. test data).
   // Orphaned FTS5 entries are harmless — the JOIN in searchDocumentsKeyword
   // filters them out since the source crm_embeddings row no longer exists.
+
+  // -------------------------------------------------------------------------
+  // 26. PERFIL_USUARIO (structured user profile for agent personalization)
+  // -------------------------------------------------------------------------
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS perfil_usuario (
+      persona_id TEXT PRIMARY KEY REFERENCES persona(id),
+      estilo_comunicacion TEXT,
+      preferencias_briefing TEXT,
+      horario_trabajo TEXT,
+      datos_personales TEXT,
+      motivadores TEXT,
+      notas TEXT,
+      fecha_actualizacion TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
+  // -------------------------------------------------------------------------
+  // Migration: add 'crm-user' to crm_memories banco CHECK constraint
+  // -------------------------------------------------------------------------
+  const memSql = (
+    db
+      .prepare(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='crm_memories'",
+      )
+      .get() as { sql: string } | undefined
+  )?.sql;
+  if (memSql && !memSql.includes("crm-user")) {
+    db.pragma("foreign_keys = OFF");
+    db.exec("DROP TABLE IF EXISTS crm_memories_new");
+    db.exec(`
+      CREATE TABLE crm_memories_new (
+        id TEXT PRIMARY KEY,
+        persona_id TEXT REFERENCES persona(id),
+        banco TEXT NOT NULL CHECK(banco IN ('crm-sales','crm-accounts','crm-team','crm-user')),
+        contenido TEXT NOT NULL,
+        etiquetas TEXT,
+        fecha_creacion TEXT DEFAULT (datetime('now'))
+      )
+    `);
+    db.exec(
+      `INSERT INTO crm_memories_new (id, persona_id, banco, contenido, etiquetas, fecha_creacion)
+       SELECT id, persona_id, banco, contenido, etiquetas, fecha_creacion FROM crm_memories`,
+    );
+    db.exec("DROP TABLE crm_memories");
+    db.exec("ALTER TABLE crm_memories_new RENAME TO crm_memories");
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_crm_memories_persona ON crm_memories(persona_id);
+      CREATE INDEX IF NOT EXISTS idx_crm_memories_banco ON crm_memories(banco);
+    `);
+    db.pragma("foreign_keys = ON");
+  }
 }

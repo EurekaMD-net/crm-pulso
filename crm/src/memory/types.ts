@@ -6,7 +6,7 @@
  */
 
 /** Memory bank identifiers for CRM domains. */
-export type MemoryBank = "crm-sales" | "crm-accounts" | "crm-team";
+export type MemoryBank = "crm-sales" | "crm-accounts" | "crm-team" | "crm-user";
 
 /** Options for storing a memory. */
 export interface RetainOptions {

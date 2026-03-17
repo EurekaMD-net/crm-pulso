@@ -11,7 +11,7 @@ Agentic CRM for media ad sales. NanoClaw engine at `engine/`, all CRM code at `c
 | File | Purpose |
 |------|---------|
 | `crm/src/bootstrap.ts` | CRM init: creates schema, registers hooks |
-| `crm/src/schema.ts` | 24 CRM tables (15 core + crm_events + docs/embeddings/vec/fts + crm_memories + 3 relationship tables + aprobacion_registro + insight_comercial) |
+| `crm/src/schema.ts` | 26 CRM tables (15 core + crm_events + docs/embeddings/vec/fts + crm_memories + 3 relationship tables + aprobacion_registro + insight_comercial + patron_detectado + feedback_propuesta + perfil_usuario) |
 | `crm/src/hierarchy.ts` | isManagerOf, isDirectorOf, isVp helpers |
 | `crm/src/ipc-handlers.ts` | CRM IPC handler (crm_registrar_actividad, warmth_recompute, etc.) |
 | `crm/src/doc-sync.ts` | Document sync + hybrid RAG (vector KNN + FTS5 keyword + RRF fusion) |
@@ -19,12 +19,16 @@ Agentic CRM for media ad sales. NanoClaw engine at `engine/`, all CRM code at `c
 | `crm/src/warmth.ts` | Executive relationship warmth scoring (recency + frequency + quality) |
 | `crm/src/warmth-scheduler.ts` | Nightly warmth recomputation (4 AM MX via IPC) |
 | `crm/src/memory/` | Pluggable memory service (Hindsight sidecar or SQLite fallback) |
-| `crm/src/tools/index.ts` | Tool registry: 59 tools, role-based filtering |
+| `crm/src/tools/index.ts` | Tool registry: 65 tools, role-based filtering |
+| `crm/src/tools/perfil.ts` | User profile tool (actualizar_perfil + getUserProfile + formatProfileSection) |
+| `crm/src/package-builder.ts` | Creative package composition (historical mix, peers, inventory, rate cards) |
+| `crm/src/tools/package-tools.ts` | 3 package tools (construir_paquete, consultar_oportunidades_inventario, comparar_paquetes) |
 | `crm/src/tools/aprobaciones.ts` | 6 approval workflow tools (solicitar, aprobar, rechazar, impugnar, pendientes) |
-| `crm/src/tools/insight-tools.ts` | 3 insight tools (consultar_insights, actuar_insight, consultar_insights_equipo) |
+| `crm/src/tools/insight-tools.ts` | 5 insight/draft tools (consultar_insights, actuar_insight, consultar_insights_equipo, revisar_borrador, modificar_borrador) |
 | `crm/src/overnight-engine.ts` | 5 overnight analyzers + cross-agent pattern detection |
 | `crm/src/proposal-drafter.ts` | Insight → borrador_agente propuesta (value/media derivation) |
 | `crm/src/cross-intelligence.ts` | 5 cross-agent pattern detectors (vertical, holding, inventory, winloss, concentration) |
+| `crm/src/feedback-engine.ts` | Draft-vs-final delta tracking for system learning |
 | `crm/src/analysis/` | Shared analysis modules (peer-comparison.ts, media-mix.ts) |
 | `crm/src/tools/relaciones.ts` | 7 Dir/VP relationship tools (warmth, milestones, interactions) |
 | `crm/src/tools/memoria.ts` | 3 memory tools (guardar, buscar, reflexionar) |
@@ -32,10 +36,10 @@ Agentic CRM for media ad sales. NanoClaw engine at `engine/`, all CRM code at `c
 | `crm/src/google-auth.ts` | Google JWT auth: Gmail (send+compose+read), Calendar, Drive, Slides API, Sheets API |
 | `crm/src/dashboard/server.ts` | Dashboard HTTP server + router (7 API endpoints) |
 | `crm/groups/global.md` | Global CLAUDE.md template (schema, queries, rules, scope guard, disambiguation) |
-| `crm/groups/ae.md` | AE persona template (34 tools) |
-| `crm/groups/manager.md` | Manager persona template (28 tools) |
-| `crm/groups/director.md` | Director persona template (38 tools, incl. 7 relationship + 4 email) |
-| `crm/groups/vp.md` | VP persona template (36 tools, incl. 7 relationship + 4 email) |
+| `crm/groups/ae.md` | AE persona template (46 tools) |
+| `crm/groups/manager.md` | Manager persona template (49 tools) |
+| `crm/groups/director.md` | Director persona template (58 tools, incl. 7 relationship + 4 email) |
+| `crm/groups/vp.md` | VP persona template (56 tools, incl. 7 relationship + 4 email) |
 
 ### Engine Hook Points (DO NOT modify beyond these 5 files)
 
@@ -97,8 +101,8 @@ git subtree pull --prefix=engine https://github.com/qwibitai/nanoclaw.git main -
 ### Message Flow
 
 ```
-WhatsApp → engine (NanoClaw) → Direct tools (59 CRM tools via inference adapter)
-                                    ├── Role-based tool filtering (AE:42, Ger:44, Dir:52, VP:50)
+WhatsApp → engine (NanoClaw) → Direct tools (65 CRM tools via inference adapter)
+                                    ├── Role-based tool filtering (AE:46, Ger:49, Dir:58, VP:56)
                                     ├── Google Workspace (Gmail, Drive, Calendar)
                                     ├── Hybrid RAG (vector + FTS5 keyword + RRF fusion)
                                     ├── Long-term memory (Hindsight or SQLite fallback)
@@ -126,7 +130,7 @@ WhatsApp → engine (NanoClaw) → Direct tools (59 CRM tools via inference adap
 ## Testing
 
 ```bash
-npm run test         # All tests (710 CRM + 640 engine)
+npm run test         # All tests (783 CRM + 640 engine)
 ```
 
 Tests live in:

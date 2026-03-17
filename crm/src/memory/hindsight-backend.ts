@@ -156,4 +156,15 @@ const BANK_CONFIGS: Record<
       "Enfocarse en patrones y anomalias de rendimiento. Consolidar metricas rutinarias. " +
       "Retener observaciones de coaching y sus resultados a largo plazo.",
   },
+  "crm-user": {
+    mission:
+      "Recordar preferencias, estilo de comunicacion, datos personales y patrones de " +
+      "comportamiento del usuario (el vendedor que habla con el agente). Incluye: " +
+      "como prefiere recibir informacion, horarios, familia, hobbies, fechas importantes, " +
+      "y correcciones de estilo que ha hecho al agente.",
+    disposition:
+      "Priorizar preferencias de comunicacion y correcciones de estilo — estas afectan " +
+      "cada interaccion. Consolidar datos personales redundantes. Mantener actualizado " +
+      "cuando el usuario corrija informacion previa.",
+  },
 };

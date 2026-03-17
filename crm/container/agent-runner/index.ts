@@ -28,6 +28,10 @@ import {
   executeTool,
   getToolsForRole,
 } from "../../src/tools/index.js";
+import {
+  getUserProfile,
+  formatProfileSection,
+} from "../../src/tools/perfil.js";
 import { inferWithTools } from "../../src/inference-adapter.js";
 import type {
   ChatMessage,
@@ -312,6 +316,18 @@ function buildSystemPrompt(groupFolder: string, persona: Persona): string {
 
   // Org tree injection
   parts.push(buildOrgContext(persona));
+
+  // User profile injection (structured profile from perfil_usuario table)
+  try {
+    const db = getDatabase();
+    const profile = getUserProfile(db, persona.id);
+    if (profile) {
+      const section = formatProfileSection(profile);
+      if (section) parts.push(section);
+    }
+  } catch {
+    // Profile not available — non-fatal, skip silently
+  }
 
   return parts.join("\n\n---\n\n");
 }

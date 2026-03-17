@@ -39,6 +39,12 @@ import {
   crear_documento_drive,
 } from "./drive.js";
 import { buscar_web } from "./web-search.js";
+import {
+  construir_paquete,
+  consultar_oportunidades_inventario,
+  comparar_paquetes,
+} from "./package-tools.js";
+import { actualizar_perfil } from "./perfil.js";
 import { analizar_winloss, analizar_tendencias } from "./analytics.js";
 import { recomendar_crosssell } from "./crosssell.js";
 import { generar_link_dashboard } from "./dashboard.js";
@@ -76,6 +82,10 @@ import {
   modificar_borrador,
 } from "./insight-tools.js";
 import { consultar_patrones, desactivar_patron } from "./pattern-tools.js";
+import {
+  consultar_feedback,
+  generar_reporte_aprendizaje,
+} from "./feedback-tools.js";
 
 // ---------------------------------------------------------------------------
 // Tool context — passed to every tool handler
@@ -1019,7 +1029,7 @@ const TOOL_GUARDAR_OBSERVACION: ToolDefinition = {
         },
         banco: {
           type: "string",
-          enum: ["ventas", "cuentas", "equipo"],
+          enum: ["ventas", "cuentas", "equipo", "usuario"],
           description:
             "En que banco guardar. Default: ventas. 'cuentas' para inteligencia de cuentas, 'equipo' para patrones de gestion (solo gerentes+).",
         },
@@ -1062,7 +1072,7 @@ const TOOL_BUSCAR_MEMORIA: ToolDefinition = {
         },
         banco: {
           type: "string",
-          enum: ["ventas", "cuentas", "equipo"],
+          enum: ["ventas", "cuentas", "equipo", "usuario"],
           description: "En que banco buscar. Default: ventas.",
         },
         limite: {
@@ -1098,7 +1108,7 @@ const TOOL_REFLEXIONAR_MEMORIA: ToolDefinition = {
         },
         banco: {
           type: "string",
-          enum: ["ventas", "cuentas", "equipo"],
+          enum: ["ventas", "cuentas", "equipo", "usuario"],
           description: "En que banco reflexionar. Default: ventas.",
         },
       },
@@ -1791,9 +1801,213 @@ const TOOL_DESACTIVAR_PATRON: ToolDefinition = {
   },
 };
 
+const TOOL_CONSULTAR_FEEDBACK: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "consultar_feedback",
+    description:
+      "Metricas de rendimiento de los borradores del agente por Ejecutivo.\n" +
+      "Muestra: tasa de engagement sano (aceptados con cambios), tasa sin cambios (rubber-stamping), tasa de descarte.\n\n" +
+      "USAR CUANDO:\n" +
+      "- Quieres medir la adopcion de la inteligencia comercial por tu equipo\n" +
+      "- Necesitas coaching signals: Ejecutivos que aceptan todo sin revisar o que descartan todo",
+    parameters: {
+      type: "object",
+      properties: {
+        dias: { type: "number", description: "Periodo en dias (default 30)" },
+      },
+    },
+  },
+};
+
+const TOOL_GENERAR_REPORTE_APRENDIZAJE: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "generar_reporte_aprendizaje",
+    description:
+      "Reporte de aprendizaje del sistema: patrones de correccion mas frecuentes, delta de valor promedio, " +
+      "tendencia de mejora, y estadisticas de descarte.\n\n" +
+      "USAR CUANDO:\n" +
+      "- Quieres entender que aprende el sistema de las correcciones de los Ejecutivos\n" +
+      "- En revisiones trimestrales para medir la mejora del sistema",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Package builder tools
+// ---------------------------------------------------------------------------
+
+const TOOL_CONSTRUIR_PAQUETE: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "construir_paquete",
+    description:
+      "Construye un paquete de medios optimizado para una cuenta.\n\n" +
+      "Usa historial de compra, benchmark de peers, inventario de evento (si aplica), " +
+      "y tarjetas de tarifas para generar un mix recomendado.\n" +
+      "Devuelve paquete principal + alternativa menor (-20%) y mayor (+20%).\n\n" +
+      "USAR CUANDO:\n" +
+      "- Un Ejecutivo necesita armar una propuesta para un cliente\n" +
+      "- Quieres un punto de partida data-driven para una negociacion\n" +
+      "- Necesitas comparar opciones de presupuesto",
+    parameters: {
+      type: "object",
+      properties: {
+        cuenta_nombre: {
+          type: "string",
+          description: "Nombre de la cuenta (cliente/anunciante)",
+        },
+        presupuesto_objetivo: {
+          type: "number",
+          description:
+            "Presupuesto objetivo en pesos. Si no se proporciona, se deriva del historial",
+        },
+        evento_nombre: {
+          type: "string",
+          description:
+            "Nombre del evento para considerar inventario disponible (opcional)",
+        },
+        medios_excluir: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: ["tv_abierta", "ctv", "radio", "digital"],
+          },
+          description: "Medios a excluir del paquete (opcional)",
+        },
+      },
+      required: ["cuenta_nombre"],
+    },
+  },
+};
+
+const TOOL_CONSULTAR_OPORTUNIDADES_INVENTARIO: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "consultar_oportunidades_inventario",
+    description:
+      "Muestra inventario disponible de un evento con sell-through % por medio.\n\n" +
+      "Incluye estado por medio (escaso/limitado/disponible), avance de revenue vs meta, " +
+      "y lista de medios escasos vs disponibles.\n\n" +
+      "USAR CUANDO:\n" +
+      "- Quieres saber que medios quedan disponibles en un evento\n" +
+      "- Necesitas datos de disponibilidad para armar una propuesta\n" +
+      "- Quieres ver el avance de venta de un evento",
+    parameters: {
+      type: "object",
+      properties: {
+        evento_nombre: {
+          type: "string",
+          description: "Nombre del evento a consultar",
+        },
+      },
+      required: ["evento_nombre"],
+    },
+  },
+};
+
+const TOOL_COMPARAR_PAQUETES: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "comparar_paquetes",
+    description:
+      "Compara 2-3 configuraciones de paquete lado a lado.\n\n" +
+      "Muestra diferencias por medio (porcentaje y monto) y totales.\n" +
+      "Los medios se ordenan por mayor diferencia entre paquetes.\n\n" +
+      "USAR CUANDO:\n" +
+      "- Tienes varias opciones de paquete y quieres compararlas\n" +
+      "- Despues de construir_paquete, quieres comparar las alternativas\n" +
+      "- Un cliente pidio ver opciones diferentes",
+    parameters: {
+      type: "object",
+      properties: {
+        paquete_a: {
+          type: "object",
+          description:
+            "Primer paquete: {presupuesto_total, items: [{medio, porcentaje, monto, razon}]}",
+        },
+        paquete_b: {
+          type: "object",
+          description: "Segundo paquete (mismo formato)",
+        },
+        paquete_c: {
+          type: "object",
+          description: "Tercer paquete opcional (mismo formato)",
+        },
+      },
+      required: ["paquete_a", "paquete_b"],
+    },
+  },
+};
+
+const PACKAGE_TOOLS: ToolDefinition[] = [
+  TOOL_CONSTRUIR_PAQUETE,
+  TOOL_CONSULTAR_OPORTUNIDADES_INVENTARIO,
+  TOOL_COMPARAR_PAQUETES,
+];
+
+// ---------------------------------------------------------------------------
+// User profile tool
+// ---------------------------------------------------------------------------
+
+const TOOL_ACTUALIZAR_PERFIL: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "actualizar_perfil",
+    description:
+      "Actualiza un campo del perfil de tu usuario.\n\n" +
+      "El perfil se inyecta automaticamente en cada conversacion para que " +
+      "puedas adaptar tu estilo y respuestas.\n\n" +
+      "USAR CUANDO:\n" +
+      "- El usuario expresa preferencias de comunicacion ('se breve', 'dame mas detalle')\n" +
+      "- Comparte datos personales (familia, hobbies, cumpleanos)\n" +
+      "- Notas patrones de horario ('siempre me escribe a las 7am')\n" +
+      "- Detectas motivadores ('le gustan los rankings', 'es competitivo')\n" +
+      "- Te corrige el estilo ('no me digas jefe', 'sin introducciones')\n\n" +
+      "IMPORTANTE: Hazlo silenciosamente. NUNCA anuncies que estas guardando informacion del perfil.",
+    parameters: {
+      type: "object",
+      properties: {
+        campo: {
+          type: "string",
+          enum: [
+            "estilo_comunicacion",
+            "preferencias_briefing",
+            "horario_trabajo",
+            "datos_personales",
+            "motivadores",
+            "notas",
+          ],
+          description:
+            "Campo a actualizar. estilo_comunicacion: como prefiere recibir informacion. " +
+            "preferencias_briefing: formato de briefings. horario_trabajo: patron de horario. " +
+            "datos_personales: familia, hobbies, fechas. motivadores: que lo motiva. " +
+            "notas: cualquier otra observacion.",
+        },
+        valor: {
+          type: "string",
+          description:
+            "Nuevo valor para el campo. Incluye el contenido existente si solo agregas informacion.",
+        },
+      },
+      required: ["campo", "valor"],
+    },
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Role-based tool sets
 // ---------------------------------------------------------------------------
+
+const FEEDBACK_TOOLS: ToolDefinition[] = [TOOL_CONSULTAR_FEEDBACK];
+const FEEDBACK_ADMIN_TOOLS: ToolDefinition[] = [
+  TOOL_CONSULTAR_FEEDBACK,
+  TOOL_GENERAR_REPORTE_APRENDIZAJE,
+];
 
 const PATTERN_TOOLS: ToolDefinition[] = [TOOL_CONSULTAR_PATRONES];
 const PATTERN_ADMIN_TOOLS: ToolDefinition[] = [
@@ -1853,6 +2067,8 @@ const AE_TOOLS: ToolDefinition[] = [
   TOOL_SOLICITAR_CONTACTO,
   TOOL_IMPUGNAR_REGISTRO,
   ...INSIGHT_TOOLS,
+  ...PACKAGE_TOOLS,
+  TOOL_ACTUALIZAR_PERFIL,
 ];
 
 const APPROVAL_TOOLS: ToolDefinition[] = [
@@ -1900,6 +2116,9 @@ const GERENTE_TOOLS: ToolDefinition[] = [
   ...APPROVAL_TOOLS,
   ...INSIGHT_TEAM_TOOLS,
   ...PATTERN_TOOLS,
+  ...FEEDBACK_TOOLS,
+  ...PACKAGE_TOOLS,
+  TOOL_ACTUALIZAR_PERFIL,
 ];
 
 const RELATIONSHIP_TOOLS: ToolDefinition[] = [
@@ -1949,6 +2168,9 @@ const DIRECTOR_TOOLS: ToolDefinition[] = [
   ...APPROVAL_TOOLS,
   ...INSIGHT_TEAM_TOOLS,
   ...PATTERN_ADMIN_TOOLS,
+  ...FEEDBACK_ADMIN_TOOLS,
+  ...PACKAGE_TOOLS,
+  TOOL_ACTUALIZAR_PERFIL,
 ];
 
 const VP_TOOLS: ToolDefinition[] = [
@@ -1986,6 +2208,9 @@ const VP_TOOLS: ToolDefinition[] = [
   ...APPROVAL_TOOLS,
   ...INSIGHT_TEAM_TOOLS,
   ...PATTERN_ADMIN_TOOLS,
+  ...FEEDBACK_ADMIN_TOOLS,
+  ...PACKAGE_TOOLS,
+  TOOL_ACTUALIZAR_PERFIL,
 ];
 
 export function getToolsForRole(
@@ -2067,6 +2292,12 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   modificar_borrador,
   consultar_patrones,
   desactivar_patron,
+  consultar_feedback,
+  generar_reporte_aprendizaje,
+  construir_paquete,
+  consultar_oportunidades_inventario,
+  comparar_paquetes,
+  actualizar_perfil,
 };
 
 export async function executeTool(

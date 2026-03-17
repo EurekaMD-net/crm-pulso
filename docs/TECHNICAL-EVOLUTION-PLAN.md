@@ -11,37 +11,40 @@
 
 The crm-azteca repo is already a working agentic CRM with substantial infrastructure. This plan is not a rewrite — it's a **targeted evolution** that transforms a capable system into the organizational nervous system described in VISION.md.
 
-### What Already Exists (crm-azteca @ 48 commits)
+### What Already Exists (crm-azteca — Phases 1–11 complete)
 
 | Layer | What's Built | Files |
 |-------|-------------|-------|
-| **Schema** | 17 SQLite tables: persona, cuenta, contacto, contrato, descarga, propuesta, actividad, cuota, inventario, alerta_log, email_log, evento_calendario, crm_events, crm_documents, crm_embeddings, crm_vec_embeddings | `crm/src/schema.ts` |
-| **Tools** | 31 tools across 17 modules — activity logging, pipeline mgmt, Google Workspace (Gmail, Drive, Calendar), event tracking, RAG search (sqlite-vec), web search (Brave), analytics, cross-sell, swarm analysis, follow-up reminders | `crm/src/tools/` |
-| **Hierarchy** | Full org chart traversal + role-based access control (AE/Manager/Director/VP) | `crm/src/hierarchy.ts` |
-| **Proactive workflows** | Morning briefings (staggered by role), weekly summaries, hourly follow-up reminders, alert evaluation (6 evaluators + event countdown), document sync (Drive -> RAG) | `crm/src/briefing-seeds.ts`, `crm/src/alerts.ts`, `crm/src/followup-scheduler.ts` |
+| **Schema** | 25 SQLite tables: 15 core + crm_events + docs/embeddings/vec/fts + crm_memories + 3 relationship + aprobacion_registro + insight_comercial + patron_detectado + feedback_propuesta | `crm/src/schema.ts` |
+| **Tools** | 64 tools across 20+ modules — activity logging, pipeline mgmt, Google Workspace (Gmail, Drive, Calendar, Slides, Sheets), event tracking, RAG search (hybrid: sqlite-vec + FTS5), web search (Brave), analytics, cross-sell, swarm analysis, follow-up reminders, 3 memory tools, 7 relationship tools, 6 approval tools, 5 insight/draft tools, 2 pattern tools, 2 feedback tools, 3 package builder tools | `crm/src/tools/` |
+| **Hierarchy** | Full org chart traversal + role-based access control (AE:45, Ger:48, Dir:57, VP:55) | `crm/src/hierarchy.ts` |
+| **Proactive workflows** | Morning briefings (staggered by role), weekly summaries, hourly follow-up reminders, alert evaluation (8 evaluators + event countdown), document sync (Drive -> RAG), overnight commercial analysis (5 analyzers), nightly warmth recomputation | `crm/src/briefing-seeds.ts`, `crm/src/alerts.ts`, `crm/src/overnight-engine.ts`, `crm/src/warmth-scheduler.ts` |
+| **Creative Intelligence** | Overnight analysis engine (5 analyzers), proposal drafting, cross-agent pattern detection (5 detectors), feedback loop (draft-vs-final learning), package builder (historical mix + peer benchmark + inventory) | `crm/src/overnight-engine.ts`, `crm/src/proposal-drafter.ts`, `crm/src/cross-intelligence.ts`, `crm/src/feedback-engine.ts`, `crm/src/package-builder.ts` |
 | **Escalation** | Real-time cascade on activity insertion: AE->Manager->Director->VP with 4 evaluators | `crm/src/escalation.ts` |
-| **RAG** | sqlite-vec KNN search, Dashscope text-embedding-v3 (1024d), Google Drive sync pipeline | `crm/src/doc-sync.ts`, `crm/src/embedding.ts` |
-| **Dashboard** | REST API with auth + 6 endpoints, short-code WhatsApp delivery | `crm/src/dashboard/` |
+| **RAG** | Hybrid: sqlite-vec KNN + FTS5 keyword search, reciprocal rank fusion (k=60), Dashscope text-embedding-v3 (1024d), Google Drive sync pipeline | `crm/src/doc-sync.ts`, `crm/src/embedding.ts` |
+| **Memory** | Pluggable service (Hindsight sidecar or SQLite fallback), 3 banks (crm-sales, crm-accounts, crm-team), circuit breaker | `crm/src/memory/` |
+| **Dashboard** | REST API with auth + 7 endpoints + VP glance page, short-code WhatsApp delivery | `crm/src/dashboard/` |
 | **Infra** | Container builds, systemd services, crm-ctl CLI, IPC handlers, team registration (CSV/JSON) | various |
-| **Tests** | 481 tests across 22 files | `crm/tests/` |
-| **Personas** | CLAUDE.md templates per role (AE, Manager, Director, VP) | `crm/groups/` |
+| **Tests** | 761 tests across 35 files | `crm/tests/` |
+| **Personas** | CLAUDE.md templates per role (AE, Manager, Director, VP) + 3 team templates | `crm/groups/` |
 
-### What the Vision Demands That Doesn't Exist Yet
+### What the Vision Demands — Status
 
-| Vision Capability | Gap | Complexity |
-|------------------|-----|------------|
-| **Voice-first input** | No voice note transcription pipeline | Medium |
-| **Overnight analysis -> autonomous proposals** | Briefings exist but don't generate proposals | High |
-| **End-of-day wrap-up** | No scheduled EOD workflow | Low |
-| **Relationship Intelligence Engine** | No executive relationship tracking (milestones, warmth, contact opportunities) | High |
-| **Mood & momentum tracking** | No sentiment extraction from AE interactions | Medium |
-| **Enhanced client knowledge graph** | contacto table exists but lacks structured relationship intelligence | Medium |
-| **External data connectors** | Only Google Workspace + Brave. Missing: cubo, SharePoint, contracts, inventory, programming schedule | High (per connector) |
-| **Creative package builder** | Cross-sell recommendations exist but no inventory-optimized package composition | High |
-| **Cross-agent intelligence** | Escalation cascade exists but no lateral intelligence sharing between peer agents | Medium |
-| **A2A protocol foundation** | No structured API for machine-to-machine interaction | Medium |
-| **Confidence calibration** | Agent doesn't express uncertainty levels on suggestions | Low |
-| **Adaptive personality** | Same persona for all AEs regardless of their style | Low |
+| Vision Capability | Status | Phase |
+|------------------|--------|-------|
+| **Voice-first input** | **Done** — Groq Whisper transcription pipeline | 8.1 |
+| **End-of-day wrap-up** | **Done** — 6:30 PM scheduled workflow + consultar_resumen_dia | 8.2 |
+| **Mood & momentum tracking** | **Done** — Sentiment extraction + consultar_sentimiento_equipo | 8.3 |
+| **Confidence calibration** | **Done** — dataFreshness metadata, calibration sections in all templates | 8.4 |
+| **Enhanced briefings** | **Done** — generar_briefing with 4 role dispatchers | 8.5 |
+| **Relationship Intelligence Engine** | **Done** — 3 tables, 7 tools, warmth engine, nightly recomputation | 9 |
+| **Enhanced client knowledge graph** | **Done** — 6 new contacto columns, executive milestones | 9 |
+| **Overnight analysis -> autonomous proposals** | **Done** — 5 analyzers, proposal drafting, feedback loop | 11 |
+| **Creative package builder** | **Done** — Historical mix + peers + inventory + rate cards, 3 tools | 11.5 |
+| **Cross-agent intelligence** | **Done** — 5 pattern detectors, 2 tools | 11.3 |
+| **External data connectors** | Planned — Missing: cubo, SharePoint, contracts, inventory, programming schedule | 12 |
+| **A2A protocol foundation** | Planned — Structured action layer + REST API | 13 |
+| **Adaptive personality** | Planned — Per-AE preferences | 14 |
 
 ---
 
@@ -302,57 +305,24 @@ See `docs/WORKSPACE-ABSTRACTION-PLAN.md` for full implementation detail.
 
 ---
 
-### PHASE 11: Creative Intelligence (Weeks 9-14)
+### PHASE 11: Creative Intelligence (Weeks 9-14) — COMPLETE
 > *Goal: The agent thinks commercially — proposing deals, not just tracking them*
+> **Status: All 5 sessions complete. +12 tools, +3 tables, 101 new tests.**
 
-#### 11.1 Overnight Analysis Engine
+#### 11.1 Overnight Analysis Engine (Done)
+5 analyzers (calendar, inventory, gap, cross-sell, market), `insight_comercial` table, shared analysis modules (`analysis/media-mix.ts`, `analysis/peer-comparison.ts`), 3 tools (`consultar_insights`, `actuar_insight`, `consultar_insights_equipo`), overnight scheduler (2 AM MX via IPC).
 
-**Nightly pipeline (runs 2-4 a.m.):**
-1. Quota gap analysis per AE
-2. Client opportunity scan (renewals, underspent contracts, descarga gaps, category matches)
-3. Inventory opportunity matching
-4. Proposal drafting (top 2-3 opportunities per AE, stored as `propuesta.estado = 'borrador_agente'`)
+#### 11.2 Proposal Draft Engine (Done)
+`borrador_agente` proposal etapa, `proposal-drafter.ts` (value/media derivation from insight data), `convertir` action in `actuar_insight`, 2 tools (`revisar_borrador`, `modificar_borrador`), +2 columns on propuesta (`agente_razonamiento`, `confianza`).
 
-```sql
-ALTER TABLE propuesta ADD COLUMN agente_razonamiento TEXT;
-ALTER TABLE propuesta ADD COLUMN confianza REAL;
-```
+#### 11.3 Cross-Agent Intelligence (Done)
+5 pattern detectors (vertical trends, holding movements, inventory conflicts, win/loss correlation, concentration risk), `patron_detectado` table, role-scoped visibility (gerente: coaching, director: assignment, VP: strategy), 2 tools (`consultar_patrones`, `desactivar_patron`).
 
-**Claude Code session:** ~4-5 hours. Overnight orchestrator, opportunity matching, proposal generation, schema migration, tests.
+#### 11.4 Feedback Loop (Done)
+`feedback_propuesta` table (draft-vs-final delta tracking), `feedback-engine.ts` (auto-capture on modificar_borrador, learning metrics), 2 tools (`consultar_feedback`, `generar_reporte_aprendizaje`), rubber-stamping detection.
 
-#### 11.2 Creative Package Builder
-
-```
-crm/src/package-builder.ts           — combinatorial package logic
-crm/src/tools/package-tools.ts       — AE/Manager tools
-```
-
-New tools: `build_package`, `query_inventory_opportunities`, `compare_packages`
-
-**Claude Code session:** ~3-4 hours. Package composition logic, tools, tests.
-
-#### 11.3 Cross-Agent Intelligence
-
-```
-crm/src/cross-intelligence.ts        — pattern detection engine
-```
-
-Patterns: holding-level shifts, category trends, competitive signals, win/loss patterns.
-
-```sql
-CREATE TABLE patron_detectado (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tipo TEXT NOT NULL,
-    descripcion TEXT NOT NULL,
-    datos_json TEXT,
-    personas_afectadas TEXT,
-    nivel_minimo TEXT,
-    fecha_deteccion TEXT DEFAULT (datetime('now')),
-    activo INTEGER DEFAULT 1
-);
-```
-
-**Claude Code session:** ~3-4 hours. Pattern detection, new table, briefing injection, tests.
+#### 11.5 Creative Package Builder (Done)
+`package-builder.ts` — composition logic using historical media mix, peer vertical benchmarks, event inventory availability, and rate cards. Generates primary package + ±20% alternatives with reasoning. 3 tools (`construir_paquete`, `consultar_oportunidades_inventario`, `comparar_paquetes`), all roles.
 
 ---
 
@@ -478,19 +448,20 @@ Sub-3s latency, batch job monitoring, index optimization, WAL mode, load testing
 
 ## 2. Schema Evolution Summary
 
-| Phase | Tables Added | Columns Added |
-|-------|-------------|---------------|
-| 8.1 | — | actividad: audio_ref, transcription |
-| 8.3 | — | actividad: sentiment, sentiment_label |
-| 9.1 | relacion_ejecutiva, hito_contacto, interaccion_ejecutiva | — |
-| 9.4 | — | contacto: es_ejecutivo, titulo, organizacion, linkedin_url, notas_personales, fecha_nacimiento |
-| 11.1 | — | propuesta: agente_razonamiento, confianza |
-| 11.3 | patron_detectado | — |
-| 13.1 | accion_agente | — |
-| 13.3 | — | propuesta, contrato, actividad: external_ref |
-| 14.1 | preferencia_agente | — |
+| Phase | Tables Added | Columns Added | Status |
+|-------|-------------|---------------|--------|
+| 8.1 | — | actividad: audio_ref, transcripcion, sentimiento_score, tipo_mensaje | **Done** |
+| Hindsight | crm_memories, crm_fts_embeddings | — | **Done** |
+| 9 | relacion_ejecutiva, hito_contacto, interaccion_ejecutiva | contacto: es_ejecutivo, titulo, organizacion, linkedin_url, notas_personales, fecha_nacimiento | **Done** |
+| Approvals | aprobacion_registro | cuenta/contacto: estado, creado_por, fecha_activacion | **Done** |
+| 11.1-11.2 | insight_comercial | propuesta: agente_razonamiento, confianza | **Done** |
+| 11.3 | patron_detectado | — | **Done** |
+| 11.4 | feedback_propuesta | — | **Done** |
+| 13.1 | accion_agente | — | Planned |
+| 13.3 | — | propuesta, contrato, actividad: external_ref | Planned |
+| 14.1 | preferencia_agente | — | Planned |
 
-**Total: 6 new tables, ~15 new columns. Schema grows from 17 to 23 tables.**
+**Done: 25 tables (was 15). Remaining: +2 tables in Phases 13-14. Final target: 27 tables.**
 
 ---
 
@@ -500,7 +471,7 @@ These rules hold across ALL phases:
 
 1. **`engine/` is never modified.** All CRM code lives in `crm/`. Period.
 2. **Schema migrations are additive.** ALTER TABLE ADD COLUMN, CREATE TABLE. Never DROP or modify existing columns.
-3. **Tools follow the existing registration pattern.** Every new tool goes through the same inference adapter as the existing 31.
+3. **Tools follow the existing registration pattern.** Every new tool goes through the same inference adapter as the existing 64.
 4. **Role scoping is mandatory.** Every new tool, endpoint, and data query respects the hierarchy in `hierarchy.ts`.
 5. **Tests accompany every change.** No session ends without tests for the new code.
 6. **CLAUDE.md personas are updated with every capability change.** A tool the agent doesn't know about is a tool that doesn't exist.
@@ -511,25 +482,29 @@ These rules hold across ALL phases:
 
 ## 4. Claude Code Session Map
 
-| # | Session | Phase | Est. Hours | Dependencies |
-|---|---------|-------|-----------|--------------|
-| 1 | Voice transcription pipeline | 8.1 | 2-3h | None |
-| 2 | EOD wrap-up workflow | 8.2 | 1-2h | None |
-| 3 | Sentiment extraction + manager tools | 8.3 | 2-3h | Session 2 |
-| 4 | Confidence calibration (persona updates) | 8.4 | 1h | None |
-| 5 | Enhanced morning briefings | 8.5 | 2-3h | Sessions 2, 3 |
-| 6 | VP Glance Dashboard | 8.6 | 3-4h | None |
-| 7 | Relationship schema + migration | 9.1 | 1-2h | None |
-| 8 | Relationship tools (Dir/VP) | 9.2 | 3-4h | Session 7 |
-| 9 | Relationship-aware briefings + nightly monitor | 9.3 | 2-3h | Sessions 7, 8 |
-| 10 | Contacto enhancement + milestones | 9.4 | 1h | Session 7 |
-| 10.A | Workspace abstraction: provider interface + Google refactor | 10.A | 3-4h | None |
-| 10.B | Workspace abstraction: schema + config cleanup | 10.B | 1-2h | Session 10.A |
-| 10.C | Workspace abstraction: Microsoft 365 provider | 10.C | 4-5h | 10.A + Azure AD |
-| 11 | Overnight analysis engine | 11.1 | 4-5h | Phase 8 complete |
-| 12 | Creative package builder | 11.2 | 3-4h | Session 11 |
-| 13 | Cross-agent intelligence | 11.3 | 3-4h | Session 11 |
-| 14 | Connector architecture | 12.1 | 2h | None |
+| # | Session | Phase | Est. Hours | Status |
+|---|---------|-------|-----------|--------|
+| 1 | Voice transcription pipeline | 8.1 | 2-3h | **Done** |
+| 2 | EOD wrap-up workflow | 8.2 | 1-2h | **Done** |
+| 3 | Sentiment extraction + manager tools | 8.3 | 2-3h | **Done** |
+| 4 | Confidence calibration (persona updates) | 8.4 | 1h | **Done** |
+| 5 | Enhanced morning briefings | 8.5 | 2-3h | **Done** |
+| 6 | VP Glance Dashboard | 8.6 | 3-4h | **Done** |
+| 7 | Relationship schema + migration | 9.1 | 1-2h | **Done** |
+| 8 | Relationship tools (Dir/VP) | 9.2 | 3-4h | **Done** |
+| 9 | Relationship-aware briefings + nightly monitor | 9.3 | 2-3h | **Done** |
+| 10 | Contacto enhancement + milestones | 9.4 | 1h | **Done** |
+| — | Record creation approval workflow | Approvals | 3-4h | **Done** |
+| — | Circuit breaker + Hindsight memory + hybrid RAG | Hindsight | 4-5h | **Done** |
+| 11.1 | Overnight analysis engine | 11.1 | 4-5h | **Done** |
+| 11.2 | Proposal draft engine | 11.2 | 3-4h | **Done** |
+| 11.3 | Cross-agent intelligence | 11.3 | 3-4h | **Done** |
+| 11.4 | Feedback loop | 11.4 | 2-3h | **Done** |
+| 11.5 | Creative package builder | 11.5 | 3-4h | **Done** |
+| 10.A | Workspace abstraction: provider interface + Google refactor | 10.A | 3-4h | — |
+| 10.B | Workspace abstraction: schema + config cleanup | 10.B | 1-2h | — |
+| 10.C | Workspace abstraction: Microsoft 365 provider | 10.C | 4-5h | Blocked |
+| 14 | Connector architecture | 12.1 | 2h | — |
 | 15 | Cubo connector | 12.2a | 3-4h | Session 14 |
 | 16 | Inventory connector | 12.2b | 3-4h | Session 14 |
 | 17 | Contracts connector | 12.2c | 2-3h | Session 14 |

@@ -17,6 +17,7 @@ const BANK_MAP: Record<string, MemoryBank> = {
   ventas: "crm-sales",
   cuentas: "crm-accounts",
   equipo: "crm-team",
+  usuario: "crm-user",
 };
 
 function resolveBank(bank: string | undefined): MemoryBank {
@@ -67,10 +68,10 @@ export async function buscar_memoria(
   const bank = resolveBank(args.banco as string | undefined);
   const limite = Math.min(Math.max(Number(args.limite) || 5, 1), 20);
 
-  // Role-based bank access: AE can only search "ventas"
-  if (ctx.rol === "ae" && bank !== "crm-sales") {
+  // Role-based bank access: AE can only search "ventas" and "usuario"
+  if (ctx.rol === "ae" && bank !== "crm-sales" && bank !== "crm-user") {
     return JSON.stringify({
-      error: "Solo puedes buscar en el banco de ventas.",
+      error: "Solo puedes buscar en los bancos de ventas y usuario.",
     });
   }
 

@@ -1,7 +1,7 @@
 # Pulso — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-03-16 (Sessions 11.1-11.3 live — overnight engine + proposal drafts + cross-agent patterns, 59 tools, 24 tables, 710 CRM tests)
+> Last updated: 2026-03-17 (Phase 11 complete — Stage 2 done. 64 tools, 25 tables, 761 CRM tests, 35 test files)
 > Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`
 
 ## Phase Tracker
@@ -26,7 +26,7 @@
 | — | Hindsight Adaptations | **Done** | Circuit breaker (inference + embedding), Hindsight long-term memory (3 banks, 3 tools), hybrid RAG (FTS5 + reciprocal rank fusion) | — | — |
 | 9 | Relationship Intelligence | **Done** | 3 tables, 6 contacto columns, 7 Dir/VP tools, warmth engine, briefing integration, nightly recomputation | 7–10 | 5–8 |
 | 10 | Workspace Abstraction | Planned | Provider interface + Google refactor (Phase A now). Microsoft 365 via MS Graph (Phase B when Azure AD ready) | 10.A–10.C | 7–9 |
-| 11 | Creative Intelligence | **11.1-11.3 Done** | Overnight engine (5 analyzers), proposal drafts, cross-agent patterns (5 detectors). Next: 11.4-11.5 | 11–13 | 9–14 |
+| 11 | Creative Intelligence | **Done** | Overnight engine (5 analyzers), proposal drafts, cross-agent patterns (5 detectors), feedback loop, package builder. 12 new tools across 5 sessions | 11.1–11.5 | 9–14 |
 | 12 | Data Connectors | Planned | Cubo, inventory, contracts, programming schedule, SharePoint. Parallel with Phase 11 | 14–20 | 10–16 |
 | 13 | A2A Foundation | Planned | Structured action layer + approval flow, REST API expansion, A2A protocol readiness | 21–23 | 15–20 |
 | 14 | Polish & Scale | Planned | Adaptive personality, LLM migration (self-hosted Qwen 3.5), performance hardening, load testing | 24–26 | 18–24 |
@@ -132,16 +132,22 @@
 ## Phase 11: Creative Intelligence — Session Breakdown
 
 > Goal: The agent thinks commercially — proposing deals, not just tracking them
+> Status: **Complete** (all 5 sessions done)
 
-| Session | Deliverable | Est. Hours | Dependencies | Status |
-|---------|-------------|-----------|--------------|--------|
-| 11 | Overnight analysis engine — Nightly pipeline (2–4 a.m.): quota gap analysis, client opportunity scan, inventory matching, autonomous proposal drafting (`propuesta.estado = 'borrador_agente'`). Schema: +2 columns on `propuesta` (`agente_razonamiento`, `confianza`) | 4–5h | Phase 8 complete | — |
-| 12 | Creative package builder — Combinatorial package composition across linear/digital/events, CPM optimization, 3 new tools (`build_package`, `query_inventory_opportunities`, `compare_packages`) | 3–4h | Session 11 | — |
-| 13 | Cross-agent intelligence — Lateral pattern detection: holding-level shifts, category trends, competitive signals, win/loss patterns. New table `patron_detectado`, pattern injection into role-appropriate briefings | 3–4h | Session 11 | — |
+| Session | Deliverable | Status |
+|---------|-------------|--------|
+| 11.1 | Overnight analysis engine — 5 analyzers (calendar, inventory, gap, cross-sell, market), `insight_comercial` table, 3 tools (consultar_insights, actuar_insight, consultar_insights_equipo), shared analysis modules (media-mix.ts, peer-comparison.ts), overnight scheduler (2 AM MX via IPC) | **Done** |
+| 11.2 | Proposal draft engine — `borrador_agente` etapa, proposal-drafter.ts (value/media derivation), convertir action in actuar_insight, 2 tools (revisar_borrador, modificar_borrador) | **Done** |
+| 11.3 | Cross-agent intelligence — 5 pattern detectors (vertical, holding, inventory, winloss, concentration), `patron_detectado` table, 2 tools (consultar_patrones, desactivar_patron) | **Done** |
+| 11.4 | Feedback loop — `feedback_propuesta` table (draft-vs-final delta tracking), learning engine, 2 tools (consultar_feedback, generar_reporte_aprendizaje) | **Done** |
+| 11.5 | Package builder — `package-builder.ts` (historical mix, peer benchmark, inventory, rate cards), 3 tools (construir_paquete, consultar_oportunidades_inventario, comparar_paquetes) | **Done** |
 
-**Schema changes:** +1 table (`patron_detectado`), +2 columns on `propuesta`
-**New tools:** ~3 (package builder tools)
-**New tests:** ~60–80
+**Schema changes:** +3 tables (`insight_comercial`, `patron_detectado`, `feedback_propuesta`), +2 columns on `propuesta`
+**New tools:** +12 (3 insight + 2 draft + 2 pattern + 2 feedback + 3 package)
+**New src files:** 6 (`overnight-engine.ts`, `proposal-drafter.ts`, `cross-intelligence.ts`, `feedback-engine.ts`, `package-builder.ts`, `tools/package-tools.ts`)
+**New test files:** 5 (`overnight-engine`, `proposal-drafter`, `cross-intelligence`, `feedback-engine`, `package-builder`)
+**Role counts after Phase 11:** AE:45, Gerente:48, Director:57, VP:55
+**Tests after Phase 11:** 761 CRM tests (35 files)
 
 ---
 
@@ -201,22 +207,28 @@
 
 | Metric | Current (Now) | Phase 14 (Target) | Remaining |
 |--------|--------------|-------------------|-----------|
-| SQLite tables | 21 | 23 | +2 |
-| CRM tools | 46 | ~55 | +9 |
-| Test files | 29 | ~35 | +6 |
-| Tests passing | 608 | 900+ | +292 |
+| SQLite tables | 25 | 27 | +2 |
+| CRM tools | 64 | ~72 | +8 |
+| Test files | 35 | ~40 | +5 |
+| Tests passing | 761 | 1000+ | +239 |
 | Persona templates | 8 | 8 (dynamic) | — |
-| Claude Code sessions | ~14 | 26 | ~12 |
+| Role counts | AE:45 Ger:48 Dir:57 VP:55 | — | — |
+| Claude Code sessions | ~20 | 26 | ~6 |
 | Estimated hours | — | 65–85h | — |
 
 ### New Tables by Phase
 
 | Table | Phase | Purpose |
 |-------|-------|---------|
+| `crm_memories` | Hindsight | Long-term agent memory (3 banks) |
+| `crm_fts_embeddings` | Hindsight | FTS5 keyword search for hybrid RAG |
 | `relacion_ejecutiva` | 9 | Executive peer relationships (persona ↔ contacto) |
 | `hito_contacto` | 9 | Contact milestones (birthdays, promotions, appointments) |
 | `interaccion_ejecutiva` | 9 | Executive interaction log (calls, lunches, events) |
+| `aprobacion_registro` | Approvals | Approval workflow audit trail |
+| `insight_comercial` | 11 | Overnight commercial insights |
 | `patron_detectado` | 11 | Cross-agent detected patterns (holding shifts, category trends) |
+| `feedback_propuesta` | 11 | Draft-vs-final delta tracking for learning |
 | `accion_agente` | 13 | Structured agent actions with human approval gate |
 | `preferencia_agente` | 14 | Per-AE communication preferences |
 
@@ -226,8 +238,8 @@
 
 | Adoption Phase (VISION.md) | Technical Phases | What Users Get |
 |---------------------------|-----------------|----------------|
-| **Pilot (Months 1–3)** | 8 + Hindsight + 9 complete | Voice, briefings, sentiment, VP dashboard, long-term memory (Hindsight), hybrid RAG, relationship intelligence, Google Workspace (Gmail+Drive+Slides+Sheets+Calendar), agency data model |
-| **Evangelists (Months 3–6)** | 9–11 complete, 12 in progress | Relationship intelligence, overnight proposals, creative packages, cross-agent patterns |
+| **Pilot (Months 1–3)** | 8 + Hindsight + 9 + Approvals + 11 **complete** | Voice, briefings, sentiment, VP dashboard, long-term memory (Hindsight), hybrid RAG, relationship intelligence, Google Workspace, approval workflows, overnight proposals, creative packages, cross-agent patterns, feedback loop |
+| **Evangelists (Months 3–6)** | 10, 12 in progress | Workspace abstraction, data connectors (Cubo, inventory, contracts) |
 | **Standard (Months 6–9)** | 10, 12–13 complete | Full data integration, workspace abstraction, action layer, approval flow, API foundation |
 | **Ecosystem (Months 9–12+)** | 14 complete | Adaptive personality, self-hosted LLM, production hardening, A2A readiness |
 
