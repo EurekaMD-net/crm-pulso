@@ -242,7 +242,7 @@ describe("ae.md -- tool references", () => {
 describe("manager.md -- tool references", () => {
   const gerenteTools = getToolsForRole("gerente").map((t) => t.function.name);
 
-  it("references all 41 gerente tools", () => {
+  it("references all 44 gerente tools", () => {
     for (const name of gerenteTools) {
       expect(managerMd, `Missing gerente tool: ${name}`).toContain(name);
     }
@@ -256,8 +256,6 @@ describe("manager.md -- tool references", () => {
       "cerrar_propuesta",
       "actualizar_descarga",
       "establecer_recordatorio",
-      "enviar_email_seguimiento",
-      "confirmar_envio_email",
     ];
     for (const name of aeOnlyTools) {
       expect(managerMd, `Should not contain AE tool: ${name}`).not.toContain(

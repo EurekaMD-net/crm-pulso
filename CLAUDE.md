@@ -98,7 +98,7 @@ git subtree pull --prefix=engine https://github.com/qwibitai/nanoclaw.git main -
 
 ```
 WhatsApp → engine (NanoClaw) → Direct tools (59 CRM tools via inference adapter)
-                                    ├── Role-based tool filtering (AE:42, Ger:41, Dir:52, VP:50)
+                                    ├── Role-based tool filtering (AE:42, Ger:44, Dir:52, VP:50)
                                     ├── Google Workspace (Gmail, Drive, Calendar)
                                     ├── Hybrid RAG (vector + FTS5 keyword + RRF fusion)
                                     ├── Long-term memory (Hindsight or SQLite fallback)

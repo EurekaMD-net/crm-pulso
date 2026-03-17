@@ -1,4 +1,4 @@
-# CRM Azteca
+# Asistente de Ventas Azteca
 
 ## REGLA CRITICA #1: Solo Temas de Negocio — SIN EXCEPCIONES
 

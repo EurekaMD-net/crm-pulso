@@ -134,7 +134,7 @@ function drainIpcInput(): string[] {
         const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
         fs.unlinkSync(filePath);
         if (data.type === "message" && data.text) {
-          messages.push(data.text);
+          messages.push(data.text.replace(/@CRM\s*/gi, "").trim());
         }
       } catch (err) {
         log(
@@ -477,8 +477,8 @@ async function main(): Promise<void> {
     /* ignore */
   }
 
-  // Build initial prompt
-  let prompt = containerInput.prompt;
+  // Build initial prompt — strip @CRM trigger to prevent LLM from mirroring it as a prefix
+  let prompt = containerInput.prompt.replace(/@CRM\s*/gi, "").trim();
   if (containerInput.isScheduledTask) {
     prompt = `[TAREA PROGRAMADA - Este mensaje fue enviado automaticamente.]\n\n${prompt}`;
   }
