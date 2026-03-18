@@ -512,43 +512,50 @@ export async function inferWithTools(
       };
     }
 
-    // Append assistant message with tool calls
-    conversation.push({
-      role: "assistant",
-      content: response.content,
-      tool_calls: response.tool_calls,
-    });
-
-    // Execute tool calls in parallel and append results
+    // Execute tool calls in parallel, sanitizing truncated arguments
+    const sanitizedToolCalls: typeof response.tool_calls = [];
     const toolResults = await Promise.all(
       response.tool_calls.map(async (toolCall) => {
         let result: string;
-        try {
-          const rawArgs = toolCall.function.arguments;
-          // Detect likely truncation: unclosed braces/brackets
-          const opens = (rawArgs.match(/[{[]/g) || []).length;
-          const closes = (rawArgs.match(/[}\]]/g) || []).length;
-          if (opens > closes) {
-            result = JSON.stringify({
-              error:
-                "Tool call truncated (max_tokens hit). Try a simpler query.",
-            });
-            logger.warn(
-              { tool: toolCall.function.name, argsLen: rawArgs.length },
-              "tool call JSON truncated",
-            );
-          } else {
+        const rawArgs = toolCall.function.arguments;
+        // Detect likely truncation: unclosed braces/brackets
+        const opens = (rawArgs.match(/[{[]/g) || []).length;
+        const closes = (rawArgs.match(/[}\]]/g) || []).length;
+        const truncated = opens > closes;
+
+        // Sanitize: replace truncated arguments with valid JSON so the
+        // conversation history stays valid for the next provider call
+        sanitizedToolCalls.push(
+          truncated
+            ? {
+                ...toolCall,
+                function: { ...toolCall.function, arguments: "{}" },
+              }
+            : toolCall,
+        );
+
+        if (truncated) {
+          result = JSON.stringify({
+            error: "Tool call truncated (max_tokens hit). Try a simpler query.",
+          });
+          logger.warn(
+            { tool: toolCall.function.name, argsLen: rawArgs.length },
+            "tool call JSON truncated",
+          );
+        } else {
+          try {
             const args = JSON.parse(rawArgs) as Record<string, unknown>;
             result = await executor(toolCall.function.name, args);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            result = JSON.stringify({ error: message });
+            logger.error(
+              { tool: toolCall.function.name, error: message },
+              "tool execution failed",
+            );
           }
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          result = JSON.stringify({ error: message });
-          logger.error(
-            { tool: toolCall.function.name, error: message },
-            "tool execution failed",
-          );
         }
+
         return {
           role: "tool" as const,
           content: result,
@@ -556,6 +563,13 @@ export async function inferWithTools(
         };
       }),
     );
+
+    // Append assistant message with sanitized tool calls + results
+    conversation.push({
+      role: "assistant",
+      content: response.content,
+      tool_calls: sanitizedToolCalls,
+    });
     conversation.push(...toolResults);
   }
 

@@ -151,7 +151,7 @@ export class HindsightClient {
       "GET",
       "/health",
       undefined,
-      3000,
+      1500,
     );
   }
 }

@@ -15,7 +15,9 @@ import {
 let db: Database.Database;
 
 /** CRM hook: expose the database handle so CRM can create its tables in the same DB. */
-export function getDatabase(): Database.Database { return db; }
+export function getDatabase(): Database.Database {
+  return db;
+}
 
 function createSchema(database: Database.Database): void {
   database.exec(`
@@ -39,6 +41,7 @@ function createSchema(database: Database.Database): void {
       FOREIGN KEY (chat_jid) REFERENCES chats(jid)
     );
     CREATE INDEX IF NOT EXISTS idx_timestamp ON messages(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_messages_jid_ts ON messages(chat_jid, timestamp DESC);
 
     CREATE TABLE IF NOT EXISTS scheduled_tasks (
       id TEXT PRIMARY KEY,

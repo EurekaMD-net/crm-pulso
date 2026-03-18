@@ -275,8 +275,12 @@ cmd_hindsight_start() {
 
   mkdir -p "$HINDSIGHT_DATA_DIR"
 
+  # Ensure crm-net exists (agent containers use it to reach Hindsight)
+  docker network create crm-net 2>/dev/null || true
+
   docker run -d \
     --name "$HINDSIGHT_CONTAINER" \
+    --network crm-net \
     --restart unless-stopped \
     -p 8888:8888 \
     -p 9999:9999 \

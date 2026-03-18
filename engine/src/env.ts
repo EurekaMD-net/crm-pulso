@@ -7,16 +7,35 @@ import { logger } from './logger.js';
  * Does NOT load anything into process.env — callers decide what to
  * do with the values. This keeps secrets out of the process environment
  * so they don't leak to child processes.
+ *
+ * File content is cached for 60s to avoid re-reading disk on every
+ * container spawn (~30+/day per group).
  */
-export function readEnvFile(keys: string[]): Record<string, string> {
+
+let cachedContent: string | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL_MS = 60_000;
+
+function getEnvContent(): string | null {
+  const now = Date.now();
+  if (cachedContent !== null && now - cacheTimestamp < CACHE_TTL_MS) {
+    return cachedContent;
+  }
   const envFile = path.join(process.cwd(), '.env');
-  let content: string;
   try {
-    content = fs.readFileSync(envFile, 'utf-8');
+    cachedContent = fs.readFileSync(envFile, 'utf-8');
+    cacheTimestamp = now;
+    return cachedContent;
   } catch (err) {
     logger.debug({ err }, '.env file not found, using defaults');
-    return {};
+    cachedContent = null;
+    return null;
   }
+}
+
+export function readEnvFile(keys: string[]): Record<string, string> {
+  const content = getEnvContent();
+  if (!content) return {};
 
   const result: Record<string, string> = {};
   const wanted = new Set(keys);
