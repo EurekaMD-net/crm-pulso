@@ -10,11 +10,13 @@ import {
   CONTAINER_IMAGE as CONTAINER_IMAGE_DEFAULT,
   CONTAINER_MAX_OUTPUT_SIZE,
   CONTAINER_TIMEOUT,
+  CREDENTIAL_PROXY_PORT,
   DATA_DIR,
   GROUPS_DIR,
   IDLE_TIMEOUT,
   TIMEZONE,
 } from './config.js';
+import { detectAuthMode } from './credential-proxy.js';
 import { readEnvFile } from './env.js';
 
 // CRM hook: read CONTAINER_IMAGE from .env directly so it always overrides the
@@ -25,7 +27,9 @@ const CONTAINER_IMAGE = CONTAINER_IMAGE_ENV || CONTAINER_IMAGE_DEFAULT;
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import {
+  CONTAINER_HOST_GATEWAY,
   CONTAINER_RUNTIME_BIN,
+  hostGatewayArgs,
   readonlyMountArgs,
   stopContainer,
 } from './container-runtime.js';
@@ -260,8 +264,6 @@ function buildVolumeMounts(
  */
 function readSecrets(): Record<string, string> {
   return readEnvFile([
-    'CLAUDE_CODE_OAUTH_TOKEN',
-    'ANTHROPIC_API_KEY',
     'INFERENCE_PRIMARY_URL',
     'INFERENCE_PRIMARY_KEY',
     'INFERENCE_PRIMARY_MODEL',
@@ -295,9 +297,21 @@ function buildContainerArgs(
   if (DASHBOARD_BASE_URL) {
     args.push('-e', `DASHBOARD_BASE_URL=${DASHBOARD_BASE_URL}`);
   }
+  // Credential proxy: containers never see real API keys
+  const authMode = detectAuthMode();
+  if (authMode === 'api-key') {
+    args.push('-e', 'ANTHROPIC_API_KEY=placeholder');
+  } else {
+    args.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder');
+  }
+  args.push(
+    '-e',
+    `ANTHROPIC_BASE_URL=http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}`,
+  );
+  args.push(...hostGatewayArgs());
+
   // Hindsight: connect to shared Docker network so container can reach Hindsight sidecar
   args.push('--network', 'crm-net');
-  args.push('--add-host=host.docker.internal:host-gateway');
   // Override HINDSIGHT_URL for container context (use Docker network hostname)
   args.push('-e', 'HINDSIGHT_URL=http://crm-hindsight:8888');
 

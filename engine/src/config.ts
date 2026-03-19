@@ -43,6 +43,10 @@ export const CONTAINER_MAX_OUTPUT_SIZE = parseInt(
   10,
 ); // 10MB default
 export const IPC_POLL_INTERVAL = 1000;
+export const CREDENTIAL_PROXY_PORT = parseInt(
+  process.env.CREDENTIAL_PROXY_PORT || '7462',
+  10,
+);
 export const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT || '1800000', 10); // 30min default — how long to keep container alive after last result
 export const MAX_CONCURRENT_CONTAINERS = Math.max(
   1,
@@ -63,7 +67,7 @@ export const MAX_CONTEXT_MESSAGES = parseInt(
   10,
 );
 
-// Timezone for scheduled tasks (cron expressions, etc.)
-// Uses system timezone by default
-export const TIMEZONE =
-  process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
+// Timezone for scheduled tasks, container TZ, and all date logic.
+// CRM hook: default to America/Mexico_City (all users are MX-based).
+// Set TZ env var to override (also set in .env for systemd EnvironmentFile).
+export const TIMEZONE = process.env.TZ || 'America/Mexico_City';

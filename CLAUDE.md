@@ -42,15 +42,17 @@ Agentic CRM for media ad sales. NanoClaw engine at `engine/`, all CRM code at `c
 | `crm/groups/director.md` | Director persona template (62 tools, incl. 7 relationship + 4 email) |
 | `crm/groups/vp.md` | VP persona template (60 tools, incl. 7 relationship + 4 email) |
 
-### Engine Hook Points (DO NOT modify beyond these 5 files)
+### Engine Hook Points (DO NOT modify beyond these 7 files)
 
 | File | Change |
 |------|--------|
 | `engine/src/db.ts` | `getDatabase()` export |
-| `engine/src/index.ts` | `bootstrapCrm()` + schedulers + `startDashboardServer()` |
+| `engine/src/index.ts` | `bootstrapCrm()` + schedulers + `startDashboardServer()` + credential proxy |
 | `engine/src/ipc.ts` | CRM IPC delegation in default case |
 | `engine/container/agent-runner/src/index.ts` | Allowed tools |
-| `engine/src/container-runner.ts` | CRM document store mount |
+| `engine/src/container-runner.ts` | CRM document store mount + credential proxy env vars |
+| `engine/src/container-runtime.ts` | `PROXY_BIND_HOST` + `hostGatewayArgs()` + `CONTAINER_HOST_GATEWAY` |
+| `engine/src/config.ts` | `CREDENTIAL_PROXY_PORT` + `America/Mexico_City` timezone default |
 
 ## Development
 

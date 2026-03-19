@@ -11,6 +11,7 @@ import { startDashboardServer } from '../../crm/src/dashboard/server.js';
 
 import {
   ASSISTANT_NAME,
+  CREDENTIAL_PROXY_PORT,
   DATA_DIR,
   IDLE_TIMEOUT,
   MAIN_GROUP_FOLDER,
@@ -18,6 +19,7 @@ import {
   POLL_INTERVAL,
   TRIGGER_PATTERN,
 } from './config.js';
+import { startCredentialProxy } from './credential-proxy.js';
 import { parseImageReferences } from './image.js';
 import { WhatsAppChannel } from './channels/whatsapp.js';
 import {
@@ -29,6 +31,7 @@ import {
 import {
   cleanupOrphans,
   ensureContainerRuntimeRunning,
+  PROXY_BIND_HOST,
 } from './container-runtime.js';
 import {
   getAllChats,
@@ -533,11 +536,18 @@ async function main(): Promise<void> {
   seedBriefings(); // CRM hook: idempotent briefing task seeding
   startDashboardServer(); // CRM hook: dashboard REST API
   logger.info('Database initialized');
+
+  const proxyServer = await startCredentialProxy(
+    CREDENTIAL_PROXY_PORT,
+    PROXY_BIND_HOST,
+  );
+
   loadState();
 
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
+    proxyServer.close();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();
     process.exit(0);
