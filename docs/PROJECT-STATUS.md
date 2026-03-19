@@ -1,7 +1,7 @@
 # Pulso — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-03-17 (Phase 11 complete — Stage 2 done. 64 tools, 25 tables, 761 CRM tests, 35 test files)
+> Last updated: 2026-03-19 (ACE integration — 69 tools, 27 tables, 796 CRM tests, 37 test files)
 > Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`
 
 ## Phase Tracker

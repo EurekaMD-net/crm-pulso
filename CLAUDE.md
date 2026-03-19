@@ -11,7 +11,7 @@ Agentic CRM for media ad sales. NanoClaw engine at `engine/`, all CRM code at `c
 | File | Purpose |
 |------|---------|
 | `crm/src/bootstrap.ts` | CRM init: creates schema, registers hooks |
-| `crm/src/schema.ts` | 26 CRM tables (15 core + crm_events + docs/embeddings/vec/fts + crm_memories + 3 relationship tables + aprobacion_registro + insight_comercial + patron_detectado + feedback_propuesta + perfil_usuario) |
+| `crm/src/schema.ts` | 27 CRM tables (15 core + crm_events + docs/embeddings/vec/fts + crm_memories + 3 relationship tables + aprobacion_registro + insight_comercial + patron_detectado + feedback_propuesta + perfil_usuario + template_score) |
 | `crm/src/hierarchy.ts` | isManagerOf, isDirectorOf, isVp helpers |
 | `crm/src/ipc-handlers.ts` | CRM IPC handler (crm_registrar_actividad, warmth_recompute, etc.) |
 | `crm/src/doc-sync.ts` | Document sync + hybrid RAG (vector KNN + FTS5 keyword + RRF fusion) |

@@ -1,3 +1,4 @@
+<!-- template_version: dir-v1 -->
 # Asistente Estrategico -- Director de Ventas
 
 ## Identidad

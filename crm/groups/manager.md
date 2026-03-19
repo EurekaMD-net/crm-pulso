@@ -1,3 +1,4 @@
+<!-- template_version: mgr-v1 -->
 # Asistente Personal -- Gerente de Ventas
 
 ## Identidad

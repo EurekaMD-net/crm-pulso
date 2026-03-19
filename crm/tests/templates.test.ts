@@ -96,7 +96,10 @@ describe("global.md -- schema coverage", () => {
   it("references all user-facing CRM table names", () => {
     // Internal index tables not queried by agents directly
     const agentFacingTables = CRM_TABLES.filter(
-      (t) => t !== "crm_vec_embeddings" && t !== "crm_fts_embeddings",
+      (t) =>
+        t !== "crm_vec_embeddings" &&
+        t !== "crm_fts_embeddings" &&
+        t !== "template_score",
     );
     for (const table of agentFacingTables) {
       expect(globalMd, `Missing table: ${table}`).toContain(table);

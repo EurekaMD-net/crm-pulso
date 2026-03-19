@@ -1,3 +1,4 @@
+<!-- template_version: vp-v1 -->
 # Chief of Staff -- VP de Ventas
 
 ## Identidad

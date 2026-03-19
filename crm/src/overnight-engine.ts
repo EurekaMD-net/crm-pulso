@@ -5,12 +5,13 @@
  * billing gaps, peer comparisons, and market signals. Produces structured
  * insights in insight_comercial table.
  *
- * 5 analyzers:
+ * 6 analyzers:
  *   1. Calendar-driven — brands that bought for an event last year but haven't been contacted
  *   2. Inventory-driven — unsold event inventory matched to account profiles
  *   3. Gap-driven — billing below plan, recovery opportunity
  *   4. Cross-sell — peer vertical gaps (shared modules)
  *   5. Market-driven — expiring contracts, inactive accounts
+ *   6. Template scoring — correlates persona template versions with outcome quality
  */
 
 import { getDatabase } from "./db.js";
@@ -30,6 +31,7 @@ interface OvernightResult {
   gap: number;
   crosssell: number;
   market: number;
+  template: number;
   total_generated: number;
   expired: number;
 }
@@ -488,6 +490,113 @@ function expireStaleInsights(db: ReturnType<typeof getDatabase>): number {
 }
 
 // ---------------------------------------------------------------------------
+// 6. Template scoring — correlates template versions with outcome quality
+// ---------------------------------------------------------------------------
+
+function analyzeTemplates(
+  db: ReturnType<typeof getDatabase>,
+  lote: string,
+): number {
+  let generated = 0;
+
+  // Aggregate activities by template_version and sentimiento over last 7 days
+  const rows = db
+    .prepare(
+      `SELECT
+         template_version,
+         p.rol,
+         sentimiento,
+         COUNT(*) AS cnt
+       FROM actividad a
+       JOIN persona p ON p.id = a.ae_id
+       WHERE a.fecha >= datetime('now', '-7 days')
+         AND a.template_version IS NOT NULL
+       GROUP BY template_version, p.rol, sentimiento`,
+    )
+    .all() as Array<{
+    template_version: string;
+    rol: string;
+    sentimiento: string;
+    cnt: number;
+  }>;
+
+  // Build per-version aggregate
+  const versionStats = new Map<
+    string,
+    { rol: string; positive: number; negative: number; total: number }
+  >();
+  for (const r of rows) {
+    const key = r.template_version;
+    if (!versionStats.has(key)) {
+      versionStats.set(key, { rol: r.rol, positive: 0, negative: 0, total: 0 });
+    }
+    const stats = versionStats.get(key)!;
+    stats.total += r.cnt;
+    if (r.sentimiento === "positivo") stats.positive += r.cnt;
+    if (r.sentimiento === "negativo") stats.negative += r.cnt;
+  }
+
+  // Insert scores and generate recommendations for high negative rate
+  const insertScore = db.prepare(
+    `INSERT INTO template_score (id, bullet_id, template_version, rol, outcome_type, sample_size, fecha)
+     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+  );
+
+  const insertInsight = db.prepare(
+    `INSERT INTO insight_comercial (id, tipo, titulo, descripcion, accion_recomendada, confianza, sample_size, fecha_generacion, fecha_expiracion, lote_nocturno)
+     VALUES (?, 'recomendacion', ?, ?, ?, ?, ?, datetime('now'), datetime('now', '+14 days'), ?)`,
+  );
+
+  for (const [version, stats] of versionStats) {
+    // Record positive aggregate
+    if (stats.positive > 0) {
+      insertScore.run(
+        genId(),
+        `${stats.rol}-agg`,
+        version,
+        stats.rol,
+        "actividad_positiva",
+        stats.positive,
+      );
+      generated++;
+    }
+
+    // Record negative aggregate
+    if (stats.negative > 0) {
+      insertScore.run(
+        genId(),
+        `${stats.rol}-agg`,
+        version,
+        stats.rol,
+        "actividad_negativa",
+        stats.negative,
+      );
+      generated++;
+    }
+
+    // Generate recommendation if negative rate > 60% with sufficient sample
+    if (stats.total >= 10) {
+      const negativeRate = stats.negative / stats.total;
+      if (negativeRate > 0.6) {
+        const rateStr = Math.round(negativeRate * 100);
+        insertInsight.run(
+          genId(),
+          `Revisar plantilla ${stats.rol} (${version})`,
+          `La plantilla ${version} del rol ${stats.rol} tiene una tasa de sentimiento negativo del ${rateStr}% en ${stats.total} actividades (ultimos 7 dias). Revisar instrucciones para posibles mejoras.`,
+          `Comparar version actual con version anterior y analizar instrucciones que generan fricciones con clientes.`,
+          0.7,
+          stats.total,
+          lote,
+        );
+        generated++;
+      }
+    }
+  }
+
+  return generated;
+}
+
+// ---------------------------------------------------------------------------
 // Orchestrator
 // ---------------------------------------------------------------------------
 
@@ -498,12 +607,13 @@ export function runOvernightAnalysis(): OvernightResult {
   // Run expiration first
   const expired = expireStaleInsights(db);
 
-  // Run all 5 analyzers in a transaction
+  // Run all 6 analyzers in a transaction
   let calendar = 0;
   let inventory = 0;
   let gap = 0;
   let crosssell = 0;
   let market = 0;
+  let template = 0;
 
   const runAll = db.transaction(() => {
     calendar = analyzeCalendar(db, lote);
@@ -511,6 +621,7 @@ export function runOvernightAnalysis(): OvernightResult {
     gap = analyzeGap(db, lote);
     crosssell = analyzeCrossSell(db, lote);
     market = analyzeMarket(db, lote);
+    template = analyzeTemplates(db, lote);
   });
 
   runAll();
@@ -518,7 +629,7 @@ export function runOvernightAnalysis(): OvernightResult {
   // Post-analyzer: cross-agent pattern detection
   const patterns = detectCrossAgentPatterns(lote);
 
-  const total = calendar + inventory + gap + crosssell + market;
+  const total = calendar + inventory + gap + crosssell + market + template;
 
   logger.info(
     {
@@ -528,6 +639,7 @@ export function runOvernightAnalysis(): OvernightResult {
       gap,
       crosssell,
       market,
+      template,
       total,
       expired,
       patterns: patterns.total,
@@ -542,6 +654,7 @@ export function runOvernightAnalysis(): OvernightResult {
     gap,
     crosssell,
     market,
+    template,
     total_generated: total,
     expired,
   };

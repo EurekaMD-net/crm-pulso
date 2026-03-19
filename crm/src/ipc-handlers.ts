@@ -11,6 +11,7 @@ import { getDatabase } from "./db.js";
 import { getPersonByGroupFolder, hasAccessTo } from "./hierarchy.js";
 import { evaluateAlerts, logAlerts } from "./alerts.js";
 import { logger } from "./logger.js";
+import { getTemplateVersionForRole } from "./template-version.js";
 import type { IpcDeps } from "../../engine/src/ipc.js";
 
 // --- Input validation helpers ---
@@ -90,8 +91,8 @@ function buildStatements() {
   const db = getDatabase();
   return {
     insertActividad: db.prepare(`
-      INSERT INTO actividad (id, ae_id, cuenta_id, propuesta_id, contrato_id, tipo, resumen, sentimiento, siguiente_accion, fecha_siguiente_accion, fecha)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO actividad (id, ae_id, cuenta_id, propuesta_id, contrato_id, tipo, resumen, sentimiento, siguiente_accion, fecha_siguiente_accion, fecha, template_version)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     updatePropuestaActividad: db.prepare(`
       UPDATE propuesta SET fecha_ultima_actividad = ?, dias_sin_actividad = 0
@@ -196,6 +197,7 @@ export async function processCrmIpc(
           asString(data.siguiente_accion) ?? null,
           validateDate(data.fecha_siguiente_accion),
           now,
+          getTemplateVersionForRole(person.rol),
         );
 
         // Update propuesta.fecha_ultima_actividad if linked

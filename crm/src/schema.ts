@@ -1,7 +1,7 @@
 /**
  * CRM Schema Definitions — Domain-specific for media ad sales
  *
- * 25 tables. All created in the same SQLite database used by the NanoClaw
+ * 27 tables. All created in the same SQLite database used by the NanoClaw
  * engine (via getDatabase() export).
  *
  * Tables:
@@ -24,6 +24,8 @@
  *   - insight_comercial: Overnight commercial insight engine
  *   - patron_detectado: Cross-agent lateral pattern detection
  *   - feedback_propuesta: Draft-vs-final delta tracking for learning
+ *   - perfil_usuario: Structured user profile
+ *   - template_score: Template effectiveness tracking
  */
 
 import type Database from "better-sqlite3";
@@ -55,6 +57,7 @@ export const CRM_TABLES = [
   "patron_detectado",
   "feedback_propuesta",
   "perfil_usuario",
+  "template_score",
 ] as const;
 
 export type CrmTableName = (typeof CRM_TABLES)[number];
@@ -710,5 +713,32 @@ export function createCrmSchema(db: Database.Database): void {
       CREATE INDEX IF NOT EXISTS idx_crm_memories_banco ON crm_memories(banco);
     `);
     db.pragma("foreign_keys = ON");
+  }
+
+  // -------------------------------------------------------------------------
+  // 27. TEMPLATE_SCORE (persona template effectiveness tracking)
+  // -------------------------------------------------------------------------
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS template_score (
+      id TEXT PRIMARY KEY,
+      bullet_id TEXT NOT NULL,
+      template_version TEXT NOT NULL,
+      rol TEXT NOT NULL,
+      outcome_type TEXT NOT NULL CHECK(outcome_type IN (
+        'actividad_positiva','actividad_negativa',
+        'propuesta_avanzada','propuesta_perdida',
+        'feedback_aceptado','feedback_descartado'
+      )),
+      sample_size INTEGER DEFAULT 1,
+      fecha TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_tscore_bullet ON template_score(bullet_id);
+    CREATE INDEX IF NOT EXISTS idx_tscore_version ON template_score(template_version);
+    CREATE INDEX IF NOT EXISTS idx_tscore_rol ON template_score(rol);
+  `);
+
+  // Migration: add template_version to actividad
+  if (!colNames.has("template_version")) {
+    db.exec("ALTER TABLE actividad ADD COLUMN template_version TEXT");
   }
 }
