@@ -75,7 +75,7 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 - **Persistent memory** per conversation and globally
 - **Scheduled tasks** that run Claude and can message back
 - **Web access** for search and browsing
-- **Browser automation** via agent-browser
+- **Browser automation** via Lightpanda (headless browser, MCP tools)
 
 **Implementation approach:**
 - Use existing tools (WhatsApp connector, Claude Agent SDK, MCP servers)
@@ -107,7 +107,7 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 - Each agent invocation spawns a container with mounted directories
 - Containers provide filesystem isolation - agents can only see mounted paths
 - Bash access is safe because commands run inside the container, not on the host
-- Browser automation via agent-browser with Chromium in the container
+- Browser automation via Lightpanda MCP server (10 tools: goto, markdown, click, fill, etc.)
 
 ### Scheduled Tasks
 - Users can ask Claude to schedule recurring or one-time tasks from any group
@@ -154,10 +154,10 @@ A personal Claude assistant accessible via WhatsApp, with minimal custom code.
 - Standard Claude Agent SDK capabilities
 
 ### Browser Automation
-- agent-browser CLI with Chromium in container
-- Snapshot-based interaction with element references (@e1, @e2, etc.)
-- Screenshots, PDFs, video recording
-- Authentication state persistence
+- Lightpanda headless browser via MCP (10 tools)
+- Navigate, read markdown, click, fill forms, evaluate JS, extract links/structured data
+- Stateful sessions — cookies and navigation persist within an agent invocation
+- ~24MB RAM footprint (vs ~200MB+ for Chromium)
 
 ---
 

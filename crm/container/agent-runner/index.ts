@@ -275,6 +275,39 @@ function buildOrgContext(persona: Persona): string {
   return lines.join("\n");
 }
 
+/** Get current date/time string in Mexico City timezone. */
+function getMxDateTime(): string {
+  const now = new Date();
+  const mxDate = now.toLocaleDateString("es-MX", {
+    timeZone: "America/Mexico_City",
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const mxTime = now.toLocaleTimeString("es-MX", {
+    timeZone: "America/Mexico_City",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return `${mxDate}, ${mxTime} (Ciudad de Mexico)`;
+}
+
+/** Refresh the date in the system message (replaces the Fecha y Hora section). */
+function refreshSystemDate(messages: ChatMessage[]): void {
+  const sys = messages[0];
+  if (sys?.role === "system" && typeof sys.content === "string") {
+    messages[0] = {
+      role: "system",
+      content: sys.content.replace(
+        /## Fecha y Hora Actual\n.+/,
+        `## Fecha y Hora Actual\n${getMxDateTime()}`,
+      ),
+    };
+  }
+}
+
 function buildSystemPrompt(groupFolder: string, persona: Persona): string {
   const parts: string[] = [];
 
@@ -290,24 +323,8 @@ function buildSystemPrompt(groupFolder: string, persona: Persona): string {
     parts.push(fs.readFileSync(groupPath, "utf-8"));
   }
 
-  // Current date/time in Mexico City timezone
-  const mxNow = new Date();
-  const mxDate = mxNow.toLocaleDateString("es-MX", {
-    timeZone: "America/Mexico_City",
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-  const mxTime = mxNow.toLocaleTimeString("es-MX", {
-    timeZone: "America/Mexico_City",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
-  parts.push(
-    `\n## Fecha y Hora Actual\n${mxDate}, ${mxTime} (Ciudad de Mexico)`,
-  );
+  // Date/time — refreshed on every inference call via refreshSystemDate()
+  parts.push(`\n## Fecha y Hora Actual\n${getMxDateTime()}`);
 
   // Identity injection
   parts.push(
@@ -591,6 +608,9 @@ async function main(): Promise<void> {
       // Truncate for context window
       messages = truncateMessages(messages, MAX_MESSAGES);
 
+      // Refresh date/time in system prompt (container may span midnight)
+      refreshSystemDate(messages);
+
       log(
         `Starting inference (session: ${sessionId}, messages: ${messages.length})...`,
       );
@@ -718,5 +738,7 @@ export {
   IPC_INPUT_CLOSE_SENTINEL,
   IPC_POLL_MIN_MS,
   IPC_POLL_MAX_MS,
+  getMxDateTime,
+  refreshSystemDate,
 };
 export type { ContainerInput, ContainerOutput };

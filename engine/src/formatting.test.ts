@@ -58,13 +58,14 @@ describe('escapeXml', () => {
 // --- formatMessages ---
 
 describe('formatMessages', () => {
-  it('formats a single message as XML', () => {
+  it('formats a single message as XML with local time', () => {
     const result = formatMessages([makeMsg()]);
-    expect(result).toBe(
-      '<messages>\n' +
-        '<message sender="Alice" time="2024-01-01T00:00:00.000Z">hello</message>\n' +
-        '</messages>',
-    );
+    expect(result).toContain('<messages>');
+    expect(result).toContain('sender="Alice"');
+    expect(result).toContain('>hello</message>');
+    // Timestamp should be converted to local timezone (no longer raw UTC ISO)
+    expect(result).not.toContain('2024-01-01T00:00:00.000Z');
+    expect(result).toContain('time="');
   });
 
   it('formats multiple messages', () => {

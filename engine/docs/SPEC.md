@@ -61,7 +61,7 @@ A personal Claude assistant accessible via WhatsApp, with persistent memory per 
 │  │    • Bash (safe - sandboxed in container!)                     │   │
 │  │    • Read, Write, Edit, Glob, Grep (file operations)           │   │
 │  │    • WebSearch, WebFetch (internet access)                     │   │
-│  │    • agent-browser (browser automation)                        │   │
+│  │    • mcp__browser__* (Lightpanda browser via MCP)               │   │
 │  │    • mcp__nanoclaw__* (scheduler tools via IPC)                │   │
 │  │                                                                │   │
 │  └──────────────────────────────────────────────────────────────┘   │
@@ -77,7 +77,7 @@ A personal Claude assistant accessible via WhatsApp, with persistent memory per 
 | Message Storage | SQLite (better-sqlite3) | Store messages for polling |
 | Container Runtime | Containers (Linux VMs) | Isolated environments for agent execution |
 | Agent | @anthropic-ai/claude-agent-sdk (0.2.29) | Run Claude with tools and MCP servers |
-| Browser Automation | agent-browser + Chromium | Web interaction and screenshots |
+| Browser Automation | Lightpanda (headless, Zig-based) | Web navigation, content extraction, form interaction via MCP |
 | Runtime | Node.js 20+ | Host process for routing and scheduling |
 
 ---
@@ -123,7 +123,7 @@ nanoclaw/
 │   │       ├── index.ts           # Entry point (query loop, IPC polling, session resume)
 │   │       └── ipc-mcp-stdio.ts   # Stdio-based MCP server for host communication
 │   └── skills/
-│       └── agent-browser.md       # Browser automation skill
+│       └── agent-browser/SKILL.md  # Lightpanda browser skill (10 MCP tools)
 │
 ├── dist/                          # Compiled JavaScript (gitignored)
 │

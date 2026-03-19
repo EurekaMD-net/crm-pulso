@@ -1,38 +1,22 @@
 # NanoClaw Agent Container
-# Runs Claude Agent SDK in isolated Linux VM with browser automation
+# Runs Claude Agent SDK in isolated Linux VM with Lightpanda browser
 
 FROM node:22-slim
 
-# Install system dependencies for Chromium and PDF tools
+# Install system dependencies and PDF tools (no Chromium — Lightpanda replaces it)
 RUN apt-get update && apt-get install -y \
-    chromium \
-    fonts-liberation \
-    fonts-noto-cjk \
-    fonts-noto-color-emoji \
-    libgbm1 \
-    libnss3 \
-    libatk-bridge2.0-0 \
-    libgtk-3-0 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    libasound2 \
-    libpangocairo-1.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxshmfence1 \
     curl \
     git \
     poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Chromium path for agent-browser
-ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+# Install Lightpanda headless browser (Zig-based, ~24MB RAM vs Chromium's ~200MB)
+RUN curl -L -o /usr/local/bin/lightpanda \
+    https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-x86_64-linux \
+    && chmod +x /usr/local/bin/lightpanda
 
-# Install agent-browser and claude-code globally
-RUN npm install -g agent-browser @anthropic-ai/claude-code
+# Install claude-code globally
+RUN npm install -g @anthropic-ai/claude-code
 
 # Create app directory
 WORKDIR /app

@@ -1,7 +1,7 @@
 # Pulso — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-03-19 (NanoClaw upstream sync — credential proxy, timezone fix, 69 tools, 27 tables, 796 CRM tests, 37 test files)
+> Last updated: 2026-03-19 (Lightpanda browser + timezone fix — 69 tools, 27 tables, 796 CRM tests, 37 test files)
 > Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`
 
 ## Phase Tracker
@@ -291,7 +291,7 @@ These rules hold across ALL phases:
 - **Service**: `agentic-crm.service` (systemd), managed via `crm-ctl`
 - **Timezone**: `America/Mexico_City` (hardcoded default in config.ts + systemd `TZ` env var)
 - **Credential Proxy**: Port 7462 (containers get placeholder keys, proxy injects real credentials)
-- **Container**: `agentic-crm-agent:latest` (rebuilt 2026-03-16)
+- **Container**: `agentic-crm-agent:latest` (rebuilt 2026-03-19, Lightpanda browser replaces Chromium — 1.16GB vs 2.27GB)
 - **Hindsight**: `crm-hindsight` Docker sidecar on `crm-net` network (port 8888 API, 9998 UI), persistent volume at `data/hindsight/`. Qwen LLM + local embeddings
 - **WhatsApp**: Authenticated (5215530331051)
 - **Dashboard**: Port 3000 open (UFW), short links via Bitly
@@ -331,6 +331,8 @@ These rules hold across ALL phases:
 | `4989428` | feat: add crm-add-tool and crm-deploy Claude Code skills |
 | `42404dc` | docs: add Pulso vision, technical plan, and updated roadmap (Phases 8-14) |
 | — | feat: NanoClaw upstream sync — credential proxy (containers never see real API keys), PROXY_BIND_HOST + hostGatewayArgs, group-queue runningTaskId tracking |
-| — | fix: timezone — hardcode America/Mexico_City default, TZ in systemd + .env. Agent was reporting Thursday (UTC) when it was still Wednesday in MX |
+| — | fix: timezone — hardcode America/Mexico_City default, TZ in systemd + .env |
+| — | feat: replace Chromium+agent-browser with Lightpanda headless browser (MCP, 10 tools). Image 2.27→1.16GB, runtime 200→24MB RAM |
+| — | fix: UTC timestamps in message XML — toLocalTime() converts to MX timezone before LLM sees them. refreshSystemDate() keeps date fresh in long-lived containers |
 | `5a59f9e` | feat: template scoring system + ACE-inspired self-improvement |
 | `8e39a40` | fix: replace TinyURL with Bitly for dashboard link shortening |

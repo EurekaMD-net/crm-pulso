@@ -1,4 +1,5 @@
 import { Channel, NewMessage } from './types.js';
+import { TIMEZONE } from './config.js';
 
 export function escapeXml(s: string): string {
   if (!s) return '';
@@ -7,6 +8,25 @@ export function escapeXml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/** Convert UTC ISO timestamp to local time string for the configured timezone. */
+function toLocalTime(utcIso: string): string {
+  try {
+    const d = new Date(utcIso);
+    if (isNaN(d.getTime())) return utcIso;
+    return d.toLocaleString('es-MX', {
+      timeZone: TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  } catch {
+    return utcIso;
+  }
 }
 
 export function compactMessages(
@@ -28,7 +48,7 @@ export function formatMessages(
 ): string {
   const lines = messages.map(
     (m) =>
-      `<message sender="${escapeXml(m.sender_name)}" time="${m.timestamp}">${escapeXml(m.content)}</message>`,
+      `<message sender="${escapeXml(m.sender_name)}" time="${toLocalTime(m.timestamp)}">${escapeXml(m.content)}</message>`,
   );
   const header =
     truncatedCount && truncatedCount > 0

@@ -1,159 +1,85 @@
 ---
-name: agent-browser
-description: Browse the web for any task — research topics, read articles, interact with web apps, fill forms, take screenshots, extract data, and test web pages. Use whenever a browser would be useful, not just when the user explicitly asks.
-allowed-tools: Bash(agent-browser:*)
+name: lightpanda-browser
+description: Browse the web — navigate pages, read content as markdown, click buttons, fill forms, extract links, run JavaScript, and get structured data. Uses Lightpanda headless browser via MCP tools (mcp__browser__*).
+allowed-tools: mcp__browser__*
 ---
 
-# Browser Automation with agent-browser
+# Browser Automation with Lightpanda
 
 ## Quick start
 
-```bash
-agent-browser open <url>        # Navigate to page
-agent-browser snapshot -i       # Get interactive elements with refs
-agent-browser click @e1         # Click element by ref
-agent-browser fill @e2 "text"   # Fill input by ref
-agent-browser close             # Close browser
+```
+mcp__browser__goto        → Navigate to a URL
+mcp__browser__markdown    → Get page content as clean markdown
+mcp__browser__click       → Click an element by node ID
+mcp__browser__fill        → Fill a form field
 ```
 
 ## Core workflow
 
-1. Navigate: `agent-browser open <url>`
-2. Snapshot: `agent-browser snapshot -i` (returns elements with refs like `@e1`, `@e2`)
-3. Interact using refs from the snapshot
-4. Re-snapshot after navigation or significant DOM changes
+1. Navigate: `mcp__browser__goto` with `url`
+2. Read: `mcp__browser__markdown` to get page content
+3. Interact: `mcp__browser__interactiveElements` to find buttons/inputs, then `click`/`fill`
+4. Re-read after navigation or form submission
 
-## Commands
+## Available tools (10)
 
-### Navigation
+### Navigation & Content
 
-```bash
-agent-browser open <url>      # Navigate to URL
-agent-browser back            # Go back
-agent-browser forward         # Go forward
-agent-browser reload          # Reload page
-agent-browser close           # Close browser
-```
+| Tool | Purpose |
+|------|---------|
+| `mcp__browser__goto` | Navigate to URL, load page in memory |
+| `mcp__browser__markdown` | Get page as markdown (optional `url` param navigates first) |
+| `mcp__browser__links` | Extract all links from the page |
+| `mcp__browser__semantic_tree` | AI-optimized DOM tree for reasoning |
+| `mcp__browser__structuredData` | Extract JSON-LD, OpenGraph, microdata |
 
-### Snapshot (page analysis)
+### Interaction
 
-```bash
-agent-browser snapshot            # Full accessibility tree
-agent-browser snapshot -i         # Interactive elements only (recommended)
-agent-browser snapshot -c         # Compact output
-agent-browser snapshot -d 3       # Limit depth to 3
-agent-browser snapshot -s "#main" # Scope to CSS selector
-```
-
-### Interactions (use @refs from snapshot)
-
-```bash
-agent-browser click @e1           # Click
-agent-browser dblclick @e1        # Double-click
-agent-browser fill @e2 "text"     # Clear and type
-agent-browser type @e2 "text"     # Type without clearing
-agent-browser press Enter         # Press key
-agent-browser hover @e1           # Hover
-agent-browser check @e1           # Check checkbox
-agent-browser uncheck @e1         # Uncheck checkbox
-agent-browser select @e1 "value"  # Select dropdown option
-agent-browser scroll down 500     # Scroll page
-agent-browser upload @e1 file.pdf # Upload files
-```
-
-### Get information
-
-```bash
-agent-browser get text @e1        # Get element text
-agent-browser get html @e1        # Get innerHTML
-agent-browser get value @e1       # Get input value
-agent-browser get attr @e1 href   # Get attribute
-agent-browser get title           # Get page title
-agent-browser get url             # Get current URL
-agent-browser get count ".item"   # Count matching elements
-```
-
-### Screenshots & PDF
-
-```bash
-agent-browser screenshot          # Save to temp directory
-agent-browser screenshot path.png # Save to specific path
-agent-browser screenshot --full   # Full page
-agent-browser pdf output.pdf      # Save as PDF
-```
-
-### Wait
-
-```bash
-agent-browser wait @e1                     # Wait for element
-agent-browser wait 2000                    # Wait milliseconds
-agent-browser wait --text "Success"        # Wait for text
-agent-browser wait --url "**/dashboard"    # Wait for URL pattern
-agent-browser wait --load networkidle      # Wait for network idle
-```
-
-### Semantic locators (alternative to refs)
-
-```bash
-agent-browser find role button click --name "Submit"
-agent-browser find text "Sign In" click
-agent-browser find label "Email" fill "user@test.com"
-agent-browser find placeholder "Search" type "query"
-```
-
-### Authentication with saved state
-
-```bash
-# Login once
-agent-browser open https://app.example.com/login
-agent-browser snapshot -i
-agent-browser fill @e1 "username"
-agent-browser fill @e2 "password"
-agent-browser click @e3
-agent-browser wait --url "**/dashboard"
-agent-browser state save auth.json
-
-# Later: load saved state
-agent-browser state load auth.json
-agent-browser open https://app.example.com/dashboard
-```
-
-### Cookies & Storage
-
-```bash
-agent-browser cookies                     # Get all cookies
-agent-browser cookies set name value      # Set cookie
-agent-browser cookies clear               # Clear cookies
-agent-browser storage local               # Get localStorage
-agent-browser storage local set k v       # Set value
-```
+| Tool | Purpose |
+|------|---------|
+| `mcp__browser__interactiveElements` | List clickable/fillable elements with `backendNodeId` |
+| `mcp__browser__click` | Click element by `backendNodeId` |
+| `mcp__browser__fill` | Fill text into input by `backendNodeId` and `text` |
+| `mcp__browser__scroll` | Scroll page or element (optional `backendNodeId`, `x`, `y`) |
 
 ### JavaScript
 
-```bash
-agent-browser eval "document.title"   # Run JavaScript
+| Tool | Purpose |
+|------|---------|
+| `mcp__browser__evaluate` | Run JavaScript in page context (`script` param, optional `url`) |
+
+## Example: Read a web page
+
+```
+1. mcp__browser__markdown(url: "https://example.com")
+   → Returns page content as markdown
 ```
 
 ## Example: Form submission
 
-```bash
-agent-browser open https://example.com/form
-agent-browser snapshot -i
-# Output shows: textbox "Email" [ref=e1], textbox "Password" [ref=e2], button "Submit" [ref=e3]
-
-agent-browser fill @e1 "user@example.com"
-agent-browser fill @e2 "password123"
-agent-browser click @e3
-agent-browser wait --load networkidle
-agent-browser snapshot -i  # Check result
+```
+1. mcp__browser__goto(url: "https://example.com/login")
+2. mcp__browser__interactiveElements()
+   → Returns list with backendNodeId for each input/button
+3. mcp__browser__fill(backendNodeId: 5, text: "user@example.com")
+4. mcp__browser__fill(backendNodeId: 8, text: "password123")
+5. mcp__browser__click(backendNodeId: 12)
+6. mcp__browser__markdown()
+   → Check the result page
 ```
 
-## Example: Data extraction
+## Example: Extract links from a page
 
-```bash
-agent-browser open https://example.com/products
-agent-browser snapshot -i
-agent-browser get text @e1  # Get product title
-agent-browser get attr @e2 href  # Get link URL
-agent-browser screenshot products.png
 ```
+1. mcp__browser__links(url: "https://news.ycombinator.com")
+   → Returns all links with text and href
+```
+
+## Notes
+
+- Pages persist in memory within a session — `goto` once, then use other tools without re-navigating
+- Most tools accept an optional `url` parameter to navigate before acting
+- `interactiveElements` returns `backendNodeId` values — use these with `click`, `fill`, `scroll`
+- JavaScript execution via `evaluate` runs in the page context (access DOM, window, etc.)
+- No screenshots or PDF rendering (use `markdown` or `semantic_tree` for content extraction)

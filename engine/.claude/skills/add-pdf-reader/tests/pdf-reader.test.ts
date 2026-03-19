@@ -16,15 +16,36 @@ describe('pdf-reader skill package', () => {
   });
 
   it('has all files declared in adds', () => {
-    const skillMd = path.join(skillDir, 'add', 'container', 'skills', 'pdf-reader', 'SKILL.md');
-    const pdfReaderScript = path.join(skillDir, 'add', 'container', 'skills', 'pdf-reader', 'pdf-reader');
+    const skillMd = path.join(
+      skillDir,
+      'add',
+      'container',
+      'skills',
+      'pdf-reader',
+      'SKILL.md',
+    );
+    const pdfReaderScript = path.join(
+      skillDir,
+      'add',
+      'container',
+      'skills',
+      'pdf-reader',
+      'pdf-reader',
+    );
 
     expect(fs.existsSync(skillMd)).toBe(true);
     expect(fs.existsSync(pdfReaderScript)).toBe(true);
   });
 
   it('pdf-reader script is a valid Bash script', () => {
-    const scriptPath = path.join(skillDir, 'add', 'container', 'skills', 'pdf-reader', 'pdf-reader');
+    const scriptPath = path.join(
+      skillDir,
+      'add',
+      'container',
+      'skills',
+      'pdf-reader',
+      'pdf-reader',
+    );
     const content = fs.readFileSync(scriptPath, 'utf-8');
 
     // Valid shell script
@@ -44,7 +65,14 @@ describe('pdf-reader skill package', () => {
   });
 
   it('container skill SKILL.md has correct frontmatter', () => {
-    const skillMdPath = path.join(skillDir, 'add', 'container', 'skills', 'pdf-reader', 'SKILL.md');
+    const skillMdPath = path.join(
+      skillDir,
+      'add',
+      'container',
+      'skills',
+      'pdf-reader',
+      'SKILL.md',
+    );
     const content = fs.readFileSync(skillMdPath, 'utf-8');
 
     expect(content).toContain('name: pdf-reader');
@@ -56,8 +84,20 @@ describe('pdf-reader skill package', () => {
 
   it('has all files declared in modifies', () => {
     const dockerfile = path.join(skillDir, 'modify', 'container', 'Dockerfile');
-    const whatsappTs = path.join(skillDir, 'modify', 'src', 'channels', 'whatsapp.ts');
-    const whatsappTestTs = path.join(skillDir, 'modify', 'src', 'channels', 'whatsapp.test.ts');
+    const whatsappTs = path.join(
+      skillDir,
+      'modify',
+      'src',
+      'channels',
+      'whatsapp.ts',
+    );
+    const whatsappTestTs = path.join(
+      skillDir,
+      'modify',
+      'src',
+      'channels',
+      'whatsapp.test.ts',
+    );
 
     expect(fs.existsSync(dockerfile)).toBe(true);
     expect(fs.existsSync(whatsappTs)).toBe(true);
@@ -66,14 +106,30 @@ describe('pdf-reader skill package', () => {
 
   it('has intent files for all modified files', () => {
     expect(
-      fs.existsSync(path.join(skillDir, 'modify', 'container', 'Dockerfile.intent.md')),
-    ).toBe(true);
-    expect(
-      fs.existsSync(path.join(skillDir, 'modify', 'src', 'channels', 'whatsapp.ts.intent.md')),
+      fs.existsSync(
+        path.join(skillDir, 'modify', 'container', 'Dockerfile.intent.md'),
+      ),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(skillDir, 'modify', 'src', 'channels', 'whatsapp.test.ts.intent.md'),
+        path.join(
+          skillDir,
+          'modify',
+          'src',
+          'channels',
+          'whatsapp.ts.intent.md',
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(
+          skillDir,
+          'modify',
+          'src',
+          'channels',
+          'whatsapp.test.ts.intent.md',
+        ),
       ),
     ).toBe(true);
   });
@@ -96,8 +152,7 @@ describe('pdf-reader skill package', () => {
     );
 
     expect(content).toContain('FROM node:22-slim');
-    expect(content).toContain('chromium');
-    expect(content).toContain('agent-browser');
+    expect(content).toContain('lightpanda');
     expect(content).toContain('WORKDIR /app');
     expect(content).toContain('COPY agent-runner/');
     expect(content).toContain('ENTRYPOINT');

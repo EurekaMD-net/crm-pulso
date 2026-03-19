@@ -14,8 +14,8 @@ Added PDF reading capability via poppler-utils and a custom pdf-reader CLI scrip
 - Added: `RUN chmod +x /usr/local/bin/pdf-reader` to make it executable
 
 ## Invariants (must-keep)
-- All Chromium dependencies unchanged
-- agent-browser and claude-code npm global installs unchanged
+- Lightpanda browser binary install unchanged
+- claude-code npm global install unchanged
 - WORKDIR, COPY agent-runner, npm install, npm run build sequence unchanged
 - Workspace directory creation unchanged
 - Entrypoint script unchanged
