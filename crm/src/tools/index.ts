@@ -2456,7 +2456,28 @@ export async function executeTool(
   if (!handler) {
     return JSON.stringify({ error: `Herramienta desconocida: ${name}` });
   }
-  return handler(args, ctx);
+
+  const start = Date.now();
+  let success = true;
+  try {
+    return await handler(args, ctx);
+  } catch (err) {
+    success = false;
+    throw err;
+  } finally {
+    // Lazy import to avoid circular dependency and keep telemetry non-fatal
+    import("./telemetry.js")
+      .then((m) =>
+        m.recordToolUsage(
+          name,
+          ctx.persona_id,
+          ctx.rol,
+          Date.now() - start,
+          success,
+        ),
+      )
+      .catch(() => {});
+  }
 }
 
 export { type ToolDefinition };

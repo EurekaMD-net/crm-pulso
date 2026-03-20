@@ -1,7 +1,7 @@
 # Pulso — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-03-19 (Lightpanda browser + timezone fix — 69 tools, 27 tables, 796 CRM tests, 37 test files)
+> Last updated: 2026-03-20 (Tool usage telemetry + proactive memory directives — 69 tools, 27 tables + 1 telemetry, 802 CRM tests, 38 test files)
 > Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`
 
 ## Phase Tracker
