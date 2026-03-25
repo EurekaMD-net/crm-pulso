@@ -189,6 +189,9 @@ async function callProvider(
     messages: request.messages,
     max_tokens: request.max_tokens ?? getMaxTokens(),
     stream: streaming,
+    // Request usage stats in the final SSE chunk (OpenAI-compatible standard).
+    // Without this, streaming responses report 0 prompt/completion tokens.
+    ...(streaming && { stream_options: { include_usage: true } }),
   };
   if (request.temperature !== undefined) {
     body.temperature = request.temperature;
@@ -514,14 +517,26 @@ export async function inferWithTools(
     process.env.INFERENCE_TOTAL_TIMEOUT_MS ?? "120000",
     10,
   );
+  const tokenBudget = parseInt(
+    process.env.INFERENCE_TOKEN_BUDGET ?? "25000",
+    10,
+  );
   const TOOL_CHAIN_WARNING = 8;
+  // Minimum remaining time to start a new round — avoids starting an inference
+  // call that will inevitably timeout mid-stream (single call can take 20-30s).
+  const MIN_REMAINING_MS = 15_000;
 
   for (let round = 0; round < maxRounds; round++) {
-    // Fix #1: Check total elapsed time before each round — return partial results instead of crashing
-    if (Date.now() - startTime > totalTimeoutMs) {
+    const elapsed = Date.now() - startTime;
+    const remaining = totalTimeoutMs - elapsed;
+
+    // Time guard: abort if total timeout exceeded OR not enough time for another round
+    if (remaining < MIN_REMAINING_MS) {
       logger.warn(
-        { round, elapsed: Date.now() - startTime, totalTimeoutMs },
-        "total tool-loop timeout reached, returning partial results",
+        { round, elapsed, remaining, totalTimeoutMs },
+        remaining <= 0
+          ? "total tool-loop timeout reached, returning partial results"
+          : "insufficient time for next round, returning partial results",
       );
       const lastAssistant = [...conversation]
         .reverse()
@@ -540,7 +555,7 @@ export async function inferWithTools(
       };
     }
 
-    // Fix #2: After 8 consecutive tool rounds, hint the LLM to summarize and respond
+    // After 8 consecutive tool rounds, hint the LLM to summarize and respond
     if (round === TOOL_CHAIN_WARNING) {
       conversation.push({
         role: "system" as const,
@@ -633,9 +648,24 @@ export async function inferWithTools(
       tool_calls: sanitizedToolCalls,
     });
     conversation.push(...toolResults);
+
+    // Token budget check — if this round's prompt exceeded the ceiling,
+    // the next round will be even larger (more tool results). Wrap up now.
+    if (response.usage.prompt_tokens >= tokenBudget) {
+      logger.warn(
+        {
+          round,
+          promptTokens: response.usage.prompt_tokens,
+          tokenBudget,
+          totalPrompt,
+        },
+        "token budget exceeded, forcing early exit",
+      );
+      break;
+    }
   }
 
-  // Safety: hit max rounds — return last content or empty
+  // Safety: hit max rounds or token budget — return last content or empty
   const lastAssistant = [...conversation]
     .reverse()
     .find((m) => m.role === "assistant");
