@@ -4,10 +4,14 @@
  * JWT-based authentication with domain-wide delegation for Gmail, Calendar, Drive, Slides, Sheets.
  * Requires GOOGLE_SERVICE_ACCOUNT_KEY env var containing the JSON key file contents.
  * Impersonates individual persona emails for accessing their data.
+ *
+ * Key resolution: checks process.env first (container via stdin), then .env
+ * file on disk (host process for doc-sync, warmth scheduler, etc.).
  */
 
 import { google } from "googleapis";
 import { JWT } from "google-auth-library";
+import { readEnvFile } from "../../../../engine/src/env.js";
 
 const GMAIL_SEND_SCOPES = ["https://www.googleapis.com/auth/gmail.send"];
 const GMAIL_COMPOSE_SCOPES = [
@@ -28,13 +32,27 @@ const DRIVE_FULL_SCOPES = ["https://www.googleapis.com/auth/drive"];
 const SLIDES_SCOPES = ["https://www.googleapis.com/auth/presentations"];
 const SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
 
+/**
+ * Get the raw GOOGLE_SERVICE_ACCOUNT_KEY value from process.env or .env file.
+ * Returns null if not configured in either location.
+ */
+export function getGoogleServiceAccountKey(): string | null {
+  // Container path: set via stdin secrets → process.env
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    return process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  }
+  // Host path: read directly from .env file (never loaded into process.env)
+  const env = readEnvFile(["GOOGLE_SERVICE_ACCOUNT_KEY"]);
+  return env.GOOGLE_SERVICE_ACCOUNT_KEY || null;
+}
+
 /** Returns true if Google Workspace integration is configured. */
 export function isGoogleEnabled(): boolean {
-  return !!process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  return !!getGoogleServiceAccountKey();
 }
 
 function getServiceAccountKey(): { client_email: string; private_key: string } {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  const raw = getGoogleServiceAccountKey();
   if (!raw) throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY not set");
   return JSON.parse(raw);
 }

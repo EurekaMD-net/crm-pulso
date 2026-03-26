@@ -7,6 +7,11 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// Mock readEnvFile so .env fallback doesn't interfere with env-based tests
+vi.mock("../../engine/src/env.js", () => ({
+  readEnvFile: () => ({}),
+}));
+
 // Track constructor calls to verify scopes
 const jwtInstances: Array<{
   email: string;

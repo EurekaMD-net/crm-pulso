@@ -3,10 +3,14 @@
  *
  * Returns the configured workspace provider (Google or Microsoft).
  * Provider is selected via WORKSPACE_PROVIDER env var (default: google).
+ *
+ * Checks both process.env (set inside containers via stdin secrets)
+ * and the .env file (host-side for doc-sync and other host processes).
  */
 
 import type { WorkspaceProvider } from "./types.js";
 import { GoogleProvider } from "./google/index.js";
+import { getGoogleServiceAccountKey } from "./google/auth.js";
 
 let cached: WorkspaceProvider | null = null;
 
@@ -31,7 +35,7 @@ export function isWorkspaceEnabled(): boolean {
       process.env.MICROSOFT_CLIENT_SECRET
     );
   }
-  return !!process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  return !!getGoogleServiceAccountKey();
 }
 
 /** Reset cached provider (for testing). */

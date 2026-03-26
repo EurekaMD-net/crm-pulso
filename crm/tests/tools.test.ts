@@ -17,6 +17,11 @@ vi.mock("../src/db.js", () => ({
   getDatabase: () => testDb,
 }));
 
+// Mock readEnvFile so .env fallback doesn't interfere with Google-disabled tests
+vi.mock("../../engine/src/env.js", () => ({
+  readEnvFile: () => ({}),
+}));
+
 const noop = () => {};
 const noopLogger = {
   info: noop,
