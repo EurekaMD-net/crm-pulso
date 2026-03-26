@@ -56,10 +56,14 @@ export async function buscar_web(
       results?: Array<{ title: string; url: string; description: string }>;
     };
   };
+  const MAX_DESC = 150;
   const results = (data.web?.results || []).map((r) => ({
     titulo: r.title,
     url: r.url,
-    descripcion: r.description,
+    descripcion:
+      r.description.length > MAX_DESC
+        ? r.description.slice(0, MAX_DESC) + "…"
+        : r.description,
   }));
 
   return JSON.stringify({ resultados: results, total: results.length });

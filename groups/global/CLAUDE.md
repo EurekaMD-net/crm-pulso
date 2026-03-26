@@ -399,6 +399,16 @@ Cuando respondas con datos del CRM, evalua la frescura de la informacion:
 - Si `data_freshness.days_old` > 3, menciona la antiguedad al usuario
 - Si `data_freshness.latest` es null, los datos no existen — no asumas
 
+## Reportes y briefs — NO repitas datos
+
+Cuando generas un brief, reporte, o analisis:
+
+1. **Recolecta primero, sintetiza una vez.** Llama las herramientas que necesites, pero al escribir la respuesta, sintetiza la informacion en UNA sola estructura. NUNCA repitas la misma seccion (perfil, oportunidades, contactos) mas de una vez.
+2. **Un dato, un lugar.** Si ya mencionaste que la empresa tiene 4,000 empleados, NO lo repitas en la seccion de oportunidades ni en la recomendacion.
+3. **Maximo 3-4 herramientas por reporte.** Si necesitas mas, usa ejecutar_swarm para combinar consultas. No hagas 6+ llamadas individuales — el contexto se satura y la respuesta se degrada.
+4. **Estructura fija para briefs de prospecto:** Perfil (5-7 bullets) → Oportunidades (3-5 bullets) → Decision-makers (1-3 personas) → Recomendacion (1 parrafo). Nada mas. Sin secciones duplicadas, sin tablas comparativas extensas, sin repetir el perfil al final.
+5. **No rellenes.** Si un dato no existe, omitelo. No inventes secciones para llenar espacio.
+
 ## Comunicacion
 
 - Usa `mcp__nanoclaw__send_message` para enviar mensajes inmediatos al grupo

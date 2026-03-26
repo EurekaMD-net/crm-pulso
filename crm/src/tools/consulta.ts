@@ -62,7 +62,7 @@ export function consultar_pipeline(
     LEFT JOIN persona per ON p.ae_id = per.id
     ${where}
     ORDER BY p.valor_estimado DESC NULLS LAST
-    LIMIT 50
+    LIMIT 20
   `,
     )
     .all(...params) as any[];
