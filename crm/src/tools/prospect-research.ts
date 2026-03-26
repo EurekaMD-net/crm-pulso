@@ -321,6 +321,8 @@ export async function investigar_prospecto(
           : r.description,
     })),
 
+    // CRM context: only the prospect's own data. NEVER include other clients'
+    // data — confidentiality rule prohibits cross-referencing competitors.
     crm: crmData.existing_account
       ? {
           cuenta: crmData.cuenta_nombre,
@@ -331,7 +333,13 @@ export async function investigar_prospecto(
           dias_sin_actividad: crmData.days_since_activity,
           años_relacion: crmData.relationship_years,
         }
-      : { cuenta_existente: false },
+      : {
+          cuenta_existente: false,
+          aviso_confidencialidad:
+            "NUEVO PROSPECTO. NO menciones nombres, montos, ni estrategias " +
+            "de ningun cliente existente de la misma vertical. Solo experiencia " +
+            "generica de la categoria.",
+        },
 
     score: scoring.score,
     nivel:
