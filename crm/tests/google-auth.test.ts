@@ -5,12 +5,7 @@
  * Google API calls are not tested here — only auth setup and env detection.
  */
 
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-// Mock readEnvFile so .env fallback doesn't interfere with env-based tests
-vi.mock("../../engine/src/env.js", () => ({
-  readEnvFile: () => ({}),
-}));
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock googleapis and google-auth-library
 vi.mock("googleapis", () => {
@@ -38,6 +33,10 @@ vi.mock("google-auth-library", () => {
 
 const { isGoogleEnabled, getGmailClient, getCalendarClient } =
   await import("../src/google-auth.js");
+const { _resetEnvCache } = await import("../src/workspace/google/auth.js");
+
+// Block .env fallback: override cwd so readFileSync won't find a real .env
+const originalCwd = process.cwd;
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -46,6 +45,14 @@ const { isGoogleEnabled, getGmailClient, getCalendarClient } =
 describe("isGoogleEnabled", () => {
   afterEach(() => {
     delete process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+    _resetEnvCache();
+    process.cwd = originalCwd;
+  });
+
+  beforeEach(() => {
+    _resetEnvCache();
+    // Point cwd to a dir with no .env so fallback returns null
+    process.cwd = () => "/tmp";
   });
 
   it("returns false when env not set", () => {
@@ -69,8 +76,14 @@ describe("isGoogleEnabled", () => {
 });
 
 describe("getGmailClient", () => {
+  beforeEach(() => {
+    _resetEnvCache();
+    process.cwd = () => "/tmp";
+  });
   afterEach(() => {
     delete process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+    _resetEnvCache();
+    process.cwd = originalCwd;
   });
 
   it("throws when env not set", () => {
@@ -93,8 +106,14 @@ describe("getGmailClient", () => {
 });
 
 describe("getCalendarClient", () => {
+  beforeEach(() => {
+    _resetEnvCache();
+    process.cwd = () => "/tmp";
+  });
   afterEach(() => {
     delete process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+    _resetEnvCache();
+    process.cwd = originalCwd;
   });
 
   it("throws when env not set", () => {
@@ -117,6 +136,15 @@ describe("getCalendarClient", () => {
 });
 
 describe("graceful fallback", () => {
+  beforeEach(() => {
+    _resetEnvCache();
+    process.cwd = () => "/tmp";
+  });
+  afterEach(() => {
+    _resetEnvCache();
+    process.cwd = originalCwd;
+  });
+
   it("isGoogleEnabled false does not crash", () => {
     delete process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
     expect(isGoogleEnabled()).toBe(false);

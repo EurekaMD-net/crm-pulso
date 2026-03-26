@@ -9,9 +9,10 @@
  * file on disk (host process for doc-sync, warmth scheduler, etc.).
  */
 
+import fs from "fs";
+import path from "path";
 import { google } from "googleapis";
 import { JWT } from "google-auth-library";
-import { readEnvFile } from "../../../../engine/src/env.js";
 
 const GMAIL_SEND_SCOPES = ["https://www.googleapis.com/auth/gmail.send"];
 const GMAIL_COMPOSE_SCOPES = [
@@ -35,20 +36,54 @@ const SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
 /**
  * Get the raw GOOGLE_SERVICE_ACCOUNT_KEY value from process.env or .env file.
  * Returns null if not configured in either location.
+ *
+ * Container: process.env is set via stdin secrets — fast path.
+ * Host: reads .env file directly (engine's readEnvFile doesn't populate process.env).
  */
+let _envFallbackCache: string | null | undefined;
+
 export function getGoogleServiceAccountKey(): string | null {
   // Container path: set via stdin secrets → process.env
   if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
     return process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
   }
-  // Host path: read directly from .env file (never loaded into process.env)
-  const env = readEnvFile(["GOOGLE_SERVICE_ACCOUNT_KEY"]);
-  return env.GOOGLE_SERVICE_ACCOUNT_KEY || null;
+  // Host path: read .env file directly. Cached to avoid re-reading disk.
+  if (_envFallbackCache !== undefined) return _envFallbackCache;
+  try {
+    const envPath = path.resolve(process.cwd(), ".env");
+    const content = fs.readFileSync(envPath, "utf-8");
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eqIdx = trimmed.indexOf("=");
+      if (eqIdx === -1) continue;
+      if (trimmed.slice(0, eqIdx).trim() !== "GOOGLE_SERVICE_ACCOUNT_KEY")
+        continue;
+      let value = trimmed.slice(eqIdx + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      _envFallbackCache = value || null;
+      return _envFallbackCache;
+    }
+  } catch {
+    // Inside container or .env not available
+  }
+  _envFallbackCache = null;
+  return null;
 }
 
 /** Returns true if Google Workspace integration is configured. */
 export function isGoogleEnabled(): boolean {
   return !!getGoogleServiceAccountKey();
+}
+
+/** @internal — reset .env cache for testing */
+export function _resetEnvCache(): void {
+  _envFallbackCache = undefined;
 }
 
 function getServiceAccountKey(): { client_email: string; private_key: string } {

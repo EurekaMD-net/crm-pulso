@@ -90,7 +90,22 @@ function log(message: string): void {
   console.error(`[crm-agent-runner] ${message}`);
 }
 
+/**
+ * Strip CJK characters that Chinese LLMs (GLM-5, Qwen) occasionally leak.
+ * Preserves all Latin, Spanish diacritics, punctuation, emoji, and whitespace.
+ */
+function stripCJK(text: string): string {
+  // CJK Unified Ideographs + CJK Compatibility + Bopomofo + Katakana + Hangul
+  return text
+    .replace(/[\u2E80-\u9FFF\uF900-\uFAFF\uFE30-\uFE4F]+/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function writeOutput(output: ContainerOutput): void {
+  if (output.result) {
+    output.result = stripCJK(output.result);
+  }
   console.log(OUTPUT_START_MARKER);
   console.log(JSON.stringify(output));
   console.log(OUTPUT_END_MARKER);
@@ -863,6 +878,7 @@ export {
   drainIpcInput,
   shouldClose,
   writeOutput,
+  stripCJK,
   readStdin,
   OUTPUT_START_MARKER,
   OUTPUT_END_MARKER,

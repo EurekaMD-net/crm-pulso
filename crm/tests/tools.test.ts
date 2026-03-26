@@ -17,11 +17,6 @@ vi.mock("../src/db.js", () => ({
   getDatabase: () => testDb,
 }));
 
-// Mock readEnvFile so .env fallback doesn't interfere with Google-disabled tests
-vi.mock("../../engine/src/env.js", () => ({
-  readEnvFile: () => ({}),
-}));
-
 const noop = () => {};
 const noopLogger = {
   info: noop,
@@ -52,6 +47,15 @@ vi.mock("../src/google-auth.js", () => ({
   getDriveClient: () => {
     throw new Error("Not configured");
   },
+}));
+
+// Mock workspace provider to disable Google for all tools in this test suite
+vi.mock("../src/workspace/provider.js", () => ({
+  isWorkspaceEnabled: () => false,
+  getProvider: () => {
+    throw new Error("Not configured");
+  },
+  _resetProvider: () => {},
 }));
 
 const { getToolsForRole, executeTool, buildToolContext } =

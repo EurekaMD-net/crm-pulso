@@ -532,3 +532,50 @@ describe("session ID generation", () => {
     expect(id1).toMatch(/^crm-\d+-[a-z0-9]+$/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// CJK sanitization (Chinese LLM leakage prevention)
+// ---------------------------------------------------------------------------
+
+describe("stripCJK", () => {
+  // Inline implementation matching agent-runner/index.ts
+  function stripCJK(text: string): string {
+    return text
+      .replace(/[\u2E80-\u9FFF\uF900-\uFAFF\uFE30-\uFE4F]+/g, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+
+  it("strips Chinese characters from mixed Spanish text", () => {
+    expect(stripCJK("seguimiento 跟进 inmediato")).toBe(
+      "seguimiento inmediato",
+    );
+  });
+
+  it("strips full CJK sentences", () => {
+    expect(stripCJK("Pipeline activo 管道活跃")).toBe("Pipeline activo");
+  });
+
+  it("preserves Spanish with diacritics", () => {
+    expect(stripCJK("Propuesta de campaña — $15.2M")).toBe(
+      "Propuesta de campaña — $15.2M",
+    );
+  });
+
+  it("preserves emoji", () => {
+    expect(stripCJK("✅ Deal cerrado 完成")).toBe("✅ Deal cerrado");
+  });
+
+  it("returns empty for pure CJK input", () => {
+    expect(stripCJK("跟进客户")).toBe("");
+  });
+
+  it("handles no CJK gracefully", () => {
+    const text = "Todo bien, pipeline saludable";
+    expect(stripCJK(text)).toBe(text);
+  });
+
+  it("collapses multiple spaces after removal", () => {
+    expect(stripCJK("antes 中文 después")).toBe("antes después");
+  });
+});

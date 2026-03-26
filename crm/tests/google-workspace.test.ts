@@ -5,12 +5,7 @@
  * Validates scope isolation between read-only and write clients.
  */
 
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-// Mock readEnvFile so .env fallback doesn't interfere with env-based tests
-vi.mock("../../engine/src/env.js", () => ({
-  readEnvFile: () => ({}),
-}));
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Track constructor calls to verify scopes
 const jwtInstances: Array<{
@@ -64,6 +59,8 @@ const {
   getCalendarReadClient,
   getDriveClient,
 } = await import("../src/google-auth.js");
+const { _resetEnvCache } = await import("../src/workspace/google/auth.js");
+const originalCwd = process.cwd;
 
 const TEST_KEY = JSON.stringify({
   client_email: "test@project.iam.gserviceaccount.com",
@@ -76,9 +73,15 @@ const TEST_KEY = JSON.stringify({
 // ---------------------------------------------------------------------------
 
 describe("new client factories", () => {
+  beforeEach(() => {
+    _resetEnvCache();
+    process.cwd = () => "/tmp";
+  });
   afterEach(() => {
     delete process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
     jwtInstances.length = 0;
+    _resetEnvCache();
+    process.cwd = originalCwd;
   });
 
   it("getGmailReadClient returns an object", () => {
