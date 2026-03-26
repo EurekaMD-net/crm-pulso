@@ -1,7 +1,7 @@
 # Pulso — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-03-26 (Client confidentiality firewall, prospect dedup, CJK sanitizer, briefing triggers, doc-sync fix, seeder linkage — 70 tools, 31 tables, 824 CRM tests, 40 test files)
+> Last updated: 2026-03-26 (Reporting framework + confidentiality firewall + prospect dedup + CJK sanitizer + briefing triggers + doc-sync fix + seeder linkage — 70 tools, 31 tables, 824 CRM tests, 40 test files)
 > Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`, `COMPETITIVE-ASSESSMENT.md`
 
 ## Phase Tracker
@@ -342,3 +342,4 @@ These rules hold across ALL phases:
 | `34ffa36` | fix: strip CJK characters leaked by GLM-5 (stripCJK in writeOutput), auth.ts direct .env read for container build compat                                                                                                                                                                                                     |
 | `f7354a3` | fix: prospect tool bloat — content-similarity dedup (>60% word overlap), 5 source cap, 150-char descriptions, compact JSON keys                                                                                                                                                                                              |
 | `2aad2d4` | fix: client confidentiality firewall — hard rule in global.md (never cross-reference competitors), inline aviso in prospect tool for new accounts                                                                                                                                                                            |
+| `78106f3` | fix: reporting framework — anti-repetition prompt rules, buscar_web 150-char cap, pipeline 20-result cap. Prevents 3-4x content duplication in briefs                                                                                                                                                                        |
