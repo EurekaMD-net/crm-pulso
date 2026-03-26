@@ -1,7 +1,7 @@
 # Pulso — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-03-26 (Briefing trigger phrases across all 4 roles, doc-sync .env secret resolution fix, daily seeder proposal linkage, template sync — 70 tools, 31 tables, 817 CRM tests, 40 test files)
+> Last updated: 2026-03-26 (Client confidentiality firewall, prospect dedup, CJK sanitizer, briefing triggers, doc-sync fix, seeder linkage — 70 tools, 31 tables, 824 CRM tests, 40 test files)
 > Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`, `COMPETITIVE-ASSESSMENT.md`
 
 ## Phase Tracker
@@ -210,7 +210,7 @@
 | SQLite tables        | 31                        | 33                | +2        |
 | CRM tools            | 70                        | ~77               | +7        |
 | Test files           | 40                        | ~45               | +5        |
-| Tests passing        | 817                       | 1000+             | +183      |
+| Tests passing        | 824                       | 1000+             | +176      |
 | Persona templates    | 8                         | 8 (dynamic)       | —         |
 | Role counts          | AE:51 Ger:54 Dir:63 VP:61 | —                 | —         |
 | Claude Code sessions | ~24                       | 26                | ~2        |
@@ -339,3 +339,6 @@ These rules hold across ALL phases:
 | `8e39a40` | fix: replace TinyURL with Bitly for dashboard link shortening                                                                                                                                                                                                                                                                |
 | `3324739` | fix: agent ignores "Cómo vamos?" — briefing trigger phrases in all 4 role templates + global disambiguation, daily seeder links activities to proposals (fixes perpetual staleness), template sync                                                                                                                           |
 | `c522aa9` | fix: doc-sync never runs on host — readEnvFile() doesn't populate process.env, so Google key was invisible to host-side doc-sync. auth.ts now falls back to reading .env directly                                                                                                                                            |
+| `34ffa36` | fix: strip CJK characters leaked by GLM-5 (stripCJK in writeOutput), auth.ts direct .env read for container build compat                                                                                                                                                                                                     |
+| `f7354a3` | fix: prospect tool bloat — content-similarity dedup (>60% word overlap), 5 source cap, 150-char descriptions, compact JSON keys                                                                                                                                                                                              |
+| `2aad2d4` | fix: client confidentiality firewall — hard rule in global.md (never cross-reference competitors), inline aviso in prospect tool for new accounts                                                                                                                                                                            |
