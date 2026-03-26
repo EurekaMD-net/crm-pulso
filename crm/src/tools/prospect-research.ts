@@ -261,9 +261,41 @@ export async function investigar_prospecto(
   );
 
   const allResults = searchResults.flat();
-  const uniqueResults = allResults.filter(
-    (r, i, arr) => arr.findIndex((x) => x.url === r.url) === i,
-  );
+
+  // Deduplicate by URL, then by content similarity (skip snippets that
+  // share >60% of words with an already-kept result — prevents the LLM
+  // from seeing the same facts repeated across multiple search results).
+  const seen = new Set<string>();
+  const keptSnippets: string[] = [];
+  const uniqueResults: typeof allResults = [];
+
+  for (const r of allResults) {
+    if (seen.has(r.url)) continue;
+    seen.add(r.url);
+
+    // Content similarity check: tokenize description, compare with kept snippets
+    const words = new Set(
+      r.description
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 3),
+    );
+    const isDuplicate = keptSnippets.some((kept) => {
+      const keptWords = new Set(
+        kept
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((w) => w.length > 3),
+      );
+      const overlap = [...words].filter((w) => keptWords.has(w)).length;
+      return overlap > words.size * 0.6;
+    });
+
+    if (!isDuplicate) {
+      uniqueResults.push(r);
+      keptSnippets.push(r.description);
+    }
+  }
 
   // Step 2: CRM data lookup
   const crmData = lookupCrmData(empresa, ctx);
@@ -271,55 +303,45 @@ export async function investigar_prospecto(
   // Step 3: Score prospect
   const scoring = scoreProspect(crmData, uniqueResults.length);
 
-  // Step 4: Assemble structured intelligence report
+  // Step 4: Assemble compact intelligence report.
+  // Keep it lean — the LLM repeats bloated tool results verbatim.
+  // Max 5 sources, truncated descriptions, no synthesis prompt.
+  const MAX_SOURCES = 5;
+  const MAX_DESC_CHARS = 150;
+
   return JSON.stringify({
     empresa,
-    fecha_investigacion: new Date().toISOString().split("T")[0],
-    enfoque,
+    fecha: new Date().toISOString().split("T")[0],
 
-    // Web intelligence
-    inteligencia_web: {
-      total_resultados: uniqueResults.length,
-      fuentes: uniqueResults.slice(0, 10).map((r) => ({
-        titulo: r.title,
-        url: r.url,
-        descripcion: r.description,
-      })),
-    },
+    web: uniqueResults.slice(0, MAX_SOURCES).map((r) => ({
+      t: r.title,
+      d:
+        r.description.length > MAX_DESC_CHARS
+          ? r.description.slice(0, MAX_DESC_CHARS) + "…"
+          : r.description,
+    })),
 
-    // CRM context
-    contexto_crm: {
-      cuenta_existente: crmData.existing_account,
-      cuenta_nombre: crmData.cuenta_nombre,
-      vertical: crmData.vertical,
-      ejecutivo_asignado: crmData.ae_nombre,
-      propuestas_activas: crmData.active_proposals,
-      valor_historico_total: crmData.total_historical_value,
-      ultima_actividad: crmData.last_activity_date,
-      dias_sin_actividad: crmData.days_since_activity,
-      años_relacion: crmData.relationship_years,
-    },
+    crm: crmData.existing_account
+      ? {
+          cuenta: crmData.cuenta_nombre,
+          vertical: crmData.vertical,
+          ejecutivo: crmData.ae_nombre,
+          propuestas_activas: crmData.active_proposals,
+          valor_historico: crmData.total_historical_value,
+          dias_sin_actividad: crmData.days_since_activity,
+          años_relacion: crmData.relationship_years,
+        }
+      : { cuenta_existente: false },
 
-    // Scoring
-    evaluacion: {
-      score: scoring.score,
-      nivel:
-        scoring.score >= 80
-          ? "ALTA"
-          : scoring.score >= 60
-            ? "MEDIA"
-            : scoring.score >= 40
-              ? "EXPLORAR"
-              : "BAJA",
-      factores: scoring.factors,
-      recomendacion: scoring.recommendation,
-    },
-
-    // Prompt for the LLM to synthesize
-    instruccion_sintesis:
-      "Con esta información, genera un briefing ejecutivo para el Ejecutivo de Cuenta. " +
-      "Incluye: (1) Perfil de la empresa, (2) Oportunidades identificadas, " +
-      "(3) Decision-makers potenciales, (4) Talking points sugeridos, " +
-      "(5) Siguiente acción recomendada. Basa todo en los datos reales de la búsqueda.",
+    score: scoring.score,
+    nivel:
+      scoring.score >= 80
+        ? "ALTA"
+        : scoring.score >= 60
+          ? "MEDIA"
+          : scoring.score >= 40
+            ? "EXPLORAR"
+            : "BAJA",
+    recomendacion: scoring.recommendation,
   });
 }
