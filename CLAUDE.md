@@ -74,9 +74,9 @@ npm run build:container   # Build CRM container (extends engine image)
 Service management (Linux):
 
 ```bash
-systemctl --user start agentic-crm
-systemctl --user stop agentic-crm
-systemctl --user restart agentic-crm
+systemctl start agentic-crm
+systemctl stop agentic-crm
+systemctl restart agentic-crm
 ```
 
 ## Git Operations
@@ -142,7 +142,7 @@ WhatsApp → engine (NanoClaw) → Direct tools (70 CRM tools via inference adap
 ## Testing
 
 ```bash
-npm run test         # All tests (783 CRM + 640 engine)
+npm run test         # All tests (990 across 51 files)
 ```
 
 Tests live in:

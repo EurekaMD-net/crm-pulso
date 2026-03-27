@@ -1,7 +1,7 @@
 # Pulso — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-03-26 (Reporting framework + confidentiality firewall + prospect dedup + CJK sanitizer + briefing triggers + doc-sync fix + seeder linkage — 70 tools, 31 tables, 824 CRM tests, 40 test files)
+> Last updated: 2026-03-27 (Ops fixes: systemd Restart=always, link-preview-js dep, vitest config excludes stale NanoClaw scaffolding — 70 tools, 31 tables, 990 tests, 51 test files)
 > Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`, `COMPETITIVE-ASSESSMENT.md`
 
 ## Phase Tracker
