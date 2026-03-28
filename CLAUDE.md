@@ -29,7 +29,7 @@ Agentic CRM for media ad sales. NanoClaw engine at `engine/`, all CRM code at `c
 | `crm/src/proposal-drafter.ts`    | Insight → borrador_agente propuesta (value/media derivation)                                                                                                                                                                                 |
 | `crm/src/cross-intelligence.ts`  | 5 cross-agent pattern detectors (vertical, holding, inventory, winloss, concentration)                                                                                                                                                       |
 | `crm/src/feedback-engine.ts`     | Draft-vs-final delta tracking for system learning                                                                                                                                                                                            |
-| `crm/src/analysis/`              | Shared analysis modules (peer-comparison.ts, media-mix.ts)                                                                                                                                                                                   |
+| `crm/src/analysis/`              | Shared analysis modules (peer-comparison.ts, media-mix.ts, map-reduce-summarizer.ts)                                                                                                                                                         |
 | `crm/src/tools/relaciones.ts`    | 7 Dir/VP relationship tools (warmth, milestones, interactions)                                                                                                                                                                               |
 | `crm/src/tools/memoria.ts`       | 3 memory tools (guardar, buscar, reflexionar)                                                                                                                                                                                                |
 | `crm/src/tools/drive.ts`         | Drive tools: list, read, create docs/sheets/slides with content                                                                                                                                                                              |
@@ -142,7 +142,7 @@ WhatsApp → engine (NanoClaw) → Direct tools (70 CRM tools via inference adap
 ## Testing
 
 ```bash
-npm run test         # All tests (990 across 51 files)
+npm run test         # All tests (1004 across 52 files)
 ```
 
 Tests live in:
