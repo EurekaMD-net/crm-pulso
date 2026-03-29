@@ -124,13 +124,16 @@ function handleIpcError(
   err: unknown,
   sourceGroup: string,
   type: unknown,
-): true {
+): boolean {
   const code = (err as any)?.code;
   if (code === "SQLITE_BUSY" || code === "SQLITE_LOCKED") {
     logger.error(
       { err, sourceGroup, type },
-      "CRM IPC transient DB error (message lost)",
+      "CRM IPC DB contention — operation failed, caller should retry",
     );
+    // Return false so the caller knows the write did NOT succeed.
+    // With busy_timeout=5000 this only fires after 5s of contention.
+    return false;
   } else if (typeof code === "string" && code.startsWith("SQLITE_CONSTRAINT")) {
     logger.warn({ err, sourceGroup, type }, "CRM IPC constraint violation");
   } else {

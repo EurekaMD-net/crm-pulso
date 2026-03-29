@@ -292,6 +292,9 @@ function buildContainerArgs(
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
+  // Resource limits: prevent runaway agents from OOM-killing the host
+  args.push('--memory', '512m', '--cpus', '1');
+
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
   // CRM hook: tell the container agent where to find the CRM database
