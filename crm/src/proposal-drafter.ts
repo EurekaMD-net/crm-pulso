@@ -153,6 +153,7 @@ function buildReasoning(
   valueReasoning: string,
   mixReasoning: string,
   accountHistory: ReturnType<typeof getAccountPropHistory>,
+  feedbackReasoning?: string,
 ): string {
   const parts: string[] = [];
   parts.push(`Insight: ${insight.descripcion}`);
@@ -168,7 +169,111 @@ function buildReasoning(
       `En vuelo: ${Array.from(accountHistory.tipos_en_vuelo).join(", ")}`,
     );
   }
+  if (feedbackReasoning) {
+    parts.push(`Aprendizaje: ${feedbackReasoning}`);
+  }
   return parts.join(". ");
+}
+
+// ---------------------------------------------------------------------------
+// Feedback-informed adjustments
+// ---------------------------------------------------------------------------
+
+interface FeedbackAdjustment {
+  valor_multiplier: number | null;
+  medios_adjustments: Record<string, number> | null;
+  reasoning: string;
+  sample_size: number;
+}
+
+export function getFeedbackAdjustments(
+  db: ReturnType<typeof getDatabase>,
+  aeId: string | null,
+): FeedbackAdjustment {
+  const empty: FeedbackAdjustment = {
+    valor_multiplier: null,
+    medios_adjustments: null,
+    reasoning: "",
+    sample_size: 0,
+  };
+  if (!aeId) return empty;
+
+  const cutoff = new Date(Date.now() - 90 * 86400000).toISOString();
+  const rows = db
+    .prepare(
+      `SELECT borrador_valor, final_valor, borrador_medios, final_medios
+       FROM feedback_propuesta
+       WHERE ae_id = ? AND resultado = 'aceptado_con_cambios'
+         AND borrador_valor IS NOT NULL AND final_valor IS NOT NULL
+         AND fecha_accion >= ?
+       ORDER BY fecha_accion DESC LIMIT 20`,
+    )
+    .all(aeId, cutoff) as any[];
+
+  if (rows.length < 3) return { ...empty, sample_size: rows.length };
+
+  // Value adjustment: average ratio of final/draft
+  const ratios = rows
+    .filter((r: any) => r.borrador_valor > 0)
+    .map((r: any) => r.final_valor / r.borrador_valor);
+  const avgRatio =
+    ratios.length >= 3
+      ? ratios.reduce((s: number, r: number) => s + r, 0) / ratios.length
+      : null;
+  // Only apply if consistent direction (>5% delta)
+  const valorMultiplier =
+    avgRatio && Math.abs(avgRatio - 1.0) > 0.05 ? avgRatio : null;
+
+  // Media mix adjustments: track per-medio deltas
+  let mediosAdjustments: Record<string, number> | null = null;
+  try {
+    const deltaCounts: Record<string, { total: number; count: number }> = {};
+    for (const r of rows) {
+      if (!r.borrador_medios || !r.final_medios) continue;
+      const draft = JSON.parse(r.borrador_medios);
+      const final_ = JSON.parse(r.final_medios);
+      for (const medio of Object.keys({ ...draft, ...final_ })) {
+        const draftPct = draft[medio] ?? 0;
+        const finalPct = final_[medio] ?? 0;
+        if (!deltaCounts[medio]) deltaCounts[medio] = { total: 0, count: 0 };
+        deltaCounts[medio].total += finalPct - draftPct;
+        deltaCounts[medio].count += 1;
+      }
+    }
+    const significant: Record<string, number> = {};
+    for (const [medio, stats] of Object.entries(deltaCounts)) {
+      if (stats.count >= 3) {
+        const avgDelta = stats.total / stats.count;
+        if (Math.abs(avgDelta) >= 3) significant[medio] = Math.round(avgDelta);
+      }
+    }
+    if (Object.keys(significant).length > 0) mediosAdjustments = significant;
+  } catch {
+    /* ignore parse errors */
+  }
+
+  // Build reasoning
+  const parts: string[] = [];
+  if (valorMultiplier) {
+    const dir = valorMultiplier > 1 ? "incrementa" : "reduce";
+    const pct = Math.round(Math.abs(valorMultiplier - 1) * 100);
+    parts.push(
+      `Ejecutivo tipicamente ${dir} valor en ~${pct}% (${rows.length} correcciones)`,
+    );
+  }
+  if (mediosAdjustments) {
+    const strs = Object.entries(mediosAdjustments).map(
+      ([medio, delta]) => `${medio} ${delta > 0 ? "+" : ""}${delta}pp`,
+    );
+    parts.push(`Ajustes habituales de media mix: ${strs.join(", ")}`);
+  }
+
+  return {
+    valor_multiplier: valorMultiplier,
+    medios_adjustments: mediosAdjustments,
+    reasoning: parts.join(". "),
+    sample_size: rows.length,
+  };
 }
 
 export function draftProposalFromInsight(
@@ -209,11 +314,50 @@ export function draftProposalFromInsight(
   );
   const eventData = getEventData(db, insight.evento_id);
   const accountHistory = getAccountPropHistory(db, insight.cuenta_id);
+
+  // Feedback-informed adjustments: learn from AE's past corrections
+  const aeId = insight.ae_id ?? cuenta.ae_id;
+  const feedback = getFeedbackAdjustments(db, aeId);
+
+  // Apply value adjustment
+  let adjustedValor = valor;
+  if (adjustedValor && feedback.valor_multiplier) {
+    adjustedValor = Math.round(adjustedValor * feedback.valor_multiplier);
+  }
+
+  // Apply media mix adjustments
+  let adjustedMedios = medios;
+  if (medios && feedback.medios_adjustments) {
+    try {
+      const mix = JSON.parse(medios);
+      for (const [medio, delta] of Object.entries(
+        feedback.medios_adjustments,
+      )) {
+        if (mix[medio] !== undefined) {
+          mix[medio] = Math.max(0, Math.min(100, mix[medio] + delta));
+        }
+      }
+      const total = Object.values(mix).reduce(
+        (s: number, v: any) => s + Number(v),
+        0,
+      );
+      if (total > 0 && total !== 100) {
+        for (const k of Object.keys(mix)) {
+          mix[k] = Math.round((mix[k] / total) * 100);
+        }
+      }
+      adjustedMedios = JSON.stringify(mix);
+    } catch {
+      /* keep original */
+    }
+  }
+
   const razonamiento = buildReasoning(
     insight,
     valueReasoning,
     mixReasoning,
     accountHistory,
+    feedback.reasoning,
   );
 
   const titulo = eventData.gancho
@@ -231,10 +375,10 @@ export function draftProposalFromInsight(
   ).run(
     propId,
     insight.cuenta_id,
-    insight.ae_id ?? cuenta.ae_id,
+    aeId,
     titulo,
-    valor,
-    medios,
+    adjustedValor,
+    adjustedMedios,
     tipoOportunidad,
     eventData.gancho,
     eventData.fechaInicio,
@@ -253,8 +397,8 @@ export function draftProposalFromInsight(
   return {
     propuesta_id: propId,
     titulo,
-    valor_estimado: valor,
-    medios,
+    valor_estimado: adjustedValor,
+    medios: adjustedMedios,
     tipo_oportunidad: tipoOportunidad,
     gancho_temporal: eventData.gancho,
     fecha_vuelo_inicio: eventData.fechaInicio,

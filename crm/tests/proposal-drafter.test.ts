@@ -284,6 +284,46 @@ describe("modificar_borrador", () => {
   });
 });
 
+describe("feedback-informed drafting", () => {
+  function seedFeedback(count: number, valorRatio: number) {
+    for (let i = 0; i < count; i++) {
+      // Create a propuesta to satisfy FK constraint
+      testDb
+        .prepare(
+          `INSERT OR IGNORE INTO propuesta (id, cuenta_id, ae_id, titulo, etapa) VALUES (?, 'c1', 'ae1', 'FB prop', 'completada')`,
+        )
+        .run(`prop-fb-${i}`);
+      testDb
+        .prepare(
+          `INSERT INTO feedback_propuesta (id, propuesta_id, ae_id, borrador_valor, final_valor, resultado, fecha_accion)
+           VALUES (?, ?, 'ae1', 10000000, ?, 'aceptado_con_cambios', datetime('now'))`,
+        )
+        .run(`fb-${i}`, `prop-fb-${i}`, Math.round(10000000 * valorRatio));
+    }
+  }
+
+  it("adjusts value based on historical feedback deltas", () => {
+    seedInsight(testDb, { valor_potencial: 10_000_000 });
+    seedFeedback(4, 1.2); // AE consistently increases by 20%
+
+    const result = draftProposalFromInsight("ins-test-1");
+    if ("error" in result) throw new Error(result.error);
+    expect(result.valor_estimado).toBeGreaterThan(10_000_000);
+    expect(result.agente_razonamiento).toContain("Aprendizaje");
+    expect(result.agente_razonamiento).toContain("incrementa");
+  });
+
+  it("does not adjust with fewer than 3 feedback samples", () => {
+    seedInsight(testDb, { valor_potencial: 10_000_000 });
+    seedFeedback(2, 1.5); // Only 2 — below threshold
+
+    const result = draftProposalFromInsight("ins-test-1");
+    if ("error" in result) throw new Error(result.error);
+    expect(result.valor_estimado).toBe(10_000_000);
+    expect(result.agente_razonamiento).not.toContain("Aprendizaje");
+  });
+});
+
 describe("pipeline filtering", () => {
   it("excludes borrador_agente from pipeline", async () => {
     const { consultar_pipeline } = await import("../src/tools/consulta.js");
