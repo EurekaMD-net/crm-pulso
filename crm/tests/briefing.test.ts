@@ -251,6 +251,37 @@ describe("AE briefing", () => {
     expect(result.propuestas_estancadas[0].dias_sin_actividad).toBe(10);
   });
 
+  it("includes vertical intelligence from patron_detectado", async () => {
+    testDb
+      .prepare("UPDATE cuenta SET vertical = 'Consumo' WHERE id = 'c1'")
+      .run();
+    testDb
+      .prepare(
+        `INSERT INTO patron_detectado (id, tipo, descripcion, datos_json, sample_size, confianza, nivel_minimo, activo, fecha_deteccion)
+         VALUES ('pat-1', 'tendencia_vertical', 'Vertical Consumo: crecimiento de 25%', ?, 10, 0.75, 'director', 1, datetime('now'))`,
+      )
+      .run(JSON.stringify({ vertical: "Consumo", change_pct: 25 }));
+
+    const result = JSON.parse(await generar_briefing({}, aeCtx("ae1")));
+    expect(result.inteligencia_vertical).toBeDefined();
+    expect(result.inteligencia_vertical.patrones.length).toBeGreaterThanOrEqual(
+      1,
+    );
+    expect(result.inteligencia_vertical.patrones[0].tipo).toBe(
+      "tendencia_vertical",
+    );
+    expect(result.inteligencia_vertical.patrones[0].resumen).toContain(
+      "crecimiento",
+    );
+    expect(result.inteligencia_vertical.patrones[0].resumen).toContain("25%");
+  });
+
+  it("returns empty patrones when no vertical data", async () => {
+    const result = JSON.parse(await generar_briefing({}, aeCtx("ae1")));
+    expect(result.inteligencia_vertical).toBeDefined();
+    expect(result.inteligencia_vertical.patrones).toEqual([]);
+  });
+
   it("isolates AE scope (cannot see other AEs)", async () => {
     testDb
       .prepare(

@@ -332,6 +332,61 @@ function briefingAE(ctx: ToolContext): string {
         return { total: 0, top_3: [] };
       }
     })(),
+    inteligencia_vertical: (() => {
+      try {
+        // Find verticals this AE works in
+        const verticals = db
+          .prepare(
+            "SELECT DISTINCT vertical FROM cuenta WHERE ae_id = ? AND vertical IS NOT NULL",
+          )
+          .all(ctx.persona_id) as any[];
+        if (verticals.length === 0) return { patrones: [] };
+
+        const vList = verticals.map((v: any) => v.vertical);
+        const ph = vList.map(() => "?").join(",");
+        const cutoff14d = new Date(Date.now() - 14 * 86400000).toISOString();
+
+        // Get active patterns affecting AE's verticals (regardless of nivel_minimo)
+        const patterns = db
+          .prepare(
+            `SELECT tipo, descripcion, datos_json, confianza, fecha_deteccion
+             FROM patron_detectado
+             WHERE activo = 1 AND fecha_deteccion >= ?
+               AND (
+                 (tipo = 'tendencia_vertical' AND json_extract(datos_json, '$.vertical') IN (${ph}))
+                 OR (tipo = 'conflicto_inventario' AND personas_afectadas LIKE ?)
+               )
+             ORDER BY confianza DESC LIMIT 5`,
+          )
+          .all(cutoff14d, ...vList, `%${ctx.persona_id}%`) as any[];
+
+        return {
+          patrones: patterns.map((p: any) => {
+            let resumen = p.descripcion;
+            try {
+              const datos = JSON.parse(p.datos_json ?? "{}");
+              if (p.tipo === "tendencia_vertical") {
+                const dir =
+                  datos.change_pct > 0 ? "crecimiento" : "contraccion";
+                resumen = `Tu vertical ${datos.vertical}: ${dir} de ${Math.abs(datos.change_pct)}% vs año anterior`;
+              } else if (p.tipo === "conflicto_inventario") {
+                resumen = `Inventario "${datos.gancho ?? datos.evento}" con alta demanda — coordina pronto para asegurar espacios`;
+              }
+            } catch {
+              /* keep original description */
+            }
+            return {
+              tipo: p.tipo,
+              resumen,
+              confianza: p.confianza,
+              fecha: p.fecha_deteccion,
+            };
+          }),
+        };
+      } catch {
+        return { patrones: [] };
+      }
+    })(),
   });
 }
 
