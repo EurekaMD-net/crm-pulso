@@ -91,6 +91,7 @@ import {
   generar_reporte_aprendizaje,
 } from "./feedback-tools.js";
 import { investigar_prospecto } from "./prospect-research.js";
+import { TOOL_JARVIS_PULL, handleJarvisPull } from "./jarvis.js";
 
 // ---------------------------------------------------------------------------
 // Tool context — passed to every tool handler
@@ -2248,6 +2249,7 @@ const APPROVAL_TOOLS: ToolDefinition[] = [
   TOOL_RECHAZAR_REGISTRO,
   TOOL_CONSULTAR_PENDIENTES,
   TOOL_IMPUGNAR_REGISTRO,
+  TOOL_JARVIS_PULL,
 ];
 
 const GERENTE_TOOLS: ToolDefinition[] = [
@@ -2304,6 +2306,7 @@ const RELATIONSHIP_TOOLS: ToolDefinition[] = [
   TOOL_REGISTRAR_HITO,
   TOOL_CONSULTAR_HITOS_PROXIMOS,
   TOOL_ACTUALIZAR_NOTAS_ESTRATEGICAS,
+  TOOL_JARVIS_PULL,
 ];
 
 const DIRECTOR_TOOLS: ToolDefinition[] = [
@@ -2351,6 +2354,7 @@ const DIRECTOR_TOOLS: ToolDefinition[] = [
   ...FEEDBACK_ADMIN_TOOLS,
   ...PACKAGE_TOOLS,
   TOOL_ACTUALIZAR_PERFIL,
+  TOOL_JARVIS_PULL,
 ];
 
 const VP_TOOLS: ToolDefinition[] = [
@@ -2396,6 +2400,7 @@ const VP_TOOLS: ToolDefinition[] = [
   ...FEEDBACK_ADMIN_TOOLS,
   ...PACKAGE_TOOLS,
   TOOL_ACTUALIZAR_PERFIL,
+  TOOL_JARVIS_PULL,
 ];
 
 export function getToolsForRole(
@@ -2488,6 +2493,7 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   comparar_paquetes,
   actualizar_perfil,
   investigar_prospecto,
+  jarvis_pull: handleJarvisPull,
 };
 
 export async function executeTool(
