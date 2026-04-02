@@ -1,11 +1,15 @@
 /**
  * Jarvis Pull — request strategic analysis from the Jarvis system.
  *
- * Calls mission-control's /api/jarvis-pull endpoint with role-based
- * depth control. VP gets full analysis, AE gets actionable bullets.
+ * Trigger: "pregúntale/pídele a Jarvis", "consulta con Jarvis"
+ * Flow: acknowledge → call Jarvis → create Google Doc → share link
+ *
+ * Response depth scales by role (ae/gerente/director/vp).
  */
 
 import type { ToolContext } from "./index.js";
+import { isWorkspaceEnabled, getProvider } from "../workspace/provider.js";
+import { getPersonaEmail } from "./helpers.js";
 
 const JARVIS_URL = process.env.JARVIS_API_URL ?? "http://localhost:8080";
 const JARVIS_KEY = process.env.JARVIS_API_KEY ?? "";
@@ -16,30 +20,36 @@ export const TOOL_JARVIS_PULL = {
     name: "jarvis_pull",
     description: `Solicitar análisis estratégico del sistema Jarvis (asistente de inteligencia del VP).
 
+TRIGGER: Cuando el usuario dice "pregúntale a Jarvis", "pídele a Jarvis que...", "consulta con Jarvis", "que opina Jarvis", "Jarvis qué recomienda".
+
+FLUJO:
+1. Confirma al usuario: "Consultando con Jarvis..."
+2. Envía la consulta a Jarvis
+3. Crea un Google Doc con el análisis formateado
+4. Comparte el enlace del documento
+
 CUÁNDO USAR:
-- Necesitas contexto de mercado, tendencias de industria, o análisis competitivo
-- Quieres una recomendación estratégica basada en datos externos al CRM
-- Necesitas cruzar información del pipeline con inteligencia de negocio
-- El usuario pregunta algo que va más allá de los datos del CRM
+- El usuario pide explícitamente consultar a Jarvis
+- Necesitas contexto de mercado, tendencias, o análisis que va más allá del CRM
+- El usuario quiere una segunda opinión estratégica
 
 NO USAR:
 - Para datos que ya tienes en el CRM (pipeline, cuotas, actividades)
-- Para operaciones CRUD del CRM
-- Para consultas simples de status
+- Si el usuario no menciona a Jarvis explícitamente
 
-La profundidad de la respuesta se ajusta automáticamente según tu rol.`,
+La profundidad se ajusta automáticamente según tu rol.`,
     parameters: {
       type: "object" as const,
       properties: {
         query: {
           type: "string",
           description:
-            "La pregunta o solicitud de análisis. Sé específico para obtener mejor respuesta.",
+            "La pregunta o solicitud de análisis para Jarvis. Sé específico.",
         },
         context: {
           type: "string",
           description:
-            "Contexto adicional del CRM relevante para la consulta (ej: datos de pipeline, nombre de cuenta, métricas).",
+            "Contexto del CRM relevante (datos de pipeline, cuenta, métricas). Mejora la calidad del análisis.",
         },
       },
       required: ["query"],
@@ -62,6 +72,8 @@ export async function handleJarvisPull(
   const context = args.context as string | undefined;
   const role = ctx.rol ?? "ae";
 
+  // Step 1: Call Jarvis
+  let analysisText: string;
   try {
     const response = await fetch(`${JARVIS_URL}/api/jarvis-pull`, {
       method: "POST",
@@ -85,15 +97,64 @@ export async function handleJarvisPull(
       role: string;
       tokens: number;
     };
-    return JSON.stringify({
-      analisis: data.response,
-      fuente: "Jarvis Intelligence",
-      rol_aplicado: data.role,
-    });
+    analysisText = data.response;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return JSON.stringify({
       error: `Error conectando con Jarvis: ${message}`,
     });
   }
+
+  // Step 2: Create Google Doc with the analysis
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("es-MX", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "America/Mexico_City",
+  });
+  const docTitle = `Análisis Jarvis — ${dateStr}`;
+
+  const docContent =
+    `# ${docTitle}\n\n` +
+    `**Consulta:** ${query}\n` +
+    `**Rol:** ${role}\n` +
+    `**Fecha:** ${dateStr}\n\n` +
+    `---\n\n` +
+    `${analysisText}\n\n` +
+    `---\n\n` +
+    `*Generado por Jarvis Intelligence System*`;
+
+  let docLink: string | undefined;
+
+  if (isWorkspaceEnabled()) {
+    const email = getPersonaEmail(ctx.persona_id);
+    if (email) {
+      try {
+        const result = await getProvider().createDocument(
+          email,
+          docTitle,
+          "documento",
+          docContent,
+        );
+        docLink = result.enlace ?? undefined;
+      } catch {
+        // Doc creation failed — still return the analysis as text
+      }
+    }
+  }
+
+  return JSON.stringify({
+    status: "Análisis de Jarvis completado",
+    analisis: analysisText,
+    ...(docLink && {
+      documento: docLink,
+      mensaje: `📄 Documento creado: ${docLink}`,
+    }),
+    ...(!docLink && {
+      nota: "Análisis entregado como texto (Google Drive no disponible para crear documento).",
+    }),
+    fuente: "Jarvis Intelligence",
+    rol_aplicado: role,
+  });
 }
