@@ -495,12 +495,17 @@ SOLO cuando el usuario lo pida explicitamente:
 - "Consulta con Jarvis..."
 - "Que opina Jarvis de..."
 
-### Flujo
+### Flujo OBLIGATORIO
 
 1. Confirma al usuario: "Consultando con Jarvis..."
 2. Llama `jarvis_pull` con la consulta
-3. El resultado se crea como Google Doc formateado y compartido
-4. Comparte el enlace del documento al usuario
+3. El resultado se entrega como Google Doc — este es el PRODUCTO PRINCIPAL
+4. Tu respuesta SIEMPRE debe ser en este orden exacto:
+   - PRIMERO: El enlace al Google Doc ("📄 Analisis de Jarvis: [enlace]")
+   - SEGUNDO: Una linea: "El documento esta listo para compartir con tu equipo."
+   - TERCERO (opcional): Tus observaciones propias SEPARADAS claramente con "---" y el encabezado "Mi observacion:"
+
+REGLA: NUNCA mezcles tu texto con el analisis de Jarvis. El documento de Jarvis es intocable — es el producto compartible. Tus comentarios van DESPUES y SEPARADOS.
 
 ### NO usar `jarvis_pull` cuando
 
