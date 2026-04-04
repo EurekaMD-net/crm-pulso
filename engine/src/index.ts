@@ -1,12 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { bootstrapCrm } from '../../crm/src/bootstrap.js';
-import { startAlertScheduler } from '../../crm/src/alert-scheduler.js';
 import { seedBriefings } from '../../crm/src/briefing-seeds.js';
-import { startFollowupScheduler } from '../../crm/src/followup-scheduler.js';
-import { startDocSyncScheduler } from '../../crm/src/doc-sync.js';
-import { startWarmthScheduler } from '../../crm/src/warmth-scheduler.js';
-import { startOvernightScheduler } from '../../crm/src/overnight-scheduler.js';
+import { startScheduler, stopScheduler } from '../../crm/src/scheduler.js';
 import { startDashboardServer } from '../../crm/src/dashboard/server.js';
 
 import {
@@ -528,11 +524,7 @@ async function main(): Promise<void> {
     logger.fatal({ err }, 'CRM bootstrap failed — aborting startup');
     process.exit(1);
   }
-  startAlertScheduler(DATA_DIR); // CRM hook: alert evaluation every 2h
-  startFollowupScheduler(DATA_DIR); // CRM hook: follow-up reminders hourly
-  startDocSyncScheduler(DATA_DIR); // CRM hook: document sync daily at 3 AM
-  startWarmthScheduler(DATA_DIR); // CRM hook: warmth recompute at 4 AM MX
-  startOvernightScheduler(DATA_DIR); // CRM hook: overnight analysis at 2 AM MX
+  startScheduler(DATA_DIR); // CRM hook: unified cron scheduler (alerts, followups, warmth, overnight, doc-sync)
   seedBriefings(); // CRM hook: idempotent briefing task seeding
   startDashboardServer(); // CRM hook: dashboard REST API
   logger.info('Database initialized');
@@ -547,6 +539,7 @@ async function main(): Promise<void> {
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
+    stopScheduler();
     proxyServer.close();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();

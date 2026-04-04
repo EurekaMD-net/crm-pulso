@@ -6,6 +6,7 @@ import { processCrmIpc } from '../../crm/src/ipc-handlers.js';
 
 import {
   DATA_DIR,
+  IPC_FALLBACK_POLL_INTERVAL,
   IPC_POLL_INTERVAL,
   MAIN_GROUP_FOLDER,
   TIMEZONE,
@@ -31,28 +32,49 @@ export interface IpcDeps {
 }
 
 let ipcWatcherRunning = false;
+let isProcessing = false;
 
-export function startIpcWatcher(deps: IpcDeps): void {
-  if (ipcWatcherRunning) {
-    logger.debug('IPC watcher already running, skipping duplicate start');
-    return;
-  }
-  ipcWatcherRunning = true;
+// ── Watcher state ──────────────────────────────────────────────────────
+interface WatcherState {
+  baseWatcher: fs.FSWatcher | null;
+  dirWatchers: Map<string, { tasks?: fs.FSWatcher; messages?: fs.FSWatcher }>;
+  debounceTimer: ReturnType<typeof setTimeout> | null;
+  fallbackTimer: ReturnType<typeof setTimeout> | null;
+  watcherMode: 'watching' | 'polling';
+}
 
-  const ipcBaseDir = path.join(DATA_DIR, 'ipc');
-  fs.mkdirSync(ipcBaseDir, { recursive: true });
+const wState: WatcherState = {
+  baseWatcher: null,
+  dirWatchers: new Map(),
+  debounceTimer: null,
+  fallbackTimer: null,
+  watcherMode: 'polling',
+};
 
-  const processIpcFiles = async () => {
-    // Scan all group IPC directories (identity determined by directory)
+// ── Core processing (unchanged logic) ──────────────────────────────────
+
+async function processIpcFiles(
+  ipcBaseDir: string,
+  deps: IpcDeps,
+): Promise<void> {
+  if (isProcessing) return;
+  isProcessing = true;
+
+  try {
     let groupFolders: string[];
     try {
       groupFolders = fs.readdirSync(ipcBaseDir).filter((f) => {
-        const stat = fs.statSync(path.join(ipcBaseDir, f));
-        return stat.isDirectory() && f !== 'errors';
+        try {
+          return (
+            fs.statSync(path.join(ipcBaseDir, f)).isDirectory() &&
+            f !== 'errors'
+          );
+        } catch {
+          return false;
+        }
       });
     } catch (err) {
       logger.error({ err }, 'Error reading IPC base directory');
-      setTimeout(processIpcFiles, IPC_POLL_INTERVAL);
       return;
     }
 
@@ -74,7 +96,6 @@ export function startIpcWatcher(deps: IpcDeps): void {
             try {
               const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
               if (data.type === 'message' && data.chatJid && data.text) {
-                // Authorization: verify this group can send to this chatJid
                 const targetGroup = registeredGroups[data.chatJid];
                 if (
                   isMain ||
@@ -124,7 +145,6 @@ export function startIpcWatcher(deps: IpcDeps): void {
             const filePath = path.join(tasksDir, file);
             try {
               const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-              // Pass source group identity to processTaskIpc for authorization
               await processTaskIpc(data, sourceGroup, isMain, deps);
               fs.unlinkSync(filePath);
             } catch (err) {
@@ -145,12 +165,137 @@ export function startIpcWatcher(deps: IpcDeps): void {
         logger.error({ err, sourceGroup }, 'Error reading IPC tasks directory');
       }
     }
+  } finally {
+    isProcessing = false;
+  }
+}
 
-    setTimeout(processIpcFiles, IPC_POLL_INTERVAL);
+// ── fs.watch machinery ─────────────────────────────────────────────────
+
+function triggerDebounced(ipcBaseDir: string, deps: IpcDeps): void {
+  if (wState.debounceTimer) clearTimeout(wState.debounceTimer);
+  wState.debounceTimer = setTimeout(() => {
+    wState.debounceTimer = null;
+    processIpcFiles(ipcBaseDir, deps);
+  }, 100);
+}
+
+function watchGroupDir(ipcBaseDir: string, group: string, deps: IpcDeps): void {
+  if (wState.dirWatchers.has(group)) return;
+
+  const entry: { tasks?: fs.FSWatcher; messages?: fs.FSWatcher } = {};
+
+  for (const subdir of ['tasks', 'messages'] as const) {
+    const dirPath = path.join(ipcBaseDir, group, subdir);
+    try {
+      fs.mkdirSync(dirPath, { recursive: true });
+      const watcher = fs.watch(dirPath, (_event, filename) => {
+        if (filename && filename.endsWith('.json')) {
+          triggerDebounced(ipcBaseDir, deps);
+        }
+      });
+      watcher.on('error', (err) => {
+        logger.warn({ err, group, subdir }, 'Group dir watcher error');
+        watcher.close();
+      });
+      if (watcher.unref) watcher.unref();
+      entry[subdir] = watcher;
+    } catch (err) {
+      logger.warn({ err, group, subdir }, 'Failed to watch group subdir');
+    }
+  }
+
+  wState.dirWatchers.set(group, entry);
+}
+
+function setupWatchers(ipcBaseDir: string, deps: IpcDeps): void {
+  try {
+    wState.baseWatcher = fs.watch(ipcBaseDir, (eventType, filename) => {
+      if (eventType === 'rename' && filename && filename !== 'errors') {
+        const dirPath = path.join(ipcBaseDir, filename);
+        try {
+          if (fs.statSync(dirPath).isDirectory()) {
+            watchGroupDir(ipcBaseDir, filename, deps);
+          }
+        } catch {
+          /* dir may not exist yet */
+        }
+      }
+    });
+    wState.baseWatcher.on('error', (err) => {
+      logger.warn({ err }, 'Base IPC watcher error, falling back to polling');
+      teardownWatchers();
+      wState.watcherMode = 'polling';
+    });
+    if (wState.baseWatcher.unref) wState.baseWatcher.unref();
+  } catch (err) {
+    logger.warn({ err }, 'Failed to setup base IPC watcher');
+    wState.watcherMode = 'polling';
+    return;
+  }
+
+  // Watch existing group directories
+  try {
+    const groups = fs.readdirSync(ipcBaseDir).filter((f) => {
+      try {
+        return (
+          fs.statSync(path.join(ipcBaseDir, f)).isDirectory() && f !== 'errors'
+        );
+      } catch {
+        return false;
+      }
+    });
+    for (const group of groups) {
+      watchGroupDir(ipcBaseDir, group, deps);
+    }
+    wState.watcherMode = 'watching';
+    logger.info({ groups: groups.length }, 'IPC file watchers active');
+  } catch (err) {
+    logger.warn({ err }, 'Failed to enumerate IPC dirs for watching');
+    wState.watcherMode = 'polling';
+  }
+}
+
+function teardownWatchers(): void {
+  if (wState.baseWatcher) {
+    wState.baseWatcher.close();
+    wState.baseWatcher = null;
+  }
+  for (const [, entry] of wState.dirWatchers) {
+    entry.tasks?.close();
+    entry.messages?.close();
+  }
+  wState.dirWatchers.clear();
+}
+
+// ── Public API ─────────────────────────────────────────────────────────
+
+export function startIpcWatcher(deps: IpcDeps): void {
+  if (ipcWatcherRunning) {
+    logger.debug('IPC watcher already running, skipping duplicate start');
+    return;
+  }
+  ipcWatcherRunning = true;
+
+  const ipcBaseDir = path.join(DATA_DIR, 'ipc');
+  fs.mkdirSync(ipcBaseDir, { recursive: true });
+
+  // Try fs.watch (inotify on Linux)
+  setupWatchers(ipcBaseDir, deps);
+
+  // Fallback/safety-net poll loop
+  const fallbackPoll = async () => {
+    await processIpcFiles(ipcBaseDir, deps);
+    const interval =
+      wState.watcherMode === 'watching'
+        ? IPC_FALLBACK_POLL_INTERVAL
+        : IPC_POLL_INTERVAL;
+    wState.fallbackTimer = setTimeout(fallbackPoll, interval);
+    if (wState.fallbackTimer.unref) wState.fallbackTimer.unref();
   };
 
-  processIpcFiles();
-  logger.info('IPC watcher started (per-group namespaces)');
+  fallbackPoll();
+  logger.info({ mode: wState.watcherMode }, 'IPC watcher started');
 }
 
 export async function processTaskIpc(
@@ -385,12 +530,20 @@ export async function processTaskIpc(
     default: {
       // CRM hook: delegate unknown IPC types to CRM handler
       try {
-        const handled = await processCrmIpc(data as Record<string, unknown>, sourceGroup, isMain, deps);
+        const handled = await processCrmIpc(
+          data as Record<string, unknown>,
+          sourceGroup,
+          isMain,
+          deps,
+        );
         if (!handled) {
           logger.warn({ type: data.type }, 'Unknown IPC task type');
         }
       } catch (err) {
-        logger.error({ err, type: data.type, sourceGroup }, 'CRM IPC handler threw');
+        logger.error(
+          { err, type: data.type, sourceGroup },
+          'CRM IPC handler threw',
+        );
       }
     }
   }
