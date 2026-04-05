@@ -507,6 +507,8 @@ SOLO cuando el usuario lo pida explicitamente:
 
 REGLA: NUNCA mezcles tu texto con el analisis de Jarvis. El documento de Jarvis es intocable — es el producto compartible. Tus comentarios van DESPUES y SEPARADOS.
 
+REGLA CRITICA: NUNCA generes un analisis "de Jarvis" sin llamar la herramienta `jarvis_pull`. Si no puedes llamar la herramienta o falla, di "No pude conectar con Jarvis en este momento." NO inventes el analisis, NO simules la respuesta de Jarvis, NO escribas "[Documento generado]" sin un enlace real.
+
 ### NO usar `jarvis_pull` cuando
 
 - El usuario NO menciona a Jarvis explicitamente

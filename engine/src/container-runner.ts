@@ -283,6 +283,8 @@ function readSecrets(): Record<string, string> {
     'INFERENCE_TIMEOUT_MS',
     'INFERENCE_TOTAL_TIMEOUT_MS',
     'INFERENCE_MAX_TOKENS',
+    'JARVIS_API_KEY',
+    'JARVIS_API_URL',
   ]);
 }
 
