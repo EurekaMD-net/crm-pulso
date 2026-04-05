@@ -11,7 +11,9 @@ import type { ToolContext } from "./index.js";
 import { isWorkspaceEnabled, getProvider } from "../workspace/provider.js";
 import { getPersonaEmail } from "./helpers.js";
 
-const JARVIS_URL = process.env.JARVIS_API_URL ?? "http://localhost:8080";
+// Default to Docker bridge gateway — container's localhost is itself, not the host.
+// 172.17.0.1 is the standard Docker bridge gateway to reach host services.
+const JARVIS_URL = process.env.JARVIS_API_URL ?? "http://172.17.0.1:8080";
 const JARVIS_KEY = process.env.JARVIS_API_KEY ?? "";
 
 export const TOOL_JARVIS_PULL = {
@@ -127,20 +129,29 @@ export async function handleJarvisPull(
 
   let docLink: string | undefined;
 
-  if (isWorkspaceEnabled()) {
-    const email = getPersonaEmail(ctx.persona_id);
-    if (email) {
-      try {
-        const result = await getProvider().createDocument(
-          email,
-          docTitle,
-          "documento",
-          docContent,
-        );
-        docLink = result.enlace ?? undefined;
-      } catch {
-        // Doc creation failed — still return the analysis as text
-      }
+  const wsEnabled = isWorkspaceEnabled();
+  const email = getPersonaEmail(ctx.persona_id);
+  console.log(
+    `[jarvis-pull] workspace=${wsEnabled} email=${email ?? "none"} persona=${ctx.persona_id}`,
+  );
+
+  if (wsEnabled && email) {
+    try {
+      const result = await getProvider().createDocument(
+        email,
+        docTitle,
+        "documento",
+        docContent,
+      );
+      docLink = result.enlace ?? undefined;
+      console.log(
+        `[jarvis-pull] Doc created: ${docLink ?? "no link returned"}`,
+      );
+    } catch (err) {
+      console.warn(
+        `[jarvis-pull] Doc creation failed:`,
+        err instanceof Error ? err.message : err,
+      );
     }
   }
 
