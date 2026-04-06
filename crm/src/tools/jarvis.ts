@@ -92,7 +92,7 @@ export async function handleJarvisPull(
         "X-Api-Key": jarvisKey,
       },
       body: JSON.stringify({ query, role, context }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(90_000), // 90s: allows Jarvis provider fallback cascade (primary 30s + fallback 30s + buffer)
     });
 
     if (!response.ok) {

@@ -16,6 +16,37 @@ import type {
   SyncFile,
 } from "../types.js";
 
+/** Lightweight markdown → HTML for Google Docs upload. No external deps. */
+function markdownToHtml(md: string): string {
+  return (
+    md
+      .split("\n")
+      .map((line) => {
+        // Headings
+        if (line.startsWith("### ")) return `<h3>${line.slice(4)}</h3>`;
+        if (line.startsWith("## ")) return `<h2>${line.slice(3)}</h2>`;
+        if (line.startsWith("# ")) return `<h1>${line.slice(2)}</h1>`;
+        // Horizontal rule
+        if (/^---+$/.test(line.trim())) return "<hr>";
+        // List items
+        if (/^\s*[-*•]\s/.test(line))
+          return `<li>${line.replace(/^\s*[-*•]\s/, "")}</li>`;
+        if (/^\s*\d+\.\s/.test(line))
+          return `<li>${line.replace(/^\s*\d+\.\s/, "")}</li>`;
+        // Empty line → paragraph break
+        if (!line.trim()) return "<br>";
+        // Normal line
+        return `<p>${line}</p>`;
+      })
+      .join("\n")
+      // Inline formatting
+      .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+      .replace(/\*(.+?)\*/g, "<i>$1</i>")
+      .replace(/_(.+?)_/g, "<i>$1</i>")
+      .replace(/`(.+?)`/g, "<code>$1</code>")
+  );
+}
+
 const DOC_TYPES: Record<string, string> = {
   documento: "application/vnd.google-apps.document",
   hoja_de_calculo: "application/vnd.google-apps.spreadsheet",
@@ -133,9 +164,11 @@ export async function createDocument(
   if (content) {
     try {
       if (type === "documento") {
+        // Convert markdown to basic HTML so Google Docs renders formatting
+        const html = markdownToHtml(content);
         await drive.files.update({
           fileId,
-          media: { mimeType: "text/plain", body: content },
+          media: { mimeType: "text/html", body: html },
         });
       } else if (type === "presentacion") {
         await populateSlides(email, fileId, content);
