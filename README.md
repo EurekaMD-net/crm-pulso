@@ -149,7 +149,7 @@ agentic-crm/
 │   │   └── template-selector.ts   # Template evolution (A/B variant tracking)
 │   ├── container/       # CRM container image (extends engine)
 │   ├── groups/          # CLAUDE.md templates per role (ae, manager, director, vp)
-│   └── tests/           # 1018 tests across 53 test files
+│   └── tests/           # 1119 tests across 61 test files
 ├── scripts/             # Bootstrap, registration, data import
 ├── docs/                # Vision, roadmap, competitive assessment
 └── groups/              # Live group folders (created at runtime)
@@ -203,7 +203,7 @@ agentic-crm/
 npm run dev              # Run with hot reload (tsx watch)
 npm run build            # Compile TypeScript
 npm run typecheck        # Type check
-npm run test             # Run all tests (1018 across 53 files)
+npm run test             # Run all tests (1119 across 61 files)
 npm run bootstrap        # First-time CRM setup
 npm run register-team    # Register team from CSV/JSON
 npm run build:container  # Build CRM container (extends engine image)

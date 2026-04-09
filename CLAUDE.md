@@ -16,6 +16,14 @@ Agentic CRM for media ad sales. NanoClaw engine at `engine/`, all CRM code at `c
 | `crm/src/ipc-handlers.ts`        | CRM IPC handler (crm_registrar_actividad, warmth_recompute, etc.)                                                           |
 | `crm/src/doc-sync.ts`            | Document sync + hybrid RAG (vector KNN + FTS5 keyword + RRF fusion)                                                         |
 | `crm/src/circuit-breaker.ts`     | Reusable circuit breaker (inference, embedding, Hindsight)                                                                  |
+| `crm/src/session-repair.ts`      | Conversation sanitization: orphaned tools, dedup, synthetic errors, merges                                                  |
+| `crm/src/doom-loop.ts`           | 4-layer loop detection: chanting, fingerprint, ping-pong cycle, Jaccard similarity                                          |
+| `crm/src/context-compressor.ts`  | Deterministic context compression L0 (truncate old results) + L1 (pair drain)                                               |
+| `crm/src/injection-guard.ts`     | CCP3 injection defense: 17 high + 9 medium patterns, homoglyphs, encoding, structural                                       |
+| `crm/src/tool-eviction.ts`       | Oversized tool results → temp file with TOC preview                                                                         |
+| `crm/src/tool-metrics.ts`        | Per-tool rolling metrics (call count, success rate, avg/p95 latency)                                                        |
+| `crm/src/preflight.ts`           | Pre-flight validation before tool execution (email, proposals, activities)                                                  |
+| `crm/src/budget.ts`              | Cost ledger with 3-window tracking (hourly/daily/monthly) + per-model pricing                                               |
 | `crm/src/warmth.ts`              | Executive relationship warmth scoring (recency + frequency + quality)                                                       |
 | `crm/src/warmth-scheduler.ts`    | Nightly warmth recomputation (4 AM MX via IPC)                                                                              |
 | `crm/src/memory/`                | Pluggable memory service (Hindsight sidecar or SQLite fallback)                                                             |
@@ -143,13 +151,13 @@ WhatsApp → engine (NanoClaw) → Direct tools (71 CRM tools via inference adap
 ## Testing
 
 ```bash
-npm run test         # All tests (1018 across 53 files)
+npm run test         # All tests (1119 across 61 files)
 ```
 
 Tests live in:
 
 - `engine/src/*.test.ts` — Engine tests (11 test files)
-- `crm/tests/*.test.ts` — CRM tests (42 test files)
+- `crm/tests/*.test.ts` — CRM tests (50 test files)
 
 ## Service Operations
 

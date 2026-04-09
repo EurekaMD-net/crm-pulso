@@ -11,6 +11,22 @@
 
 import { logger as parentLogger } from "./logger.js";
 import { CircuitBreaker } from "./circuit-breaker.js";
+import { repairSession } from "./session-repair.js";
+import {
+  createDoomLoopState,
+  updateDoomLoop,
+  type DoomLoopSignal,
+} from "./doom-loop.js";
+import { maybeEvict } from "./tool-eviction.js";
+import { compressContext } from "./context-compressor.js";
+import {
+  analyzeInjection,
+  buildInjectionWarning,
+  isUntrustedTool,
+} from "./injection-guard.js";
+import { toolMetrics } from "./tool-metrics.js";
+import { checkPreflight } from "./preflight.js";
+import { recordCost } from "./budget.js";
 
 const logger = parentLogger.child({ component: "inference" });
 
@@ -521,16 +537,35 @@ export async function inferWithTools(
     process.env.INFERENCE_TOKEN_BUDGET ?? "25000",
     10,
   );
+  const contextLimit = parseInt(
+    process.env.INFERENCE_CONTEXT_LIMIT ?? "60000",
+    10,
+  );
   const TOOL_CHAIN_WARNING = 8;
-  // Minimum remaining time to start a new round — avoids starting an inference
-  // call that will inevitably timeout mid-stream (single call can take 20-30s).
   const MIN_REMAINING_MS = 15_000;
+
+  // --- Session repair: fix structural anomalies before first call ---
+  const repairStats = repairSession(conversation);
+  if (
+    repairStats.orphanedToolResults > 0 ||
+    repairStats.syntheticErrors > 0 ||
+    repairStats.dedupedResults > 0 ||
+    repairStats.mergedMessages > 0
+  ) {
+    logger.info({ repairStats }, "session repaired before inference");
+  }
+
+  // --- Doom-loop detection state ---
+  const doomState = createDoomLoopState();
+
+  // --- Escalation level: nudge(0) → warn(1) → force-wrap(2) → abort(3) ---
+  let escalationLevel = 0;
 
   for (let round = 0; round < maxRounds; round++) {
     const elapsed = Date.now() - startTime;
     const remaining = totalTimeoutMs - elapsed;
 
-    // Time guard: abort if total timeout exceeded OR not enough time for another round
+    // Time guard
     if (remaining < MIN_REMAINING_MS) {
       logger.warn(
         { round, elapsed, remaining, totalTimeoutMs },
@@ -555,6 +590,15 @@ export async function inferWithTools(
       };
     }
 
+    // --- Context compression: prevent context window overflow ---
+    const compression = compressContext(conversation, contextLimit);
+    if (compression.changes > 0) {
+      logger.info(
+        { level: compression.level, changes: compression.changes, round },
+        "context compressed",
+      );
+    }
+
     // After 8 consecutive tool rounds, hint the LLM to summarize and respond
     if (round === TOOL_CHAIN_WARNING) {
       conversation.push({
@@ -566,8 +610,51 @@ export async function inferWithTools(
       });
     }
 
-    // Stream text on every call — Qwen returns content: null with tool_calls,
-    // so text chunks only arrive on the final (non-tool) response.
+    // --- Graduated escalation injection ---
+    if (escalationLevel === 1) {
+      conversation.push({
+        role: "system" as const,
+        content:
+          "AVISO: Se detectó un patrón repetitivo en tus llamadas de herramientas. " +
+          "Cambia de estrategia o responde con la información que ya tienes.",
+      });
+    } else if (escalationLevel >= 2) {
+      // Force wrap-up: remove tools to prevent further calls
+      logger.warn(
+        { round, escalationLevel },
+        "doom loop escalation: forcing wrap-up (no tools)",
+      );
+      const response = await infer({ messages: conversation }, onTextChunk);
+      totalPrompt += response.usage.prompt_tokens;
+      totalCompletion += response.usage.completion_tokens;
+      const content =
+        response.content ??
+        "[El sistema detectó un bucle y detuvo las llamadas de herramientas.]";
+      conversation.push({ role: "assistant", content });
+
+      // Record cost for forced wrap-up
+      try {
+        const providers = loadProviders();
+        recordCost({
+          model: providers[0]?.model ?? "unknown",
+          promptTokens: totalPrompt,
+          completionTokens: totalCompletion,
+          provider: response.provider,
+        });
+      } catch {
+        /* non-fatal */
+      }
+
+      return {
+        content,
+        messages: conversation,
+        totalUsage: {
+          prompt_tokens: totalPrompt,
+          completion_tokens: totalCompletion,
+        },
+      };
+    }
+
     const response = await infer(
       { messages: conversation, tools },
       onTextChunk,
@@ -579,6 +666,20 @@ export async function inferWithTools(
     if (!response.tool_calls || response.tool_calls.length === 0) {
       const content = response.content ?? "";
       conversation.push({ role: "assistant", content });
+
+      // Record cost
+      try {
+        const providers = loadProviders();
+        recordCost({
+          model: providers[0]?.model ?? "unknown",
+          promptTokens: totalPrompt,
+          completionTokens: totalCompletion,
+          provider: response.provider,
+        });
+      } catch {
+        /* non-fatal */
+      }
+
       return {
         content,
         messages: conversation,
@@ -589,19 +690,21 @@ export async function inferWithTools(
       };
     }
 
-    // Execute tool calls in parallel, sanitizing truncated arguments
+    // Execute tool calls in parallel, with preflight + eviction + injection scanning
     const sanitizedToolCalls: typeof response.tool_calls = [];
     const toolResults = await Promise.all(
       response.tool_calls.map(async (toolCall) => {
         let result: string;
+        const toolName = toolCall.function.name;
         const rawArgs = toolCall.function.arguments;
-        // Detect likely truncation: unclosed braces/brackets
+        const toolStart = Date.now();
+        let success = true;
+
+        // Detect truncation
         const opens = (rawArgs.match(/[{[]/g) || []).length;
         const closes = (rawArgs.match(/[}\]]/g) || []).length;
         const truncated = opens > closes;
 
-        // Sanitize: replace truncated arguments with valid JSON so the
-        // conversation history stays valid for the next provider call
         sanitizedToolCalls.push(
           truncated
             ? {
@@ -615,23 +718,60 @@ export async function inferWithTools(
           result = JSON.stringify({
             error: "Tool call truncated (max_tokens hit). Try a simpler query.",
           });
+          success = false;
           logger.warn(
-            { tool: toolCall.function.name, argsLen: rawArgs.length },
+            { tool: toolName, argsLen: rawArgs.length },
             "tool call JSON truncated",
           );
         } else {
           try {
             const args = JSON.parse(rawArgs) as Record<string, unknown>;
-            result = await executor(toolCall.function.name, args);
+
+            // --- Pre-flight validation ---
+            const preflightError = checkPreflight(toolName, args);
+            if (preflightError) {
+              result = JSON.stringify({ error: preflightError });
+              success = false;
+              logger.warn(
+                { tool: toolName, error: preflightError },
+                "preflight check failed",
+              );
+            } else {
+              result = await executor(toolName, args);
+            }
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             result = JSON.stringify({ error: message });
+            success = false;
             logger.error(
-              { tool: toolCall.function.name, error: message },
+              { tool: toolName, error: message },
               "tool execution failed",
             );
           }
         }
+
+        // --- Tool result eviction (oversized results → temp file) ---
+        result = maybeEvict(result, toolName);
+
+        // --- Injection scanning for untrusted tool results ---
+        if (isUntrustedTool(toolName)) {
+          const injection = analyzeInjection(result, toolName);
+          if (injection.risk === "high" || injection.risk === "medium") {
+            const warning = buildInjectionWarning(injection);
+            result = warning + result;
+            logger.warn(
+              {
+                tool: toolName,
+                risk: injection.risk,
+                detections: injection.detections,
+              },
+              "injection detected in tool result",
+            );
+          }
+        }
+
+        // --- Record tool metrics ---
+        toolMetrics.record(toolName, Date.now() - toolStart, success);
 
         return {
           role: "tool" as const,
@@ -649,8 +789,32 @@ export async function inferWithTools(
     });
     conversation.push(...toolResults);
 
-    // Token budget check — if this round's prompt exceeded the ceiling,
-    // the next round will be even larger (more tool results). Wrap up now.
+    // --- Doom-loop detection ---
+    const doomSignal: DoomLoopSignal | null = updateDoomLoop(doomState, {
+      toolCalls: sanitizedToolCalls,
+      toolResults: toolResults.map((r) => ({ content: r.content })),
+      llmText: response.content ?? "",
+    });
+
+    if (doomSignal) {
+      logger.warn(
+        {
+          round,
+          layer: doomSignal.layer,
+          severity: doomSignal.severity,
+          description: doomSignal.description,
+        },
+        "doom loop detected",
+      );
+      // Graduated escalation
+      if (doomSignal.severity === "high") {
+        escalationLevel = Math.max(escalationLevel + 1, 2);
+      } else {
+        escalationLevel++;
+      }
+    }
+
+    // Token budget check
     if (response.usage.prompt_tokens >= tokenBudget) {
       logger.warn(
         {
@@ -669,6 +833,19 @@ export async function inferWithTools(
   const lastAssistant = [...conversation]
     .reverse()
     .find((m) => m.role === "assistant");
+
+  // Record cost for completed loop
+  try {
+    const providers = loadProviders();
+    recordCost({
+      model: providers[0]?.model ?? "unknown",
+      promptTokens: totalPrompt,
+      completionTokens: totalCompletion,
+    });
+  } catch {
+    /* non-fatal */
+  }
+
   return {
     content:
       (typeof lastAssistant?.content === "string"
