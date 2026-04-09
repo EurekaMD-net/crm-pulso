@@ -10,7 +10,13 @@
 
 import { getDatabase } from "../db.js";
 import type { ToolContext } from "./index.js";
-import { scopeFilter, getCurrentWeek, dateCutoff } from "./helpers.js";
+import {
+  scopeFilter,
+  getCurrentWeek,
+  dateCutoff,
+  getMxDateStr,
+  getMxYear,
+} from "./helpers.js";
 import { warmthLabel } from "../warmth.js";
 import { getTeamFeedbackStats } from "../feedback-engine.js";
 
@@ -190,7 +196,7 @@ function briefingAE(ctx: ToolContext): string {
 
   // 3. Path-to-close: quota gap + closeable pipeline
   const semana = getCurrentWeek();
-  const año = new Date().getFullYear();
+  const año = getMxYear();
   const cuota = db
     .prepare(
       `SELECT meta_total, logro, porcentaje FROM cuota
@@ -255,7 +261,7 @@ function briefingAE(ctx: ToolContext): string {
 
   return JSON.stringify({
     rol: "ae",
-    fecha: todayISO.split("T")[0],
+    fecha: getMxDateStr(),
     carry_over: carryOver.map((r) => ({
       accion: r.siguiente_accion,
       fecha: r.fecha_siguiente_accion,
@@ -525,7 +531,7 @@ function briefingGerente(ctx: ToolContext): string {
 
   // 4. Path-to-close per AE
   const semana = getCurrentWeek();
-  const año = new Date().getFullYear();
+  const año = getMxYear();
   const closeableStages = [
     "en_negociacion",
     "confirmada_verbal",
@@ -585,7 +591,7 @@ function briefingGerente(ctx: ToolContext): string {
 
   return JSON.stringify({
     rol: "gerente",
-    fecha: todayStart.toISOString().split("T")[0],
+    fecha: getMxDateStr(),
     sentimiento_equipo: Object.values(teamMood),
     sentimiento_declinando: decliningAes,
     wrap_up_sin_completar: noWrapUp,
@@ -801,7 +807,7 @@ function briefingDirector(ctx: ToolContext): string {
 
   // 5. Quota ranking for gerentes in scope
   const semana = getCurrentWeek();
-  const año = new Date().getFullYear();
+  const año = getMxYear();
   const quotaRanking = gerenteIds
     .map((g) => {
       const q = db
@@ -883,7 +889,7 @@ function briefingDirector(ctx: ToolContext): string {
 
   return JSON.stringify({
     rol: "director",
-    fecha: new Date().toISOString().split("T")[0],
+    fecha: getMxDateStr(),
     sentimiento_cross_equipo: Object.values(byGerente),
     coaching_gerentes: coachingFreq,
     mega_deals: megaWithSentiment,
@@ -1115,7 +1121,7 @@ function briefingVP(ctx: ToolContext): string {
 
   return JSON.stringify({
     rol: "vp",
-    fecha: new Date().toISOString().split("T")[0],
+    fecha: getMxDateStr(),
     pulso_organizacional: {
       ...orgMood,
       total: orgTotal,

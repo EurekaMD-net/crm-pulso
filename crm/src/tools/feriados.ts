@@ -5,6 +5,7 @@
  */
 
 import type { ToolContext } from "./index.js";
+import { getMxYear } from "./helpers.js";
 
 const API_URL = "https://date.nager.at/api/v3";
 
@@ -14,7 +15,7 @@ export async function consultar_feriados(
 ): Promise<string> {
   const pais = ((args.pais as string) || "MX").toUpperCase();
   const soloProximos = (args.solo_proximos as boolean) ?? false;
-  const año = (args.año as number) || new Date().getFullYear();
+  const año = (args.año as number) || getMxYear();
 
   const url = soloProximos
     ? `${API_URL}/NextPublicHolidays/${pais}`

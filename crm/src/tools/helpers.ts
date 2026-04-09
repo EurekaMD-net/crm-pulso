@@ -79,10 +79,12 @@ export function personaIdFromName(nombre: string): string | null {
 }
 
 export function getCurrentWeek(): number {
-  const d = new Date();
-  const start = new Date(d.getFullYear(), 0, 1);
+  const mxDate = getMxDateStr();
+  const [y, m, d] = mxDate.split("-").map(Number);
+  const now = new Date(y, m - 1, d);
+  const start = new Date(y, 0, 1);
   return Math.ceil(
-    ((d.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7,
+    ((now.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7,
   );
 }
 
@@ -92,6 +94,23 @@ export function getPersonaEmail(personaId: string): string | null {
     .prepare("SELECT email FROM persona WHERE id = ?")
     .get(personaId) as any;
   return row?.email ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Mexico City timezone helpers — ALL user-facing dates must use these
+// ---------------------------------------------------------------------------
+
+/** All user-facing dates MUST use America/Mexico_City. sv-SE locale = YYYY-MM-DD (ISO 8601). */
+const MX_TZ = "America/Mexico_City";
+
+/** YYYY-MM-DD in Mexico City timezone. Accepts optional Date for future/past dates. */
+export function getMxDateStr(date?: Date): string {
+  return (date ?? new Date()).toLocaleDateString("sv-SE", { timeZone: MX_TZ });
+}
+
+/** Current year in Mexico City timezone (avoids UTC year-boundary bug on Dec 31 evening). */
+export function getMxYear(): number {
+  return parseInt(getMxDateStr().split("-")[0], 10);
 }
 
 /**

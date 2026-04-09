@@ -14,7 +14,7 @@
 
 import { getDatabase } from "../db.js";
 import type { ToolContext } from "./index.js";
-import { findCuentaId } from "./helpers.js";
+import { findCuentaId, getMxDateStr } from "./helpers.js";
 
 const BRAVE_URL = "https://api.search.brave.com/res/v1/web/search";
 
@@ -311,7 +311,7 @@ export async function investigar_prospecto(
 
   return JSON.stringify({
     empresa,
-    fecha: new Date().toISOString().split("T")[0],
+    fecha: getMxDateStr(),
 
     web: uniqueResults.slice(0, MAX_SOURCES).map((r) => ({
       t: r.title,

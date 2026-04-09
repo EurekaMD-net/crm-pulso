@@ -11,6 +11,7 @@ import { getDatabase } from "./db.js";
 import { getPersonByGroupFolder, hasAccessTo } from "./hierarchy.js";
 import { evaluateAlerts, logAlerts } from "./alerts.js";
 import { logger } from "./logger.js";
+import { getMxDateStr } from "./tools/helpers.js";
 import { getTemplateVersionForRole } from "./template-version.js";
 import type { IpcDeps } from "../../engine/src/ipc.js";
 
@@ -362,12 +363,15 @@ export async function processCrmIpc(
         }
 
         // Dedup via alerta_log
-        const today = now.toISOString().slice(0, 10);
+        const today = getMxDateStr();
         const checkDedup = db.prepare(
           `SELECT 1 FROM alerta_log WHERE alerta_tipo = 'followup_reminder' AND entidad_id = ? AND grupo_destino = ? AND fecha_envio_date = ?`,
         );
+        const mxNow = new Date().toLocaleString("sv-SE", {
+          timeZone: "America/Mexico_City",
+        });
         const insertLog = db.prepare(
-          `INSERT OR IGNORE INTO alerta_log (id, alerta_tipo, entidad_id, grupo_destino, fecha_envio) VALUES (?, 'followup_reminder', ?, ?, datetime('now'))`,
+          `INSERT OR IGNORE INTO alerta_log (id, alerta_tipo, entidad_id, grupo_destino, fecha_envio) VALUES (?, 'followup_reminder', ?, ?, ?)`,
         );
 
         const groups = deps.registeredGroups();
@@ -400,6 +404,7 @@ export async function processCrmIpc(
             `fup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             row.id,
             row.whatsapp_group_folder,
+            mxNow,
           );
           sent++;
         }

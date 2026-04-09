@@ -7,7 +7,12 @@
 
 import { getDatabase } from "../db.js";
 import type { ToolContext } from "../tools/index.js";
-import { scopeFilter, getCurrentWeek, dateCutoff } from "../tools/helpers.js";
+import {
+  scopeFilter,
+  getCurrentWeek,
+  dateCutoff,
+  getMxDateStr,
+} from "../tools/helpers.js";
 
 type Trend = "mejorando" | "estable" | "deteriorando";
 
@@ -666,10 +671,8 @@ export function getVpGlance(
   }));
 
   // --- 6. Inventory Utilization (events next 90d) ---
-  const today = new Date().toISOString().slice(0, 10);
-  const future90 = new Date(Date.now() + 90 * 86400000)
-    .toISOString()
-    .slice(0, 10);
+  const today = getMxDateStr();
+  const future90 = getMxDateStr(new Date(Date.now() + 90 * 86400000));
   const eventRows = db
     .prepare(
       `SELECT nombre, tipo, fecha_inicio, inventario_total, inventario_vendido,

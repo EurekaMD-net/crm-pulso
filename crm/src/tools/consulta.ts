@@ -13,6 +13,7 @@ import {
   findCuentaId,
   getCurrentWeek,
   dataFreshness,
+  getMxYear,
 } from "./helpers.js";
 
 // ---------------------------------------------------------------------------
@@ -142,7 +143,7 @@ export function consultar_descarga(
 ): string {
   const db = getDatabase();
   const semana = (args.semana as number) || getCurrentWeek();
-  const año = (args.año as number) || new Date().getFullYear();
+  const año = (args.año as number) || getMxYear();
 
   let where = "WHERE d.año = ? AND d.semana = ?";
   const params: unknown[] = [año, semana];
@@ -215,7 +216,7 @@ export function consultar_cuota(
 ): string {
   const db = getDatabase();
   const semana = (args.semana as number) || getCurrentWeek();
-  const año = new Date().getFullYear();
+  const año = getMxYear();
 
   let where = "WHERE q.año = ? AND q.semana = ?";
   const params: unknown[] = [año, semana];

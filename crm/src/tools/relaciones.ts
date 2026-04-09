@@ -8,7 +8,7 @@
 import { getDatabase } from "../db.js";
 import { computeWarmth, warmthLabel } from "../warmth.js";
 import type { InteractionRow } from "../warmth.js";
-import { dataFreshness } from "./helpers.js";
+import { dataFreshness, getMxDateStr } from "./helpers.js";
 import type { ToolContext } from "./index.js";
 
 // ---------------------------------------------------------------------------
@@ -435,11 +435,7 @@ export async function consultar_hitos_proximos(
     ORDER BY h.fecha ASC
   `,
     )
-    .all(
-      now.toISOString().slice(0, 10),
-      cutoff.toISOString().slice(0, 10),
-      ...scope.params,
-    ) as any[];
+    .all(getMxDateStr(now), getMxDateStr(cutoff), ...scope.params) as any[];
 
   // Recurring (birthdays etc): match month-day within window
   // Fetch all recurring milestones for tracked contacts, filter in JS

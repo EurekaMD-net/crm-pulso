@@ -16,6 +16,7 @@
 
 import { getDatabase } from "./db.js";
 import { logger } from "./logger.js";
+import { getMxDateStr } from "./tools/helpers.js";
 import { comparePeers } from "./analysis/peer-comparison.js";
 import { getDaysSinceActivity } from "./analysis/media-mix.js";
 import { detectCrossAgentPatterns } from "./cross-intelligence.js";
@@ -616,7 +617,7 @@ function analyzeTemplates(
 
 export function runOvernightAnalysis(): OvernightResult {
   const db = getDatabase();
-  const lote = new Date().toISOString().slice(0, 10);
+  const lote = getMxDateStr();
 
   // Run expiration + purge first
   const expired = expireStaleInsights(db);

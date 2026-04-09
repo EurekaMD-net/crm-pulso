@@ -11,6 +11,7 @@
 import { getDatabase } from "./db.js";
 import { getPersonById, getTeamIds, getFullTeamIds } from "./hierarchy.js";
 import { logger } from "./logger.js";
+import { getMxDateStr } from "./tools/helpers.js";
 import type { IpcDeps } from "../../engine/src/ipc.js";
 
 // ---------------------------------------------------------------------------
@@ -22,25 +23,28 @@ function genId(prefix: string): string {
 }
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return getMxDateStr();
 }
 
 function currentWeek(): { year: number; week: number } {
-  const now = new Date();
-  const year = now.getFullYear();
+  const mxDate = getMxDateStr();
+  const [y, m, d] = mxDate.split("-").map(Number);
+  const now = new Date(y, m - 1, d);
   const dayOfYear = Math.floor(
-    (now.getTime() - new Date(year, 0, 1).getTime()) / 86400000,
+    (now.getTime() - new Date(y, 0, 1).getTime()) / 86400000,
   );
   const week = Math.max(1, Math.ceil((dayOfYear + 1) / 7));
-  return { year, week };
+  return { year: y, week };
 }
 
 function mondayOfCurrentWeek(): string {
-  const now = new Date();
+  const mxDate = getMxDateStr();
+  const [y, m, d] = mxDate.split("-").map(Number);
+  const now = new Date(y, m - 1, d);
   const day = now.getDay(); // 0=Sun, 1=Mon, ...
   const diff = day === 0 ? 6 : day - 1;
   const monday = new Date(now.getTime() - diff * 86400000);
-  return monday.toISOString().slice(0, 10);
+  return getMxDateStr(monday);
 }
 
 /** Check if an alert of this type+entity was already sent today. */
@@ -61,10 +65,13 @@ function recordAlert(
   grupoDestino: string,
 ): void {
   const db = getDatabase();
+  const mxNow = new Date().toLocaleString("sv-SE", {
+    timeZone: "America/Mexico_City",
+  });
   db.prepare(
     `INSERT OR IGNORE INTO alerta_log (id, alerta_tipo, entidad_id, grupo_destino, fecha_envio)
-     VALUES (?, ?, ?, ?, datetime('now'))`,
-  ).run(genId("esc"), alertType, entityId, grupoDestino);
+     VALUES (?, ?, ?, ?, ?)`,
+  ).run(genId("esc"), alertType, entityId, grupoDestino, mxNow);
 }
 
 /** Find the JID for a persona's whatsapp_group_folder from registered groups. */

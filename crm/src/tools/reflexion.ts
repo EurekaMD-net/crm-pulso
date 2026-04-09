@@ -8,7 +8,12 @@
 
 import { getDatabase } from "../db.js";
 import type { ToolContext } from "./index.js";
-import { scopeFilter, getCurrentWeek } from "./helpers.js";
+import {
+  scopeFilter,
+  getCurrentWeek,
+  getMxDateStr,
+  getMxYear,
+} from "./helpers.js";
 
 export function consultar_resumen_dia(
   _args: Record<string, unknown>,
@@ -92,7 +97,7 @@ export function consultar_resumen_dia(
 
   // 5. Quota snapshot
   const semana = getCurrentWeek();
-  const año = new Date().getFullYear();
+  const año = getMxYear();
   const cuota = db
     .prepare(
       `
@@ -121,7 +126,7 @@ export function consultar_resumen_dia(
   }
 
   return JSON.stringify({
-    fecha: todayISO.split("T")[0],
+    fecha: getMxDateStr(),
     actividades_hoy: {
       total: actividades.length,
       detalle: actividades.map((a) => ({

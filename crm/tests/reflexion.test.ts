@@ -354,7 +354,9 @@ describe("consultar_resumen_dia", () => {
 
   it("returns date field matching today", () => {
     const result = JSON.parse(consultar_resumen_dia({}, aeCtx()));
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toLocaleDateString("sv-SE", {
+      timeZone: "America/Mexico_City",
+    });
     expect(result.fecha).toBe(today);
   });
 });

@@ -8,6 +8,7 @@
 
 import { getDatabase } from "./db.js";
 import { getPersonById, getManager, getDirector } from "./hierarchy.js";
+import { getMxDateStr } from "./tools/helpers.js";
 import type { Persona } from "./hierarchy.js";
 
 export interface AlertResult {
@@ -568,7 +569,7 @@ export function alertPendientesAprobacion(): AlertResult[] {
 
 export function evaluateAlerts(): AlertResult[] {
   const db = getDatabase();
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const today = getMxDateStr();
 
   // Run auto-promotion first (silent side-effect, no alerts generated)
   alertAprobacion24hExpiry();
@@ -602,9 +603,14 @@ export function evaluateAlerts(): AlertResult[] {
 
 export function logAlerts(results: AlertResult[]): void {
   const db = getDatabase();
+  // Use Mexico City datetime so fecha_envio_date (generated: date(fecha_envio))
+  // matches the getMxDateStr() used in dedup checks.
+  const mxNow = new Date().toLocaleString("sv-SE", {
+    timeZone: "America/Mexico_City",
+  });
   const stmt = db.prepare(
     `INSERT OR IGNORE INTO alerta_log (id, alerta_tipo, entidad_id, grupo_destino, fecha_envio)
-     VALUES (?, ?, ?, ?, datetime('now'))`,
+     VALUES (?, ?, ?, ?, ?)`,
   );
 
   const insertAll = db.transaction(() => {
@@ -614,6 +620,7 @@ export function logAlerts(results: AlertResult[]): void {
         a.alerta_tipo,
         a.entidad_id,
         a.grupo_destino_folder,
+        mxNow,
       );
     }
   });

@@ -8,6 +8,7 @@
 import { getDatabase } from "../db.js";
 import { classifyAndUpdate } from "../sentiment.js";
 import type { ToolContext } from "./index.js";
+import { getMxYear } from "./helpers.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -59,10 +60,15 @@ function findPropuesta(
 }
 
 function getCurrentWeek(): number {
-  const d = new Date();
-  const start = new Date(d.getFullYear(), 0, 1);
-  const diff = d.getTime() - start.getTime();
-  return Math.ceil((diff / 86400000 + start.getDay() + 1) / 7);
+  const mxDate = new Date().toLocaleDateString("sv-SE", {
+    timeZone: "America/Mexico_City",
+  });
+  const [y, m, d] = mxDate.split("-").map(Number);
+  const now = new Date(y, m - 1, d);
+  const start = new Date(y, 0, 1);
+  return Math.ceil(
+    ((now.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -306,7 +312,7 @@ export function actualizar_descarga(
   const cuentaNombre = args.cuenta_nombre as string;
   const notasAe = args.notas_ae as string;
   const semana = (args.semana as number) || getCurrentWeek();
-  const año = new Date().getFullYear();
+  const año = getMxYear();
 
   const cuenta = findCuenta(cuentaNombre);
   if (!cuenta) {
