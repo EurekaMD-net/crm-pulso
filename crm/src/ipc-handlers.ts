@@ -528,6 +528,20 @@ export async function processCrmIpc(
       }
     }
 
+    case "crm_daily_seed": {
+      try {
+        const { runDailySeed } = await import("./daily-seeder.js");
+        const result = await runDailySeed();
+        logger.info(
+          { ok: result.ok, code: result.code, durationMs: result.durationMs },
+          "Daily seed task completed",
+        );
+        return result.ok;
+      } catch (err) {
+        return handleIpcError(err, sourceGroup, data.type);
+      }
+    }
+
     case "crm_register_template_variant": {
       try {
         const { registerVariant } = await import("./template-evolution.js");

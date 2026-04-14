@@ -63,6 +63,16 @@ const SCHEDULES: ScheduleEntry[] = [
     taskType: "crm_warmth_recompute",
     startupBehavior: "none",
   },
+  {
+    // Daily activity seeder — fills any date gaps from the last run up to
+    // today for every active AE, plus cuota + descarga for the current
+    // week. Idempotent (date-based IDs with INSERT OR IGNORE). Runs once
+    // on startup and every day at 5 AM Mexico City (after warmth).
+    name: "daily-seed",
+    cron: "0 5 * * *",
+    taskType: "crm_daily_seed",
+    startupBehavior: "immediate",
+  },
 ];
 
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
