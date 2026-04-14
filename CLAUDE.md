@@ -45,6 +45,9 @@ Agentic CRM for media ad sales. NanoClaw engine at `engine/`, all CRM code at `c
 | `crm/src/workspace/`             | WorkspaceProvider interface + Google implementation (mail, files, calendar)                                                 |
 | `crm/src/google-auth.ts`         | Re-export shim for workspace/google/auth.ts (backward compat)                                                               |
 | `crm/src/dashboard/server.ts`    | Dashboard HTTP server + router (7 API endpoints)                                                                            |
+| `crm/src/tools/helpers.ts`       | `scopeFilter`, `estadoFilter`, MX timezone helpers (`getMxDateStr`, `getMxYear`, `getMxDateTimeStr`)                        |
+| `docs/AUDIT-2026-04-14.md`       | Full 6-dimension audit report (58 fixes landed, 13 false positives excluded)                                                |
+| `docs/LEARNINGS-2026-04-14.md`   | Cross-cutting patterns distilled from the audit (MX timezone SQL, async port, scope check helpers, homoglyph coverage)      |
 | `crm/groups/global.md`           | Global CLAUDE.md template (schema, queries, rules, scope guard, disambiguation)                                             |
 | `crm/groups/ae.md`               | AE persona template (51 tools)                                                                                              |
 | `crm/groups/manager.md`          | Manager persona template (55 tools)                                                                                         |
