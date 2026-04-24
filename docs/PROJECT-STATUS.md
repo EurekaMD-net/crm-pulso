@@ -1,8 +1,8 @@
 # Pulso — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-04-21 (Inference resilience port + ops recovery — 71 tools, 29 tables, 1119 tests, 61 test files, all green)
-> Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`, `COMPETITIVE-ASSESSMENT.md`, `AUDIT-2026-04-14.md`, `LEARNINGS-2026-04-21.md`
+> Last updated: 2026-04-24 (jarvis_pull reliability fix — per-tool wallclock cap unblocks "pregúntale a Jarvis" path that had silently failed for weeks; 71 tools, 29 tables, **1124 tests, 62 test files**, all green; agentic-crm-agent:latest rebuilt + restarted; E2E smoke 200 OK in 4.7s)
+> Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`, `COMPETITIVE-ASSESSMENT.md`, `AUDIT-2026-04-14.md`, `LEARNINGS-2026-04-21.md`, `LEARNINGS-2026-04-24.md`
 
 ## Phase Tracker
 

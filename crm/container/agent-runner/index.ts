@@ -44,6 +44,22 @@ import type { ToolContext } from "../../src/tools/index.js";
 // Types
 // ---------------------------------------------------------------------------
 
+// Per-tool wallclock timeout overrides. The default 15s budget kills
+// fast tools (DB, file I/O) that hang — but tools whose backend is an
+// LLM provider cascade need much longer. See the executor block below
+// for the budget-layering rationale.
+//
+// EXPORTED for unit testing — see crm/tests/agent-runner-timeouts.test.ts.
+export const DEFAULT_TOOL_TIMEOUT_MS = 15_000;
+export const TOOL_TIMEOUTS: Readonly<Record<string, number>> = Object.freeze({
+  jarvis_pull: 120_000,
+});
+
+/** Pick the wallclock budget for a given tool name. */
+export function selectToolTimeout(name: string): number {
+  return TOOL_TIMEOUTS[name] ?? DEFAULT_TOOL_TIMEOUT_MS;
+}
+
 interface ContainerInput {
   prompt: string;
   sessionId?: string;
@@ -511,24 +527,46 @@ async function main(): Promise<void> {
   // Build system prompt
   const systemPrompt = buildSystemPrompt(containerInput.groupFolder, persona);
 
-  // Tool executor: wraps executeTool with ToolContext + timeout
-  const TOOL_TIMEOUT_MS = 15_000;
+  // Tool executor: wraps executeTool with ToolContext + per-tool timeout.
+  //
+  // The default 15s budget is load-bearing for fast tools (DB queries,
+  // file I/O, calendar lookups) — a hung query that runs forever is
+  // exactly what we want killed quickly.
+  //
+  // BUT: tools whose backend is itself an LLM provider cascade can take
+  // far longer. `jarvis_pull` calls mission-control's /api/jarvis-pull,
+  // which on a primary-provider miss falls back through up to 3 providers
+  // (~30s timeout each) AND can re-issue infer() once if the first
+  // response is <20 chars. Realistic worst case is ~90-110s. Override
+  // map and helper live at module scope (see top of file).
+  //
+  // Budget layering for jarvis_pull:
+  //   fetch-side AbortSignal (primary budget):       110_000ms (in jarvis.ts)
+  //   agent-runner cap (defense-in-depth, +10s):     120_000ms (TOOL_TIMEOUTS)
+  //   mc /api/jarvis-pull double-infer worst case:   ~110_000ms
+  // So the fetch fires first under all observed failure modes, and the
+  // runner cap only fires if mc itself hangs past its own budget.
   const executor = async (
     name: string,
     args: Record<string, unknown>,
   ): Promise<string> => {
-    return Promise.race([
-      executeTool(name, args, toolCtx),
-      new Promise<string>((_, reject) =>
-        setTimeout(
-          () =>
-            reject(
-              new Error(`Tool "${name}" timed out after ${TOOL_TIMEOUT_MS}ms`),
-            ),
-          TOOL_TIMEOUT_MS,
-        ),
-      ),
-    ]);
+    const timeoutMs = selectToolTimeout(name);
+    let timer: NodeJS.Timeout | undefined;
+    const timeoutP = new Promise<string>((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(new Error(`Tool "${name}" timed out after ${timeoutMs}ms`)),
+        timeoutMs,
+      );
+    });
+    try {
+      return await Promise.race([executeTool(name, args, toolCtx), timeoutP]);
+    } finally {
+      // Prevent timer accumulation on the resolve path: a 100-call
+      // session at 15s default would otherwise hold ~1500s of pending
+      // event-loop refs simultaneously.
+      if (timer) clearTimeout(timer);
+    }
   };
 
   // Load or create session

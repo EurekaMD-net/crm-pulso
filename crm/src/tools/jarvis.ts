@@ -93,7 +93,18 @@ export async function handleJarvisPull(
         "X-Api-Key": jarvisKey,
       },
       body: JSON.stringify({ query, role, context }),
-      signal: AbortSignal.timeout(90_000), // 90s: allows Jarvis provider fallback cascade (primary 30s + fallback 30s + buffer)
+      // 110s = primary budget. The agent-runner has a 120s per-tool cap
+      // (TOOL_TIMEOUTS["jarvis_pull"] in agent-runner/index.ts) that
+      // sits 10s above this — so the fetch's AbortSignal fires first
+      // under every observed failure mode, giving us a clean
+      // tool-result error instead of a runner-level guillotine.
+      // The runner cap is the safety net for "mc hung past 110s".
+      // Realistic mc cascade worst case (3 providers × 30s timeouts +
+      // double-infer on near-empty response) is ~110s, so 110s leaves
+      // zero headroom — a single retry-on-short pushes us past, which
+      // is acceptable: that's exactly when we want to give up on this
+      // turn and let the agent answer from its own knowledge.
+      signal: AbortSignal.timeout(110_000),
     });
 
     if (!response.ok) {
