@@ -173,3 +173,79 @@ narrative belongs in the post-tool-result phase, not as an
 instruction inside the tool description. If you want a user-facing
 "please wait" indicator, render it in the tool's handler as a
 streaming status update, not as a prompt instruction.
+
+## 7. JWT signing secret with "random fallback for dev" is a
+
+production hazard
+
+Same session, second incident. Right after the `jarvis_pull` deploy
+restarted `agentic-crm` at 23:13, mission-control reported "Jarvis
+says token expired" when fetching CRM status. The mc `CRM_API_TOKEN`
+JWT had a 30-day `exp` claim — checked at the boundary, valid until
+May 24. But the CRM kept rejecting it with `401 {"error":"Invalid or
+expired token"}`.
+
+Root cause was **`crm/src/dashboard/auth.ts:18-22`**:
+
+```ts
+const SECRET =
+  process.env.DASHBOARD_JWT_SECRET ||
+  (process.env.NODE_ENV === "production"
+    ? (() => { throw ... })()
+    : crypto.randomBytes(32).toString("hex"));
+```
+
+`DASHBOARD_JWT_SECRET` was unset in `agentic-crm/.env` AND `NODE_ENV`
+was unset, so the dev branch fired: a fresh random secret on every
+process start. Every `systemctl restart agentic-crm` rotated the
+secret silently — every previously-issued JWT (mc's, the dashboard's,
+internal callers') instantly failed signature verification while
+their `exp` claims still looked fine.
+
+This pattern has three independent failure modes that compound:
+
+1. **Silent state mutation across restarts.** No log line on boot
+   said "regenerated random secret because DASHBOARD_JWT_SECRET was
+   unset". The behavior was invisible until a downstream caller hit 401.
+2. **`NODE_ENV` not set + production = dev-fallback active in prod.**
+   The "production guard" only fires when `NODE_ENV === "production"`.
+   Most systemd units don't set NODE_ENV. So the safety throw never
+   ran, and prod ran with dev semantics.
+3. **Error message conflates two failure modes.** `verify()` returns
+   the same string `"Invalid or expired token"` whether the signature
+   is wrong (secret rotated) or the `exp` is past. The diagnostic
+   signal is lost — you cannot tell from the error which branch you
+   need to fix. Distinguishing them is a 5-line edit.
+
+**Rule**: any "use ENV_VAR if set, else generate randomly for dev"
+pattern is a tripwire when ENV_VAR is silently absent in production.
+If the value matters for cross-process consistency (signing secrets,
+encryption keys, session keys, CSRF tokens), the dev branch should
+either:
+
+- Persist the random value to disk on first boot and reuse it on
+  restart (so dev still works without an env var, but the value is
+  stable across restarts), OR
+- Log a loud `console.warn("⚠️  DASHBOARD_JWT_SECRET unset — using
+random per-process value, all tokens will be invalidated on next
+restart")` on boot so the operator sees it once.
+
+**Fix shipped**:
+
+- Generated 64-hex-char secret via `openssl rand -hex 32`.
+- Pinned to `agentic-crm/.env` as `DASHBOARD_JWT_SECRET=<hex>`.
+- Documented requirement in `.env.example` (commit `0d9d65e`) so the
+  next operator who clones this won't recreate the trap.
+- Re-minted `CRM_API_TOKEN` for `per-001 / vp` against the new pinned
+  secret, locally signature-verified before deploy, written to
+  `mission-control/.env`, mc restarted.
+- Tightened `mission-control/.env` and `COMMIT-AI/.env` from mode 644
+  to 600 (audit caught both as world-readable despite holding API
+  keys + bot tokens — same single-user box, but principle of least
+  privilege).
+
+**Diagnostic signal — error-message disambiguation is debugging gold.**
+If `auth.ts:verify` had returned `"Token signature invalid (secret
+mismatch)"` vs `"Token expired (exp past)"` separately, this would
+have been a 30-second diagnosis instead of 30 minutes. The fix
+remains an open follow-up.

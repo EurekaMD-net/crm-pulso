@@ -1,7 +1,7 @@
 # Pulso — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-04-24 (jarvis_pull reliability fix — per-tool wallclock cap unblocks "pregúntale a Jarvis" path that had silently failed for weeks; 71 tools, 29 tables, **1124 tests, 62 test files**, all green; agentic-crm-agent:latest rebuilt + restarted; E2E smoke 200 OK in 4.7s)
+> Last updated: 2026-04-24 (TWO incidents closed in one session — (1) jarvis_pull reliability fix: per-tool wallclock cap unblocks "pregúntale a Jarvis" path that had silently failed for weeks; (2) DASHBOARD_JWT_SECRET pinned in `.env` after the jarvis_pull deploy restarted agentic-crm and silently rotated the random fallback secret, invalidating mission-control's CRM_API_TOKEN — re-minted, both services hardened with 0600 .env mode. 71 tools, 29 tables, **1124 tests, 62 test files**, all green; agentic-crm-agent:latest rebuilt + restarted; E2E smoke 200 OK in 4.7s; CRM-side `crm_query` task end-to-end through `/api/tasks` → 200 with real pipeline data)
 > Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`, `COMPETITIVE-ASSESSMENT.md`, `AUDIT-2026-04-14.md`, `LEARNINGS-2026-04-21.md`, `LEARNINGS-2026-04-24.md`
 
 ## Phase Tracker
