@@ -105,12 +105,12 @@ affected. Tests stay at 1,166 by construction.
 Concrete wins, each shippable independently. Run full test suite
 after each.
 
-| Item                                                                                                                                                                   | Status                                                                                     | Effort | Value                                                               |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------ | ------------------------------------------------------------------- |
-| `CONTAINER_MEMORY` / `CONTAINER_CPUS` / `CONTAINER_PIDS_LIMIT` env vars in `engine/config.ts`, threaded through `buildContainerArgs`. Closes audit `--pids-limit` gap. | **Shipped 2026-04-26** (Phase 2a)                                                          | ~1 h   | Per-deploy tuning + closes audit security gap                       |
-| Trim `engine/ipc.ts` to engine-only IPC. CRM handlers already live in `crm/src/ipc-handlers.ts`.                                                                       | **N/A** — verified already partitioned (only the default-case CRM delegation at line 546). | —      | Was a false-positive guess from Phase 1 inventory                   |
-| Split `engine/index.ts` (620 LOC) into `engine/bootstrap.ts` (engine startup) + thin `engine/index.ts` (entry point), keeping CRM hooks in `crm/src/bootstrap.ts`.     | Queued (Phase 2b)                                                                          | ~2 h   | Reduces max-file complexity; cleaner review surface                 |
-| Container heartbeat + stuck-container reaper, ported from upstream's `host-sweep.ts` pattern but adapted to fit our `group-queue.ts` model.                            | Queued (Phase 2c)                                                                          | ~3–4 h | Catches "container alive but silent" — doom-loop only catches loops |
+| Item                                                                                                                                                                                                            | Status                                                                                     | Effort | Value                                                               |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------ | ------------------------------------------------------------------- |
+| `CONTAINER_MEMORY` / `CONTAINER_CPUS` / `CONTAINER_PIDS_LIMIT` env vars in `engine/config.ts`, threaded through `buildContainerArgs`. Closes audit `--pids-limit` gap.                                          | **Shipped 2026-04-26** (Phase 2a)                                                          | ~1 h   | Per-deploy tuning + closes audit security gap                       |
+| Trim `engine/ipc.ts` to engine-only IPC. CRM handlers already live in `crm/src/ipc-handlers.ts`.                                                                                                                | **N/A** — verified already partitioned (only the default-case CRM delegation at line 546). | —      | Was a false-positive guess from Phase 1 inventory                   |
+| Extract bootstrap sequence from `engine/src/index.ts:main()` into `engine/src/bootstrap.ts`. Original plan called for a "thin index.ts" via dramatic split; revised to minimal extraction after closer reading. | **Shipped 2026-04-26** (Phase 2b)                                                          | ~1 h   | Clear semantic boundary (subsystem startup vs orchestration)        |
+| Container heartbeat + stuck-container reaper, ported from upstream's `host-sweep.ts` pattern but adapted to fit our `group-queue.ts` model.                                                                     | Queued (Phase 2c)                                                                          | ~3–4 h | Catches "container alive but silent" — doom-loop only catches loops |
 
 ### Phase 2a — what shipped
 
@@ -135,8 +135,37 @@ after each.
   - Strict regex validation of values (audit-suggested `/^\d+(\.\d+)?[bkmg]?$/i` for memory etc.) — docker's own error on first spawn is sufficient signal; adding parser duplicates docker's validation.
   - Test that `'0'` escape hatch omits the flag at the spawn-args layer — covered by inspection at `container-runner.ts:298` (six lines of obvious conditionals); re-mocking config per-test would test the mock plumbing more than production code.
 
-**Risk for remaining items (2b, 2c):** medium per item, low when
-batched. Each has tests covering it; run the full suite after each.
+### Phase 2b — what shipped
+
+- New `engine/src/bootstrap.ts` (~85 LOC) exporting
+  `bootstrapEngine(): Promise<{ proxyServer }>`. Owns the boot sequence
+  (container runtime + DB + CRM bootstrap + scheduler + briefings +
+  dashboard + credential proxy) in the same load-bearing order as
+  before, with the same `try/catch` fail-fast around `bootstrapCrm`.
+- `engine/src/index.ts` `main()` collapsed lines 519-535 to one
+  `const { proxyServer } = await bootstrapEngine();`. Removed the
+  internal `ensureContainerSystemRunning` helper (now lives in
+  bootstrap.ts) and dropped 11 imports that became unused after the
+  extraction (`bootstrapCrm`, `seedBriefings`, `startScheduler`,
+  `startDashboardServer`, `startCredentialProxy`, `cleanupOrphans`,
+  `ensureContainerRuntimeRunning`, `initDatabase`, `PROXY_BIND_HOST`,
+  `DATA_DIR`, `CREDENTIAL_PROXY_PORT`). `stopScheduler` retained — the
+  shutdown handler still calls it.
+- New `engine/src/bootstrap.test.ts` (2 tests):
+  - "calls subsystems in the expected order and returns proxyServer" —
+    asserts `invocationCallOrder` to pin the load-bearing ordering
+  - "exits process when bootstrapCrm throws (fail-fast contract)" —
+    asserts downstream subsystems do NOT fire when CRM bootstrap fails
+- **Scope was smaller than the original plan implied.** The plan
+  called for "thin index.ts via dramatic split." Closer reading
+  showed index.ts is well-organized (state at top, helpers grouped,
+  main(), entry guard); a bigger split would require passing module
+  state across files (worse than current). The valuable extraction
+  was just the boot sequence — clear semantic boundary, no shared
+  mutable state, 25-line reduction in index.ts.
+
+**Risk for remaining item (2c):** medium. The heartbeat reaper has
+tests upstream we'd port alongside the implementation.
 
 ---
 

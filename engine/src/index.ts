@@ -1,34 +1,24 @@
 import fs from 'fs';
 import path from 'path';
-import { bootstrapCrm } from '../../crm/src/bootstrap.js';
-import { seedBriefings } from '../../crm/src/briefing-seeds.js';
-import { startScheduler, stopScheduler } from '../../crm/src/scheduler.js';
-import { startDashboardServer } from '../../crm/src/dashboard/server.js';
+import { stopScheduler } from '../../crm/src/scheduler.js';
 
 import {
   ASSISTANT_NAME,
-  CREDENTIAL_PROXY_PORT,
-  DATA_DIR,
   IDLE_TIMEOUT,
   MAIN_GROUP_FOLDER,
   MAX_CONTEXT_MESSAGES,
   POLL_INTERVAL,
   TRIGGER_PATTERN,
 } from './config.js';
-import { startCredentialProxy } from './credential-proxy.js';
 import { parseImageReferences } from './image.js';
 import { WhatsAppChannel } from './channels/whatsapp.js';
+import { bootstrapEngine } from './bootstrap.js';
 import {
   ContainerOutput,
   runContainerAgent,
   writeGroupsSnapshot,
   writeTasksSnapshot,
 } from './container-runner.js';
-import {
-  cleanupOrphans,
-  ensureContainerRuntimeRunning,
-  PROXY_BIND_HOST,
-} from './container-runtime.js';
 import {
   getAllChats,
   getAllRegisteredGroups,
@@ -37,7 +27,6 @@ import {
   getMessagesSince,
   getNewMessages,
   getRouterState,
-  initDatabase,
   setRegisteredGroup,
   setRouterState,
   setSession,
@@ -510,29 +499,8 @@ function recoverPendingMessages(): void {
   }
 }
 
-function ensureContainerSystemRunning(): void {
-  ensureContainerRuntimeRunning();
-  cleanupOrphans();
-}
-
 async function main(): Promise<void> {
-  ensureContainerSystemRunning();
-  initDatabase();
-  try {
-    bootstrapCrm(); // CRM hook: initialize CRM schema and hooks
-  } catch (err) {
-    logger.fatal({ err }, 'CRM bootstrap failed — aborting startup');
-    process.exit(1);
-  }
-  startScheduler(DATA_DIR); // CRM hook: unified cron scheduler (alerts, followups, warmth, overnight, doc-sync)
-  seedBriefings(); // CRM hook: idempotent briefing task seeding
-  startDashboardServer(); // CRM hook: dashboard REST API
-  logger.info('Database initialized');
-
-  const proxyServer = await startCredentialProxy(
-    CREDENTIAL_PROXY_PORT,
-    PROXY_BIND_HOST,
-  );
+  const { proxyServer } = await bootstrapEngine();
 
   loadState();
 
