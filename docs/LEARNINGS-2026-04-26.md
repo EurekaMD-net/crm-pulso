@@ -134,3 +134,49 @@ becomes loud — by then it's too late to notice without a comparison.
 "where does this run write to?" If the answer is "wherever
 `process.cwd()` happens to be," the suite has no isolation guarantee.
 Set the data-path env var in vitest setup, never in individual tests.
+
+## 7. SQLite → Postgres backup: bytea is binary-safe, COPY TEXT is not
+
+When the user asked whether we had a live backup of the CRM SQLite, the
+honest answer was no — `.backups/` held only March 8 _code_ snapshots,
+nothing automated, no replication, no off-host copy. We shipped two
+components: bytea snapshots every 15 min for recovery (Component A)
+and a daily `pgloader` schema-translated mirror for analytics
+(Component B). Targets the existing Supabase Postgres at `localhost:5433`
+(`db.mycommit.net` upstream) — no new infrastructure.
+
+The non-obvious lesson surfaced _during_ implementation:
+
+**`\copy` in TEXT format is not bytea-safe.** PostgreSQL's wire format
+treats `\x` as a single-byte escape (the character with hex code in
+the next two digits), _not_ as the bytea hex literal prefix that
+SQL-level `INSERT ... '\xABCD'::bytea` recognizes. So a row built as
+`<tab><tab>...<tab>\x1f8b08...` writes a single 0x1f byte followed by
+the _ASCII characters_ `8b08...` into the bytea column. The first
+backup looked successful (rows landed, sizes plausible) but every
+restore failed with "not in gzip format."
+
+**Rule:** For arbitrary binary into a `bytea` column, use PostgreSQL
+large objects: `\lo_import 'path'` to load the file as a temporary
+LOB, `INSERT ... lo_get(:oid)` to copy into bytea, `lo_unlink(:oid)`
+to clean up. Symmetric on read: `lo_from_bytea(0, db_blob)` then
+`\lo_export :oid 'path'`. No escape ambiguity, no command-line size
+limits, no stdin protocol contortions.
+
+**Also:** `\lo_import` sets the special `LASTOID` variable, but
+`:LASTOID` only expands cleanly inside a `\set` indirection
+(`\set blob_oid :LASTOID`), not directly in a subsequent SQL statement.
+Without the indirection it silently expands to `0` and you get
+`large object 0 does not exist`.
+
+**Operationally**, two patterns worth keeping:
+
+- **Atomic schema swap for queryable mirrors.** pgloader loads into
+  a `crm_mirror_loading` schema, then a single transaction does
+  `DROP SCHEMA crm_mirror CASCADE; ALTER SCHEMA crm_mirror_loading RENAME TO crm_mirror;`.
+  Readers either see the previous full mirror or the new full mirror,
+  never an empty or half-loaded state.
+- **Operate on a snapshot, not the live DB.** Both Component A
+  (`sqlite3 .backup` → gzip → bytea) and Component B (snapshot →
+  pgloader) take an atomic offline copy first. `.backup` uses
+  SQLite's online backup API — no reader lock against the live agent.

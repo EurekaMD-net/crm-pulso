@@ -170,6 +170,21 @@ Tests live in:
 - `crm-ctl` at `/usr/local/bin/crm-ctl` is the canonical way to manage the service.
 - Check systemd status BEFORE using pgrep (systemd-spawned processes also match).
 
+## Backup & Restore
+
+The CRM SQLite (`data/store/crm.db`) is backed up into Supabase Postgres (`localhost:5433`, `crm_backup_meta.crm_backups`). Every 15 min via `crm-backup.timer`, gzipped + sha256-checksummed, 90-day retention.
+
+A daily 03:00 MX `crm-mirror.timer` runs `pgloader` to reload a queryable schema-translated copy into the `crm_mirror` schema (excludes sqlite-vec / FTS5 virtual tables). Use it for Grafana / Studio / ad-hoc analytics — it is not a primary store and gets fully recreated each run.
+
+| Command                              | Purpose                                                                                                                                          |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `crm-backup`                         | Take a snapshot now (manual run; timer fires every 15 min)                                                                                       |
+| `crm-backup-list [N]`                | List recent snapshots (default 20 most recent)                                                                                                   |
+| `crm-restore [id\|latest] [out_dir]` | Pull a snapshot from PG, gunzip, verify sha256, write to `<out_dir>/crm-restored-<id>.db`. Does NOT swap the live DB — prints the swap commands. |
+| `crm-mirror`                         | Rebuild `crm_mirror.*` queryable schema (manual; timer fires daily 03:00 MX)                                                                     |
+
+Config: `/etc/crm-backup.env` (mode 600). Mirror config: `/etc/crm-mirror.load`. PG creds for both come from `/opt/supabase/.env`. See LEARNINGS-2026-04-26 §7 for the design (Component A = bytea recovery, Component B = pgloader analytics mirror).
+
 ## Terminology Protocol
 
 When renaming any user-facing term, always update all 4 layers:
