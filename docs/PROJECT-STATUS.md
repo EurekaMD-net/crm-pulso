@@ -1,8 +1,8 @@
 # Pulso — Project Status
 
 > Quick-retrieval status file. Updated each `/session-wrap`.
-> Last updated: 2026-04-24 (TWO incidents closed in one session — (1) jarvis_pull reliability fix: per-tool wallclock cap unblocks "pregúntale a Jarvis" path that had silently failed for weeks; (2) DASHBOARD_JWT_SECRET pinned in `.env` after the jarvis_pull deploy restarted agentic-crm and silently rotated the random fallback secret, invalidating mission-control's CRM_API_TOKEN — re-minted, both services hardened with 0600 .env mode. 71 tools, 29 tables, **1124 tests, 62 test files**, all green; agentic-crm-agent:latest rebuilt + restarted; E2E smoke 200 OK in 4.7s; CRM-side `crm_query` task end-to-end through `/api/tasks` → 200 with real pipeline data)
-> Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`, `COMPETITIVE-ASSESSMENT.md`, `AUDIT-2026-04-14.md`, `LEARNINGS-2026-04-21.md`, `LEARNINGS-2026-04-24.md`
+> Last updated: 2026-04-26 (cost_ledger bug chain — six bugs surfaced behind one symptom (22 zero-token rows over a week). Fixed: SSE usage capture (final empty-choices chunk was being skipped), per-call recordCost moved into `infer()` so sentiment + summarizer are no longer invisible, hard monthly-budget guard, `GET /api/v1/budget` endpoint, vitest test isolation via per-run `CRM_DB_PATH`, raised `INFERENCE_TOKEN_BUDGET` 25k→80k so it backstops compression instead of pre-empting it, honest exit messages distinguishing budget vs. round exhaustion. 71 tools, 29 tables, **1130 tests, 63 test files**, 9 pre-existing dashboard/reflexion failures unchanged. agentic-crm-agent:latest rebuilt + restarted; row #28 verified end-to-end (`qwen3.6-plus / 26012p+635c / $0.022` — same 26k prompt that previously failed on round 0 now completes cleanly). 22 stale + 4 test-pollution rows purged from production ledger. Commits: `53f42da`, `a923eff`, `a38b228`)
+> Companion docs: `VISION.md`, `TECHNICAL-EVOLUTION-PLAN.md`, `COMPETITIVE-ASSESSMENT.md`, `AUDIT-2026-04-14.md`, `LEARNINGS-2026-04-21.md`, `LEARNINGS-2026-04-24.md`, `LEARNINGS-2026-04-26.md`
 
 ## Phase Tracker
 
