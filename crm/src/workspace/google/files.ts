@@ -25,6 +25,21 @@ import type {
 const GOOGLE_TIMEOUT_MS = 15_000;
 const GOOGLE_WRITE_TIMEOUT_MS = 30_000;
 
+/**
+ * Escape a string for safe embedding inside Drive's `q` query language.
+ * Drive uses single-quoted string literals; backslash is the escape char.
+ * Order matters: backslashes MUST be escaped first, otherwise the
+ * escape backslash we add in front of `'` would itself be re-escaped.
+ *
+ * Real-world inputs that need this: Mexican surnames like O'Brien, Drive
+ * folder names that contain quotes, sync timestamps from external state.
+ *
+ * Reference: https://developers.google.com/drive/api/guides/ref-search-terms
+ */
+export function escapeDriveQueryString(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(
@@ -96,8 +111,9 @@ export async function listFiles(
   const drive = getDriveClient(email);
 
   const qParts: string[] = [];
-  if (query) qParts.push(`fullText contains '${query.replace(/'/g, "\\'")}'`);
-  if (folderId) qParts.push(`'${folderId}' in parents`);
+  if (query)
+    qParts.push(`fullText contains '${escapeDriveQueryString(query)}'`);
+  if (folderId) qParts.push(`'${escapeDriveQueryString(folderId)}' in parents`);
   qParts.push("trashed = false");
 
   const res = await withTimeout(
@@ -374,7 +390,7 @@ export async function listModifiedFiles(
   let query =
     "mimeType != 'application/vnd.google-apps.folder' and trashed = false";
   if (since) {
-    query += ` and modifiedTime > '${since}'`;
+    query += ` and modifiedTime > '${escapeDriveQueryString(since)}'`;
   }
 
   const res = await drive.files.list({

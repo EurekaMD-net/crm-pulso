@@ -1,27 +1,46 @@
 # Audit Follow-up — 2026-04-26 (post-batch review)
 
-> Pickup doc for the next session. Five fix batches landed today
-> (commits `34411c0`, `6703f85`, `7c8faa9`, `c0bd6f9`, `6afe88d`,
-> all queued locally on `main`, NOT pushed). This file covers (A) what
-> I'd flag if I were reviewing my own work and (B) the deferred §2
-> security items as actionable proposals.
+> Updated 2026-04-26 part 3: §2 security batch (B1, B2, B4 + A5)
+> landed as a single commit. B3 (PG `~/.pgpass`) split out per user
+> request. Remaining queue: B3, A1+A2 docstrings, A3 overnight test,
+> S1 doom test.
 >
 > Source-of-truth audit: `docs/AUDIT-2026-04-26.md` (120 findings, 5
-> batches). What was fixed by dimension is in the session-end summary
-> below.
+> batches). The audit-of-fixes review (Part A) and §2 design notes
+> (Part B) are below.
 
 ## What landed today
 
-| Commit    | Audit § | Summary                                                      |
-| --------- | ------- | ------------------------------------------------------------ |
-| `34411c0` | §5      | `getCurrentWeek` (6 divergent copies) + `dateCutoff` unified |
-| `6703f85` | §4      | `Promise.allSettled`, overnight `errors[]`, SSE log, budget  |
-| `7c8faa9` | §1      | doom-loop LRU, providerBreakers cap, parseBuffer cap         |
-| `c0bd6f9` | §3      | bulk entity resolve, two composite indexes (one COVERING)    |
-| `6afe88d` | §6      | doom thresholds 3→2, immediate escalation, `validateEnv()`   |
+| Commit    | Audit § | Summary                                                                       |
+| --------- | ------- | ----------------------------------------------------------------------------- |
+| `34411c0` | §5      | `getCurrentWeek` (6 divergent copies) + `dateCutoff` unified                  |
+| `6703f85` | §4      | `Promise.allSettled`, overnight `errors[]`, SSE log, budget                   |
+| `7c8faa9` | §1      | doom-loop LRU, providerBreakers cap, parseBuffer cap                          |
+| `c0bd6f9` | §3      | bulk entity resolve, two composite indexes (one COVERING)                     |
+| `6afe88d` | §6      | doom thresholds 3→2, immediate escalation, `validateEnv()`                    |
+| `1e4ba9a` | docs    | this followup doc                                                             |
+| _new_     | §2      | **B1 + B2 + B4 + A5** — aprobaciones allowlist, Drive escape, SSRF, JWT floor |
 
-All 1130 tests green throughout. Container rebuilt + restarted clean
-after each batch.
+Test count: 1130 → 1153 (B1+B2+B4+A5 initial 23) → 1164 (post-audit 11
+SSRF bypass-pinning sweep). All green. Container rebuilt + restarted
+clean after each batch.
+
+### Wiring gap discovered while deploying §2 batch
+
+`NODE_ENV` is **not set** on the running `agentic-crm` systemd unit
+(`/proc/<pid>/environ` shows only `TZ=America/Mexico_City`). The new
+B4 SSRF + A5 JWT-length checks gate on `NODE_ENV === "production"`,
+so they currently no-op in prod. Two paths forward:
+
+1. Add `Environment=NODE_ENV=production` to
+   `/etc/systemd/system/agentic-crm.service`. One line, one restart.
+2. Drop the `NODE_ENV` gate and key the checks off something else
+   (e.g. presence of `DASHBOARD_JWT_SECRET`, since dev rarely sets it).
+
+Recommend (1) — it's the standard Node convention and makes other
+production-only paths (logging, error handling) behave correctly too.
+Defer to next session — touching the systemd unit is its own risk
+window and shouldn't piggyback on a code change.
 
 ---
 
@@ -216,25 +235,29 @@ radius).
 
 ## Suggested next-session order
 
-1. **B1** aprobaciones allowlist — sharpest, smallest, highest impact. ~30 min.
-2. **B4** SSRF hardening into `validateEnv()` — cheapest free hardening. ~30 min.
-3. **A5** add length floor to `DASHBOARD_JWT_SECRET` in `validateEnv()` — fits with B4. ~5 min.
-4. **A1 + A2** docstring fixes for `getCurrentWeek` + `dateCutoff` — paperwork that prevents future drift. ~10 min.
-5. **A3** add overnight `errors[]` test. ~15 min.
-6. **S1** add doom-loop N=2 escalation test. ~15 min.
-7. **B2** Drive query escape. ~1 h.
-8. **B3** PG `~/.pgpass` migration for backup scripts. ~1 h.
+**Done in part 3** (single commit): ~~B1, B2, B4, A5~~. SSRF guard came
+out fatter than spec — also rejects integer/hex IPs, IPv6 loopback +
+link-local + unique-local + IPv4-mapped IPv6. Bypass-pinning sweep (11
+extra tests) lives in `bootstrap.test.ts`.
 
-Total ~3.5 h to clear the entire audit + audit-of-audit backlog.
+**Remaining queue:**
+
+1. **NODE_ENV wiring** — `Environment=NODE_ENV=production` in the
+   systemd unit. Without this, B4/A5 are no-ops in prod. ~5 min + restart.
+2. **B3** PG `~/.pgpass` migration for backup scripts (split from §2
+   batch per user — touches systemd timer, separate run). ~1 h.
+3. **A1 + A2** docstring fixes for `getCurrentWeek` + `dateCutoff`. ~10 min.
+4. **A3** add overnight `errors[]` test. ~15 min.
+5. **S1** add doom-loop N=2 escalation test. ~15 min.
+
+Total ~2 h to fully close the audit + audit-of-audit backlog.
 
 After that, only `BUDGET_ENFORCE` default flip remains (explicitly
 flagged "discuss before flipping" in audit §7, not in this list).
 
 ## Cross-cuts to remember
 
-- Push the 5 today's commits when next session starts (they're queued
-  on `main`, not yet pushed). Run `gh auth status` first per project
-  CLAUDE.md.
+- All §1-§6 commits + the §2 batch are now pushed to `origin/main`.
 - After any §2 fix, write a `LEARNINGS-2026-MM-DD.md` entry on the
   underlying anti-pattern (interpolated table names, query-string
   escaping, env-var credentials) so the next audit doesn't surface

@@ -533,6 +533,43 @@ describe("aprobar_registro", () => {
     );
     expect(result.error).toContain("No encontre");
   });
+
+  it("rejects bogus entidad_tipo without touching SQL (B1 allowlist)", () => {
+    // Defense against SQL injection via table-name interpolation. SQLite
+    // can't bind table names — only an explicit allowlist is safe. The
+    // injection candidates here would be DDL or expression payloads if the
+    // value reached the prepared statement.
+    const gerCtx = makeCtx("ger1", "gerente", ["ae1"]);
+
+    for (const bogus of [
+      "cuenta; DROP TABLE persona",
+      "persona",
+      "sqlite_master",
+      "(SELECT 1)",
+      "",
+      null,
+      undefined,
+      123,
+      { table: "cuenta" },
+    ]) {
+      const result = JSON.parse(
+        aprobar_registro(
+          { entidad_tipo: bogus as any, entidad_id: "anything" },
+          gerCtx,
+        ),
+      );
+      expect(result.error).toBeDefined();
+      // Either the missing-args check or the allowlist check fires; both are
+      // acceptable rejections — neither path constructs SQL with the input.
+      expect(typeof result.error).toBe("string");
+    }
+
+    // Persona table must still exist (no DROP executed).
+    const persona = testDb
+      .prepare("SELECT name FROM sqlite_master WHERE name = 'persona'")
+      .get();
+    expect(persona).toBeTruthy();
+  });
 });
 
 // ---------------------------------------------------------------------------

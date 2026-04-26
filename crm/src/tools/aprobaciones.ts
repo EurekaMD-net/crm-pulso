@@ -36,6 +36,24 @@ const ROLE_RANK: Record<string, number> = {
 
 type EntidadTipo = "cuenta" | "contacto";
 
+/**
+ * Allowlist for table names embedded in approval-flow SQL via string
+ * interpolation. SQLite cannot bind table names — only values — so the only
+ * safe pattern is an explicit allowlist. Inline `entidadTipo === "cuenta"`
+ * guards exist below as defense-in-depth, but every interpolation site must
+ * resolve through this map. If you add a new approvable entity, add it here
+ * AND extend the EntidadTipo union.
+ */
+const APPROVAL_TABLES = {
+  cuenta: "cuenta",
+  contacto: "contacto",
+} as const satisfies Record<EntidadTipo, string>;
+
+function resolveApprovalTable(tipo: unknown): string | null {
+  if (typeof tipo !== "string") return null;
+  return (APPROVAL_TABLES as Record<string, string>)[tipo] ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -459,13 +477,13 @@ export function aprobar_registro(
         "entidad_tipo ('cuenta' o 'contacto') y entidad_id son requeridos.",
     });
   }
-  if (entidadTipo !== "cuenta" && entidadTipo !== "contacto") {
+  const table = resolveApprovalTable(entidadTipo);
+  if (!table) {
     return JSON.stringify({
       error: "entidad_tipo debe ser 'cuenta' o 'contacto'.",
     });
   }
 
-  const table = entidadTipo;
   const row = db
     .prepare(`SELECT id, nombre, estado, creado_por FROM ${table} WHERE id = ?`)
     .get(entidadId) as any;
@@ -617,13 +635,13 @@ export function rechazar_registro(
         "entidad_tipo ('cuenta' o 'contacto') y entidad_id son requeridos.",
     });
   }
-  if (entidadTipo !== "cuenta" && entidadTipo !== "contacto") {
+  const table = resolveApprovalTable(entidadTipo);
+  if (!table) {
     return JSON.stringify({
       error: "entidad_tipo debe ser 'cuenta' o 'contacto'.",
     });
   }
 
-  const table = entidadTipo;
   const row = db
     .prepare(`SELECT id, nombre, estado, creado_por FROM ${table} WHERE id = ?`)
     .get(entidadId) as any;
@@ -779,13 +797,13 @@ export function impugnar_registro(
       error: "El motivo de la impugnacion es requerido.",
     });
   }
-  if (entidadTipo !== "cuenta" && entidadTipo !== "contacto") {
+  const table = resolveApprovalTable(entidadTipo);
+  if (!table) {
     return JSON.stringify({
       error: "entidad_tipo debe ser 'cuenta' o 'contacto'.",
     });
   }
 
-  const table = entidadTipo;
   const row = db
     .prepare(
       `SELECT id, nombre, estado, creado_por, fecha_activacion FROM ${table} WHERE id = ?`,
