@@ -25,6 +25,24 @@ interface GroupState {
   groupFolder: string | null;
   retryCount: number;
   runningTaskId: string | null;
+  /**
+   * Wall-clock ms when registerProcess() was called for the current
+   * container. Cleared when the container exits. Used by Phase 2c
+   * observability — getActiveContainers() exposes this for the periodic
+   * stats logger and the localhost dashboard endpoint.
+   */
+  startedAt: number | null;
+}
+
+/** Snapshot of one currently-running container, returned by getActiveContainers(). */
+export interface ActiveContainerInfo {
+  groupJid: string;
+  containerName: string | null;
+  groupFolder: string | null;
+  startedAt: number;
+  ageMs: number;
+  idleWaiting: boolean;
+  isTaskContainer: boolean;
 }
 
 export class GroupQueue {
@@ -49,6 +67,7 @@ export class GroupQueue {
         groupFolder: null,
         retryCount: 0,
         runningTaskId: null,
+        startedAt: null,
       };
       this.groups.set(groupJid, state);
     }
@@ -138,6 +157,7 @@ export class GroupQueue {
     const state = this.getGroup(groupJid);
     state.process = proc;
     state.containerName = containerName;
+    state.startedAt = Date.now();
     if (groupFolder) state.groupFolder = groupFolder;
   }
 
@@ -232,6 +252,7 @@ export class GroupQueue {
       state.process = null;
       state.containerName = null;
       state.groupFolder = null;
+      state.startedAt = null;
       this.activeCount--;
       this.drainGroup(groupJid);
     }
@@ -261,6 +282,7 @@ export class GroupQueue {
       state.process = null;
       state.containerName = null;
       state.groupFolder = null;
+      state.startedAt = null;
       this.activeCount--;
       this.drainGroup(groupJid);
     }
@@ -348,6 +370,40 @@ export class GroupQueue {
       }
       // If neither pending, skip this group
     }
+  }
+
+  /**
+   * Snapshot of all currently-running containers. Used by the Phase 2c
+   * observability path: container-stats-logger logs this every 5 min,
+   * and the localhost dashboard endpoint exposes it for ad-hoc inspection.
+   *
+   * Filter is `state.process !== null` (not `state.active`) — covers both
+   * runForGroup containers and runTask containers, which is what an
+   * operator wants to see ("what's actually running right now").
+   *
+   * Caveat: "active" here means "the engine still holds the child
+   * handle," not "the container is healthy." After `shutdown()`
+   * intentionally detaches containers (without nulling state.process),
+   * those entries will continue to appear here — accurate, since the
+   * containers really are still running on the host, just no longer
+   * managed by this engine instance.
+   */
+  getActiveContainers(): ActiveContainerInfo[] {
+    const now = Date.now();
+    const result: ActiveContainerInfo[] = [];
+    for (const [groupJid, state] of this.groups) {
+      if (state.process === null || state.startedAt === null) continue;
+      result.push({
+        groupJid,
+        containerName: state.containerName,
+        groupFolder: state.groupFolder,
+        startedAt: state.startedAt,
+        ageMs: now - state.startedAt,
+        idleWaiting: state.idleWaiting,
+        isTaskContainer: state.isTaskContainer,
+      });
+    }
+    return result;
   }
 
   async shutdown(_gracePeriodMs: number): Promise<void> {

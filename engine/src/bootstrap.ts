@@ -43,6 +43,7 @@ import {
 } from './container-runtime.js';
 import { startCredentialProxy } from './credential-proxy.js';
 import { initDatabase } from './db.js';
+import type { ActiveContainerInfo } from './group-queue.js';
 import { logger } from './logger.js';
 
 /**
@@ -60,7 +61,20 @@ export interface BootstrapHandles {
   proxyServer: Server;
 }
 
-export async function bootstrapEngine(): Promise<BootstrapHandles> {
+/**
+ * Optional dependencies threaded into bootstrapEngine. Right now the
+ * only one is `getActiveContainers` for Phase 2c observability — the
+ * GroupQueue is created in index.ts and stays there, so its getter is
+ * passed in here rather than bootstrap.ts importing the queue
+ * instance.
+ */
+export interface BootstrapOptions {
+  getActiveContainers?: () => ActiveContainerInfo[];
+}
+
+export async function bootstrapEngine(
+  opts: BootstrapOptions = {},
+): Promise<BootstrapHandles> {
   ensureContainerSystemRunning();
   initDatabase();
   try {
@@ -71,7 +85,9 @@ export async function bootstrapEngine(): Promise<BootstrapHandles> {
   }
   startScheduler(DATA_DIR); // CRM hook: unified cron scheduler (alerts, followups, warmth, overnight, doc-sync)
   seedBriefings(); // CRM hook: idempotent briefing task seeding
-  startDashboardServer(); // CRM hook: dashboard REST API
+  startDashboardServer(undefined, {
+    getActiveContainers: opts.getActiveContainers,
+  }); // CRM hook: dashboard REST API + Phase 2c container visibility
   logger.info('Database initialized');
 
   const proxyServer = await startCredentialProxy(

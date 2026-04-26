@@ -5,16 +5,17 @@
  * No framework dependencies. Co-hosted with the engine process.
  *
  * Routes:
- *   GET /api/v1/pipeline    — Pipeline overview (role-scoped)
- *   GET /api/v1/cuota       — Quota tracking (role-scoped)
- *   GET /api/v1/descarga    — Discharge tracking (role-scoped)
- *   GET /api/v1/actividades — Recent activities (role-scoped)
- *   GET /api/v1/equipo      — Org tree (role-scoped)
- *   GET /api/v1/alertas     — Recent alerts (role-scoped)
- *   GET /api/v1/vp-glance   — VP glance aggregated view (VP only)
- *   GET /api/v1/budget      — Inference cost windows (hourly/daily/monthly)
- *   GET /api/v1/token       — Generate token (internal CLI use)
- *   GET /health             — Health check (no auth)
+ *   GET /api/v1/pipeline           — Pipeline overview (role-scoped)
+ *   GET /api/v1/cuota              — Quota tracking (role-scoped)
+ *   GET /api/v1/descarga           — Discharge tracking (role-scoped)
+ *   GET /api/v1/actividades        — Recent activities (role-scoped)
+ *   GET /api/v1/equipo             — Org tree (role-scoped)
+ *   GET /api/v1/alertas            — Recent alerts (role-scoped)
+ *   GET /api/v1/vp-glance          — VP glance aggregated view (VP only)
+ *   GET /api/v1/budget             — Inference cost windows (hourly/daily/monthly)
+ *   GET /api/v1/token              — Generate token (localhost-only, CLI use)
+ *   GET /api/v1/containers/active  — Active container snapshot (localhost-only, Phase 2c)
+ *   GET /health                    — Health check (no auth)
  */
 
 import http from "http";
@@ -44,6 +45,29 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STATIC_DIR = path.resolve(__dirname, "../../dashboard");
 
 type ApiHandler = (query: Record<string, string>, ctx: ToolContext) => unknown;
+
+/**
+ * Phase 2c — shape of the engine's active-container snapshot, declared
+ * inline rather than imported from `engine/src/group-queue.js` so the
+ * dashboard module doesn't pull engine internals. The engine guarantees
+ * this shape via its own typed export; if the two ever drift, the
+ * /api/v1/containers/active endpoint will surface garbage rather than
+ * throw — acceptable for an operator-only inspection endpoint.
+ */
+export interface ActiveContainerInfo {
+  groupJid: string;
+  containerName: string | null;
+  groupFolder: string | null;
+  startedAt: number;
+  ageMs: number;
+  idleWaiting: boolean;
+  isTaskContainer: boolean;
+}
+
+export interface DashboardOptions {
+  /** Engine getter for currently-running containers. Phase 2c. */
+  getActiveContainers?: () => ActiveContainerInfo[];
+}
 
 // ---------------------------------------------------------------------------
 // Route table
@@ -90,6 +114,7 @@ function sendJson(
 function handleRequest(
   req: http.IncomingMessage,
   res: http.ServerResponse,
+  opts: DashboardOptions,
 ): void {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -146,6 +171,32 @@ function handleRequest(
       return;
     }
     sendJson(res, 200, { token });
+    return;
+  }
+
+  // Active-container snapshot — Phase 2c operator inspection.
+  // Localhost-only (matches /api/v1/token pattern) so a public Caddy
+  // proxy can't expose the container list. Container names + group
+  // folders are operationally sensitive even though not strictly secret.
+  if (pathname === "/api/v1/containers/active") {
+    const remoteAddr = req.socket.remoteAddress || "";
+    const isLocal =
+      remoteAddr === "127.0.0.1" ||
+      remoteAddr === "::1" ||
+      remoteAddr === "::ffff:127.0.0.1";
+    if (!isLocal) {
+      sendJson(res, 403, {
+        error: "Containers endpoint is only accessible from localhost",
+      });
+      return;
+    }
+    if (!opts.getActiveContainers) {
+      sendJson(res, 503, {
+        error: "Containers endpoint not configured",
+      });
+      return;
+    }
+    sendJson(res, 200, { containers: opts.getActiveContainers() });
     return;
   }
 
@@ -261,9 +312,12 @@ function serveStatic(filePath: string, res: http.ServerResponse): void {
 
 let server: http.Server | null = null;
 
-export function startDashboardServer(port?: number): http.Server {
+export function startDashboardServer(
+  port?: number,
+  opts: DashboardOptions = {},
+): http.Server {
   const p = port || Number(process.env.DASHBOARD_PORT) || 3000;
-  server = http.createServer(handleRequest);
+  server = http.createServer((req, res) => handleRequest(req, res, opts));
   server.listen(p, () => {
     logger.info({ port: p }, "Dashboard server started");
   });

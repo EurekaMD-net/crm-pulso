@@ -446,4 +446,75 @@ describe('GroupQueue', () => {
     resolveProcess!();
     await vi.advanceTimersByTimeAsync(10);
   });
+
+  // -------------------------------------------------------------------------
+  // Phase 2c — getActiveContainers (operator visibility)
+  // -------------------------------------------------------------------------
+
+  describe('getActiveContainers (Phase 2c)', () => {
+    /** Minimal ChildProcess stub — registerProcess only stores the handle. */
+    function fakeProc() {
+      return { killed: false } as any;
+    }
+
+    it('returns empty when no processes registered', () => {
+      expect(queue.getActiveContainers()).toEqual([]);
+    });
+
+    it('includes containers after registerProcess with non-zero ageMs', () => {
+      const now = Date.now();
+      vi.setSystemTime(now);
+      queue.registerProcess(
+        'group1@g.us',
+        fakeProc(),
+        'agent-group1-abc',
+        'group1-folder',
+      );
+
+      // Advance time so ageMs is observable.
+      vi.setSystemTime(now + 4_000);
+      const active = queue.getActiveContainers();
+      expect(active).toHaveLength(1);
+      expect(active[0]).toMatchObject({
+        groupJid: 'group1@g.us',
+        containerName: 'agent-group1-abc',
+        groupFolder: 'group1-folder',
+        startedAt: now,
+        idleWaiting: false,
+        isTaskContainer: false,
+      });
+      expect(active[0].ageMs).toBeGreaterThanOrEqual(4_000);
+    });
+
+    it('reflects multiple groups simultaneously', () => {
+      queue.registerProcess('g1@g.us', fakeProc(), 'c1', 'f1');
+      queue.registerProcess('g2@g.us', fakeProc(), 'c2', 'f2');
+      const jids = queue
+        .getActiveContainers()
+        .map((e) => e.groupJid)
+        .sort();
+      expect(jids).toEqual(['g1@g.us', 'g2@g.us']);
+    });
+
+    it('excludes a group after the task finally-block clears the slot', async () => {
+      // Run a task through enqueueTask. Inside the task body, register a
+      // process to simulate the runtime sequence (registerProcess fires
+      // mid-task in production via container-runner). The runTask finally
+      // block clears process + startedAt; getActiveContainers should then
+      // exclude the entry.
+      const sawDuring: string[] = [];
+      const taskFn = vi.fn(async () => {
+        queue.registerProcess('grpA@g.us', fakeProc(), 'ca', 'fa');
+        sawDuring.push(...queue.getActiveContainers().map((e) => e.groupJid));
+      });
+      queue.enqueueTask('grpA@g.us', 'task-A', taskFn);
+
+      // Let microtasks + the runTask finally-block flush.
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(sawDuring).toContain('grpA@g.us');
+      expect(queue.getActiveContainers()).toEqual([]);
+    });
+  });
 });

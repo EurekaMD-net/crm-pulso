@@ -13,6 +13,7 @@ import {
 import { parseImageReferences } from './image.js';
 import { WhatsAppChannel } from './channels/whatsapp.js';
 import { bootstrapEngine } from './bootstrap.js';
+import { startContainerStatsLogger } from './container-stats-logger.js';
 import {
   ContainerOutput,
   runContainerAgent,
@@ -500,15 +501,22 @@ function recoverPendingMessages(): void {
 }
 
 async function main(): Promise<void> {
-  const { proxyServer } = await bootstrapEngine();
+  const { proxyServer } = await bootstrapEngine({
+    getActiveContainers: () => queue.getActiveContainers(),
+  });
 
   loadState();
+
+  // Phase 2c — periodic operator visibility into running containers.
+  // Logs every 5 min while at least one container is active.
+  const stopStatsLogger = startContainerStatsLogger(queue);
 
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
     stopScheduler();
     stopIpcWatcher();
+    stopStatsLogger();
     proxyServer.close();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();

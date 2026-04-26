@@ -105,12 +105,12 @@ affected. Tests stay at 1,166 by construction.
 Concrete wins, each shippable independently. Run full test suite
 after each.
 
-| Item                                                                                                                                                                                                            | Status                                                                                     | Effort | Value                                                               |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------ | ------------------------------------------------------------------- |
-| `CONTAINER_MEMORY` / `CONTAINER_CPUS` / `CONTAINER_PIDS_LIMIT` env vars in `engine/config.ts`, threaded through `buildContainerArgs`. Closes audit `--pids-limit` gap.                                          | **Shipped 2026-04-26** (Phase 2a)                                                          | ~1 h   | Per-deploy tuning + closes audit security gap                       |
-| Trim `engine/ipc.ts` to engine-only IPC. CRM handlers already live in `crm/src/ipc-handlers.ts`.                                                                                                                | **N/A** — verified already partitioned (only the default-case CRM delegation at line 546). | —      | Was a false-positive guess from Phase 1 inventory                   |
-| Extract bootstrap sequence from `engine/src/index.ts:main()` into `engine/src/bootstrap.ts`. Original plan called for a "thin index.ts" via dramatic split; revised to minimal extraction after closer reading. | **Shipped 2026-04-26** (Phase 2b)                                                          | ~1 h   | Clear semantic boundary (subsystem startup vs orchestration)        |
-| Container heartbeat + stuck-container reaper, ported from upstream's `host-sweep.ts` pattern but adapted to fit our `group-queue.ts` model.                                                                     | Queued (Phase 2c)                                                                          | ~3–4 h | Catches "container alive but silent" — doom-loop only catches loops |
+| Item                                                                                                                                                                                                                                                                                               | Status                                                                                     | Effort | Value                                                                |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------ | -------------------------------------------------------------------- |
+| `CONTAINER_MEMORY` / `CONTAINER_CPUS` / `CONTAINER_PIDS_LIMIT` env vars in `engine/config.ts`, threaded through `buildContainerArgs`. Closes audit `--pids-limit` gap.                                                                                                                             | **Shipped 2026-04-26** (Phase 2a)                                                          | ~1 h   | Per-deploy tuning + closes audit security gap                        |
+| Trim `engine/ipc.ts` to engine-only IPC. CRM handlers already live in `crm/src/ipc-handlers.ts`.                                                                                                                                                                                                   | **N/A** — verified already partitioned (only the default-case CRM delegation at line 546). | —      | Was a false-positive guess from Phase 1 inventory                    |
+| Extract bootstrap sequence from `engine/src/index.ts:main()` into `engine/src/bootstrap.ts`. Original plan called for a "thin index.ts" via dramatic split; revised to minimal extraction after closer reading.                                                                                    | **Shipped 2026-04-26** (Phase 2b)                                                          | ~1 h   | Clear semantic boundary (subsystem startup vs orchestration)         |
+| Operator visibility into active containers — periodic log (5 min) + localhost-only dashboard endpoint. Original plan called for a full heartbeat reaper; revised to Option B after closer reading showed our existing `IDLE_TIMEOUT + reset-on-stream-output` already acts as effective heartbeat. | **Shipped 2026-04-26** (Phase 2c — Option B)                                               | ~1 h   | Catches "alive but silent" via operator inspection (rare wedge case) |
 
 ### Phase 2a — what shipped
 
@@ -164,8 +164,59 @@ after each.
   was just the boot sequence — clear semantic boundary, no shared
   mutable state, 25-line reduction in index.ts.
 
-**Risk for remaining item (2c):** medium. The heartbeat reaper has
-tests upstream we'd port alongside the implementation.
+### Phase 2c — what shipped (Option B, observability-only)
+
+The original Phase 2c plan called for a full container heartbeat
+reaper ported from upstream's `host-sweep.ts`. On closer reading
+(documented in the session log) this turned out to be the wrong
+shape:
+
+- Our existing `IDLE_TIMEOUT + reset-on-stream-output` at
+  `engine/src/container-runner.ts:537-562` already acts as effective
+  heartbeat: each chunk of streaming output resets a 30-min hard-kill
+  timer.
+- The actual gap is _operator visibility_ for the rare case where a
+  container wedges before triggering the timer (e.g. silent lock-up
+  mid-tool-call).
+- Full reaper port would add agent-runner-internal heartbeat writes
+  - a host-side sweep loop + group-queue integration — multi-file,
+    container rebuild, real risk surface.
+- Marginal value over the existing safety net: ~5 min vs ~30 min
+  recovery on the rare wedge.
+
+So we shipped Option B (observability-only):
+
+- **`engine/src/group-queue.ts`** — added `startedAt: number | null`
+  to `GroupState`. Set in `registerProcess()`, cleared in both
+  `runForGroup` and `runTask` finally blocks. New
+  `getActiveContainers(): ActiveContainerInfo[]` filters
+  `state.process !== null` and returns `{groupJid, containerName,
+groupFolder, startedAt, ageMs, idleWaiting, isTaskContainer}`.
+- **`engine/src/container-stats-logger.ts`** (NEW, ~50 LOC) — periodic
+  `logger.info({...}, 'container active')` every 5 min while at least
+  one container runs. Empty list logs nothing. Wrapped in try/catch
+  so a transient throw can't tear down the timer thread.
+- **`engine/src/bootstrap.ts`** — `bootstrapEngine()` now accepts
+  `BootstrapOptions = { getActiveContainers? }` and threads it to
+  `startDashboardServer(undefined, { getActiveContainers })`.
+- **`engine/src/index.ts`** — `main()` passes
+  `() => queue.getActiveContainers()` as the getter; calls
+  `startContainerStatsLogger(queue)` and tears down in shutdown.
+- **`crm/src/dashboard/server.ts`** — new
+  `GET /api/v1/containers/active` route, **localhost-only** (mirrors
+  `/api/v1/token` pattern). Returns `{containers: [...]}` if a getter
+  is wired, `503` otherwise. Verified post-deploy that public-IP
+  access returns `403` while loopback returns the snapshot.
+
+Tests: 1175 → 1183 (+8). 4 in `group-queue.test.ts` (empty/single/
+multi/cleared-after-task), 3 in `container-stats-logger.test.ts`
+(intervals/empty-quiet/teardown), 1 in `bootstrap.test.ts` (opts
+threading).
+
+If wedged-container frequency turns out to be a real production pain
+point in the next few months (operator can grep journalctl for
+`"container active"` lines with high `ageSec` + `idleWaiting=false`),
+escalate to Option C (full heartbeat reaper) with concrete data.
 
 ---
 

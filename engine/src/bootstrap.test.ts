@@ -15,9 +15,11 @@ const initDatabase = vi.fn();
 const bootstrapCrm = vi.fn();
 const startScheduler = vi.fn();
 const seedBriefings = vi.fn();
-const startDashboardServer = vi.fn();
+const startDashboardServer = vi.fn(
+  (_port?: number, _opts?: unknown) => undefined,
+);
 const startCredentialProxy = vi.fn(
-  async () =>
+  async (_port: number, _host: string) =>
     ({
       fakeServer: true,
     }) as any,
@@ -37,7 +39,8 @@ vi.mock('../../crm/src/scheduler.js', () => ({
   startScheduler: (dir: string) => startScheduler(dir),
 }));
 vi.mock('../../crm/src/dashboard/server.js', () => ({
-  startDashboardServer: () => startDashboardServer(),
+  startDashboardServer: (port: number | undefined, opts?: unknown) =>
+    startDashboardServer(port, opts),
 }));
 vi.mock('./credential-proxy.js', () => ({
   startCredentialProxy: (port: number, host: string) =>
@@ -149,5 +152,35 @@ describe('bootstrapEngine (Phase 2b)', () => {
     expect(startCredentialProxy).not.toHaveBeenCalled();
 
     exitSpy.mockRestore();
+  });
+
+  it('Phase 2c: threads getActiveContainers opt to startDashboardServer', async () => {
+    const stats = vi.fn(() => [
+      {
+        groupJid: 'g1@g.us',
+        containerName: 'c1',
+        groupFolder: 'f1',
+        startedAt: 0,
+        ageMs: 100,
+        idleWaiting: false,
+        isTaskContainer: false,
+      },
+    ]);
+
+    await bootstrapEngine({ getActiveContainers: stats });
+
+    // startDashboardServer is invoked once. Inspect its second arg
+    // (opts) and confirm the getter was forwarded.
+    expect(startDashboardServer).toHaveBeenCalledTimes(1);
+    const [, opts] = startDashboardServer.mock.calls[0];
+    expect(opts).toBeDefined();
+    expect((opts as any).getActiveContainers).toBe(stats);
+
+    // The dashboard route, when later called, should be able to invoke
+    // the getter and receive the engine's snapshot. Simulate that.
+    const result = (opts as any).getActiveContainers();
+    expect(stats).toHaveBeenCalled();
+    expect(result).toHaveLength(1);
+    expect(result[0].groupJid).toBe('g1@g.us');
   });
 });

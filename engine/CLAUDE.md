@@ -14,24 +14,25 @@ filesystem and memory.
 
 ## Key Files
 
-| File                       | Purpose                                                                                                                              |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/index.ts`             | Orchestrator: state, message loop wiring, agent invocation. Boot sequence moved to `src/bootstrap.ts`.                               |
-| `src/bootstrap.ts`         | Engine boot sequence: container runtime + DB + CRM bootstrap + scheduler + dashboard + credential proxy. Returns long-lived handles. |
-| `src/channels/whatsapp.ts` | WhatsApp connection, auth, send/receive                                                                                              |
-| `src/ipc.ts`               | IPC watcher; CRM IPC delegation in default case                                                                                      |
-| `src/router.ts`            | Message formatting and outbound routing                                                                                              |
-| `src/config.ts`            | Trigger pattern, paths, intervals, MX timezone, credential proxy                                                                     |
-| `src/container-runner.ts`  | Spawns agent containers with mounts + resource limits (`CONTAINER_MEMORY`/`CPUS`/`PIDS_LIMIT` env vars, defaults 512m/1/256)         |
-| `src/container-runtime.ts` | Container runtime detection + host gateway args                                                                                      |
-| `src/task-scheduler.ts`    | Runs scheduled tasks (warmth, alerts, overnight, etc.)                                                                               |
-| `src/db.ts`                | Engine SQLite operations + `getDatabase()` export for CRM                                                                            |
-| `src/credential-proxy.ts`  | Keeps Anthropic API keys out of agent containers                                                                                     |
-| `src/mount-security.ts`    | Validates additional mounts against `~/.config/nanoclaw/mount-allowlist.json`                                                        |
-| `src/group-queue.ts`       | Per-group concurrency control                                                                                                        |
-| `src/whatsapp-auth.ts`     | WhatsApp pairing + session storage                                                                                                   |
-| `groups/{name}/CLAUDE.md`  | Per-group memory (isolated)                                                                                                          |
-| `container/skills/...`     | Container-side skills bundled into the agent image                                                                                   |
+| File                            | Purpose                                                                                                                                                         |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/index.ts`                  | Orchestrator: state, message loop wiring, agent invocation. Boot sequence moved to `src/bootstrap.ts`.                                                          |
+| `src/bootstrap.ts`              | Engine boot sequence: container runtime + DB + CRM bootstrap + scheduler + dashboard + credential proxy. Returns long-lived handles.                            |
+| `src/container-stats-logger.ts` | Phase 2c — periodic log of active containers (every 5 min) for operator visibility. `GET /api/v1/containers/active` (localhost-only) exposes the same snapshot. |
+| `src/channels/whatsapp.ts`      | WhatsApp connection, auth, send/receive                                                                                                                         |
+| `src/ipc.ts`                    | IPC watcher; CRM IPC delegation in default case                                                                                                                 |
+| `src/router.ts`                 | Message formatting and outbound routing                                                                                                                         |
+| `src/config.ts`                 | Trigger pattern, paths, intervals, MX timezone, credential proxy                                                                                                |
+| `src/container-runner.ts`       | Spawns agent containers with mounts + resource limits (`CONTAINER_MEMORY`/`CPUS`/`PIDS_LIMIT` env vars, defaults 512m/1/256)                                    |
+| `src/container-runtime.ts`      | Container runtime detection + host gateway args                                                                                                                 |
+| `src/task-scheduler.ts`         | Runs scheduled tasks (warmth, alerts, overnight, etc.)                                                                                                          |
+| `src/db.ts`                     | Engine SQLite operations + `getDatabase()` export for CRM                                                                                                       |
+| `src/credential-proxy.ts`       | Keeps Anthropic API keys out of agent containers                                                                                                                |
+| `src/mount-security.ts`         | Validates additional mounts against `~/.config/nanoclaw/mount-allowlist.json`                                                                                   |
+| `src/group-queue.ts`            | Per-group concurrency control                                                                                                                                   |
+| `src/whatsapp-auth.ts`          | WhatsApp pairing + session storage                                                                                                                              |
+| `groups/{name}/CLAUDE.md`       | Per-group memory (isolated)                                                                                                                                     |
+| `container/skills/...`          | Container-side skills bundled into the agent image                                                                                                              |
 
 ## CRM Integration Surface
 
