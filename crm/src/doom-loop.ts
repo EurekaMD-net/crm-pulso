@@ -14,8 +14,11 @@
 // ---------------------------------------------------------------------------
 
 const CHANTING_CHUNK = 200;
-const CHANTING_THRESHOLD = 3;
-const FINGERPRINT_THRESHOLD = 3;
+// Threshold of 2: a single repeat is the loop. The previous value of 3
+// burned an extra round before flagging — long enough for one more bad
+// LLM call, plus tool execution, before we noticed.
+const CHANTING_THRESHOLD = 2;
+const FINGERPRINT_THRESHOLD = 2;
 const JACCARD_THRESHOLD = 0.85;
 const JACCARD_WINDOW = 3;
 const CYCLE_HISTORY = 10;

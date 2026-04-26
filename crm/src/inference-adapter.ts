@@ -702,16 +702,9 @@ export async function inferWithTools(
       });
     }
 
-    // --- Graduated escalation injection ---
-    if (escalationLevel === 1) {
-      conversation.push({
-        role: "system" as const,
-        content:
-          "AVISO: Se detectó un patrón repetitivo en tus llamadas de herramientas. " +
-          "Cambia de estrategia o responde con la información que ya tienes.",
-      });
-    } else if (escalationLevel >= 2) {
-      // Force wrap-up: remove tools to prevent further calls
+    // --- Doom-loop escalation: force wrap-up on first signal ---
+    if (escalationLevel >= 2) {
+      // Remove tools to prevent further calls — final inference is text-only.
       logger.warn(
         { round, escalationLevel },
         "doom loop escalation: forcing wrap-up (no tools)",
@@ -878,12 +871,11 @@ export async function inferWithTools(
         },
         "doom loop detected",
       );
-      // Graduated escalation
-      if (doomSignal.severity === "high") {
-        escalationLevel = Math.max(escalationLevel + 1, 2);
-      } else {
-        escalationLevel++;
-      }
+      // First signal of any severity → wrap-up. The previous gradual ramp
+      // (warn at 1, wrap-up at 2) burned an extra round on every loop —
+      // by the time we wrapped, the LLM had already spent another turn
+      // chasing the same dead end.
+      escalationLevel = Math.max(escalationLevel, 2);
     }
 
     // Token budget check (per-round prompt size, not cumulative spend)
