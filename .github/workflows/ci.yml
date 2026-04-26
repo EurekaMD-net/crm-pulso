@@ -20,9 +20,21 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            engine/package-lock.json
+            crm/package-lock.json
 
-      - name: Install dependencies
+      - name: Install root deps
         run: npm ci
+
+      - name: Install engine deps
+        run: npm ci
+        working-directory: engine
+
+      - name: Install crm deps
+        run: npm ci
+        working-directory: crm
 
       - name: Typecheck
         run: npm run typecheck
