@@ -180,3 +180,175 @@ Without the indirection it silently expands to `0` and you get
   (`sqlite3 .backup` → gzip → bytea) and Component B (snapshot →
   pgloader) take an atomic offline copy first. `.backup` uses
   SQLite's online backup API — no reader lock against the live agent.
+
+---
+
+# Engine Evolution Arc (same day, evening session)
+
+After the §2 security batch landed, the day continued into a
+strategic decision: stop pulling from upstream NanoClaw (they've
+moved to a v2 architecture incompatible with our CRM glue) and
+treat `engine/` as a permanent fork. From that one decision came
+five shippable phases: `799b6b9` (P1 cleanup), `24dcec6` (P2a
+resource limits), `3ee0c7e` (P2b bootstrap split), `38dbf53` (P2c
+observability), `3265b2e` (P3 arc closure).
+
+Seven durable learnings worth naming.
+
+## 8. Plans shrink under closer reading
+
+The Phase 2 plan looked substantial on paper. Two of the three
+sub-phases shrank dramatically once I actually read the code:
+
+- **Phase 2b (index.ts split)** — original plan called for a "thin
+  index.ts via dramatic split." Closer reading showed index.ts is
+  well-organized (state at top, helpers grouped, main(), entry
+  guard); a bigger split would require passing module state across
+  files, which is _worse_ than the current shape. The valuable
+  extraction was just the boot sequence — 25-line reduction +
+  ~85-line new file.
+
+- **Phase 2c (heartbeat reaper)** — original plan called for a full
+  port of upstream's `host-sweep.ts`. Closer reading of
+  `engine/src/container-runner.ts:537-562` showed our existing
+  `IDLE_TIMEOUT + reset-on-stream-output` already acts as effective
+  heartbeat. The actual gap was just _operator visibility_ for the
+  rare wedge case. Picked Option B (5-min log + localhost endpoint,
+  ~50 LOC) over Option C (full reaper, ~4h multi-file).
+
+**The pattern:** don't trust the high-level plan. Read the actual
+code _before_ committing to scope. The "look at the file, it's
+600 LOC, must be a mess" instinct is wrong about half the time.
+
+## 9. Honest pushback is engineering work
+
+Three times this evening I pushed back on planned scope before
+shipping (Phase 2b → minimal extraction; Phase 2c → observability
+only; Phase 3 → close arc deferred). Each time the user accepted
+with brief instruction ("Go for B," "Close the arc"). The lesson:
+when a plan implies more work than the cost-benefit warrants,
+_saying so_ is part of the job. Not preachy, just direct: "I read
+the code and the gap is smaller than the plan implied; here are
+three options."
+
+The user explicitly invited this with phrases like "plan
+thoughtfully" and "double check if necessary." That's a license,
+not a hint.
+
+## 10. `process.env.X = ""` defeats `??`
+
+Audit-caught Phase 2a regression risk:
+`process.env.CONTAINER_MEMORY ?? '512m'` only catches `undefined`.
+If an operator drafts `CONTAINER_MEMORY=` in the systemd
+Environment line and forgets the value, `??` keeps the empty
+string, the runtime pushes `docker run --memory ''`, and docker
+rejects — container fails to start (worse than no limit).
+
+Fix: a tiny `trimEnv()` helper that treats empty/whitespace as
+"use default." Pattern worth using anywhere env vars feed config
+defaults:
+
+```ts
+const trimEnv = (v: string | undefined, fallback: string): string => {
+  const t = (v ?? "").trim();
+  return t === "" ? fallback : t;
+};
+```
+
+The `??` operator is _almost_ what you want for env vars; never
+quite is.
+
+## 11. `--cpus 0` is rejected; `--memory 0` and `--pids-limit 0` mean unlimited
+
+Docker's escape-hatch convention is uneven. `--memory 0` and
+`--pids-limit 0` mean "no limit." `--cpus 0` is _rejected_ with
+`range of cpus is from 0.01 to <ncpu>`.
+
+Phase 2a sidestepped this by using the same _skip-the-flag_ pattern
+for all three: `if (X !== '0') args.push('--<flag>', X);`. Setting
+any to `'0'` omits the flag entirely (which Docker treats as
+"unlimited" for memory + pids; for cpus, omission also = unlimited).
+Uniform across the three.
+
+The takeaway: when a tool's escape-hatch convention is partially
+broken, abstract _away_ from the tool's convention rather than
+papering over the gap.
+
+## 12. Localhost socket check, not header check, is the right operator-endpoint defense
+
+Phase 2c's `/api/v1/containers/active` is operator-only. The
+defense is `req.socket.remoteAddress === '127.0.0.1' || '::1' ||
+'::ffff:127.0.0.1'`. **Not** `X-Forwarded-For`, which an attacker
+can spoof.
+
+Threat model verification I should always run on a "localhost-only"
+claim:
+
+1. Does any reverse proxy front this listener? (Caddy, nginx,
+   HAProxy.) If yes, every request will socket-arrive from the
+   proxy's loopback → "localhost-only" silently becomes "everyone."
+2. What does `ufw status` say about the port? If open, public IPs
+   reach the listener directly — verify by `curl`ing from
+   `hostname -I` (the public iface).
+
+In our case Caddy only proxies db/studio/grafana subdomains, none
+point at port 3000, UFW allows 3000 publicly. The socket check
+correctly rejects external clients. Verified post-deploy:
+`curl http://<public-ip>:3000/api/v1/containers/active` → 403.
+
+If we ever add Caddy in front of port 3000, both `/api/v1/token`
+and `/api/v1/containers/active` will silently flip to public.
+Worth a comment on those routes; deferred for now.
+
+## 13. `vitest`'s `resetModules` is `vi.resetModules()`, not a named export
+
+Trivially small but cost a test run. `import { resetModules } from
+'vitest'` doesn't exist. The correct API is on the `vi` global:
+`vi.resetModules()`. Used inside test bodies that need to re-import
+a module after mutating `process.env` so module-level constants
+reflect the new state.
+
+## 14. Existing safety nets often already cover the "obvious" gap
+
+Phase 2c was queued as "container heartbeat + stuck-container
+reaper, ported from upstream's host-sweep.ts" — a ~4h multi-file
+port. Reading the actual container-runner code revealed:
+
+- A 30-min hard-kill timer (`IDLE_TIMEOUT + 30s`) that gets reset
+  on every streaming output chunk
+- A "had streaming output" branch that distinguishes legitimate
+  idle from never-responded
+- The `--rm` flag that auto-cleans on exit
+- group-queue's `idleWaiting` state that knows when a container
+  is _supposed_ to be quiet
+
+The composition of these is _already_ effective heartbeat behavior
+for everything except the genuinely-wedged-mid-execution case
+(rare, hard to distinguish from legitimate idle without
+container-internal heartbeat).
+
+**The pattern:** before adding a defensive layer because "we
+should detect X," read the existing code and ask whether X is
+_already_ detected by a composition of existing layers under a
+different name. Often it is.
+
+---
+
+## Cross-cutting meta-pattern from the day
+
+Two extended sessions, ~2,500 lines of code shipped, ~14k lines
+removed (the engine/setup et al cleanup), 17 new tests across
+Phase 2, six audit-on-audit fix loops. The thread that runs
+through all of them: **scope discipline beats velocity**.
+
+Each ship-it batch:
+
+1. Plan the scope explicitly before invoking
+2. Read the actual code (not the high-level plan) before locking
+3. Push back if the plan and the code disagree
+4. Audit-on-audit pre-commit, fix any non-trivial findings
+5. Ship the smaller-than-planned version with explicit
+   documentation of _why_ it's smaller
+
+Repeated mechanically, this beats "just ship the plan." Speed
+comes from not having to revert.
