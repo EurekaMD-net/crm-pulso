@@ -211,9 +211,9 @@ npm run build:container  # Build CRM container (extends engine image)
 
 ## Engine
 
-This project is powered by [NanoClaw](https://github.com/qwibitai/nanoclaw), an open-source platform for building AI agent systems on WhatsApp. NanoClaw handles the messaging infrastructure, container isolation, and agent orchestration. The CRM layer adds sales-specific schema, tools, personas, and hierarchy management on top.
+The agent runtime at `engine/` was originally subtree'd from [NanoClaw](https://github.com/qwibitai/nanoclaw), an open-source platform for building AI agent systems on WhatsApp. NanoClaw provides the core messaging infrastructure, container isolation, and agent orchestration; the CRM layer adds sales-specific schema, tools, personas, and hierarchy management on top.
 
-The engine lives at `engine/` as a git subtree. See [docs/UPSTREAM-SYNC.md](docs/UPSTREAM-SYNC.md) for how to pull updates.
+As of 2026-04-26 the engine is a **permanent fork** — upstream has diverged into a v2 architecture incompatible with the CRM glue, and we no longer pull updates. See [docs/ENGINE-EVOLUTION-2026-04-26.md](docs/ENGINE-EVOLUTION-2026-04-26.md) for the rationale + roadmap.
 
 ## Documentation
 
@@ -222,6 +222,6 @@ The engine lives at `engine/` as a git subtree. See [docs/UPSTREAM-SYNC.md](docs
 - [Project Status](docs/PROJECT-STATUS.md) — Phase tracker (Phases 1-11 complete, 12-14 planned), session breakdown, metrics
 - [Competitive Assessment](docs/COMPETITIVE-ASSESSMENT.md) — Honest goalpost tracker vs Salesforce Agentforce
 - [Workspace Abstraction Plan](docs/WORKSPACE-ABSTRACTION-PLAN.md) — Google Workspace refactor + future Microsoft 365 support
-- [Upstream Sync](docs/UPSTREAM-SYNC.md) — Pulling NanoClaw updates
+- [Engine Evolution](docs/ENGINE-EVOLUTION-2026-04-26.md) — Fork ownership + 3-phase plan for the engine
 
 Historical design documents (superseded by implementation) are in [docs/archive/](docs/archive/).

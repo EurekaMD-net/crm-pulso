@@ -1,60 +1,80 @@
-# NanoClaw
+# Engine — CRM Agent Runtime
 
-Personal Claude assistant. See [README.md](README.md) for philosophy and setup. See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for architecture decisions.
+The agent runtime that the CRM is built on. Originally subtree'd from
+[qwibitai/nanoclaw](https://github.com/qwibitai/nanoclaw); as of
+2026-04-26 this is a permanent fork — no more `git subtree pull` from
+upstream. Treat every file under `engine/` as ours to refactor.
 
 ## Quick Context
 
-Single Node.js process that connects to WhatsApp, routes messages to Claude Agent SDK running in containers (Linux VMs). Each group has isolated filesystem and memory.
+Single Node.js process (managed by systemd as `agentic-crm`) that
+connects to WhatsApp, routes messages to a Claude Agent SDK running
+in per-group Docker containers (Linux VMs). Each group has isolated
+filesystem and memory.
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `src/index.ts` | Orchestrator: state, message loop, agent invocation |
-| `src/channels/whatsapp.ts` | WhatsApp connection, auth, send/receive |
-| `src/ipc.ts` | IPC watcher and task processing |
-| `src/router.ts` | Message formatting and outbound routing |
-| `src/config.ts` | Trigger pattern, paths, intervals |
-| `src/container-runner.ts` | Spawns agent containers with mounts |
-| `src/task-scheduler.ts` | Runs scheduled tasks |
-| `src/db.ts` | SQLite operations |
-| `groups/{name}/CLAUDE.md` | Per-group memory (isolated) |
-| `container/skills/agent-browser/SKILL.md` | Lightpanda browser (10 MCP tools: goto, markdown, click, fill, etc.) |
+| File                       | Purpose                                                                       |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| `src/index.ts`             | Orchestrator: state, message loop, agent invocation, CRM hooks                |
+| `src/channels/whatsapp.ts` | WhatsApp connection, auth, send/receive                                       |
+| `src/ipc.ts`               | IPC watcher; CRM IPC delegation in default case                               |
+| `src/router.ts`            | Message formatting and outbound routing                                       |
+| `src/config.ts`            | Trigger pattern, paths, intervals, MX timezone, credential proxy              |
+| `src/container-runner.ts`  | Spawns agent containers with mounts + resource limits                         |
+| `src/container-runtime.ts` | Container runtime detection + host gateway args                               |
+| `src/task-scheduler.ts`    | Runs scheduled tasks (warmth, alerts, overnight, etc.)                        |
+| `src/db.ts`                | Engine SQLite operations + `getDatabase()` export for CRM                     |
+| `src/credential-proxy.ts`  | Keeps Anthropic API keys out of agent containers                              |
+| `src/mount-security.ts`    | Validates additional mounts against `~/.config/nanoclaw/mount-allowlist.json` |
+| `src/group-queue.ts`       | Per-group concurrency control                                                 |
+| `src/whatsapp-auth.ts`     | WhatsApp pairing + session storage                                            |
+| `groups/{name}/CLAUDE.md`  | Per-group memory (isolated)                                                   |
+| `container/skills/...`     | Container-side skills bundled into the agent image                            |
 
-## Skills
+## CRM Integration Surface
 
-| Skill | When to Use |
-|-------|-------------|
-| `/setup` | First-time installation, authentication, service configuration |
-| `/customize` | Adding channels, integrations, changing behavior |
-| `/debug` | Container issues, logs, troubleshooting |
-| `/update` | Pull upstream NanoClaw changes, merge with customizations, run migrations |
-| `/qodo-pr-resolver` | Fetch and fix Qodo PR review issues interactively or in batch |
-| `/get-qodo-rules` | Load org- and repo-level coding rules from Qodo before code tasks |
+The CRM hooks into the engine at these points (no longer a "do not
+touch beyond these" constraint — just a current map):
+
+| File                                  | CRM Hook                                                              |
+| ------------------------------------- | --------------------------------------------------------------------- |
+| `src/db.ts`                           | `getDatabase()` shared with CRM                                       |
+| `src/index.ts`                        | `bootstrapCrm()` + schedulers + `startDashboardServer()` + cred proxy |
+| `src/ipc.ts`                          | CRM IPC delegation for unknown task types                             |
+| `src/container-runner.ts`             | CRM document store mount + credential proxy env vars                  |
+| `src/container-runtime.ts`            | `PROXY_BIND_HOST` + `hostGatewayArgs()`                               |
+| `src/config.ts`                       | `CREDENTIAL_PROXY_PORT` + `America/Mexico_City` timezone default      |
+| `container/agent-runner/src/index.ts` | Allowed tools list                                                    |
 
 ## Development
 
 Run commands directly—don't tell the user to run them.
 
 ```bash
-npm run dev          # Run with hot reload
+npm run dev          # Run with hot reload (tsx watch)
 npm run build        # Compile TypeScript
 ./container/build.sh # Rebuild agent container
 ```
 
-Service management:
-```bash
-# macOS (launchd)
-launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist
-launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw  # restart
+Service management (Linux only — we don't run macOS):
 
-# Linux (systemd)
-systemctl --user start nanoclaw
-systemctl --user stop nanoclaw
-systemctl --user restart nanoclaw
+```bash
+crm-ctl restart      # canonical restart wrapper
+systemctl status agentic-crm
+journalctl -u agentic-crm -f
 ```
 
 ## Container Build Cache
 
-The container buildkit caches the build context aggressively. `--no-cache` alone does NOT invalidate COPY steps — the builder's volume retains stale files. To force a truly clean rebuild, prune the builder then re-run `./container/build.sh`.
+The container buildkit caches the build context aggressively.
+`--no-cache` alone does NOT invalidate COPY steps — the builder's
+volume retains stale files. To force a truly clean rebuild, prune
+the builder then re-run `./container/build.sh` (or
+`npm run build:container` from the repo root).
+
+## Evolution Plan
+
+See `docs/ENGINE-EVOLUTION-2026-04-26.md` (root `docs/`) for the
+3-phase plan (Phase 1 = this cleanup; Phase 2 = reliability
+tightening; Phase 3 = CRM-driven evolution).

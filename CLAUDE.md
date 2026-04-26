@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## Quick Context
 
-Agentic CRM for media ad sales. NanoClaw engine at `engine/`, all CRM code at `crm/`. Salespeople chat with AI agents via WhatsApp. Each group has an isolated agent with role-appropriate CRM access.
+Agentic CRM for media ad sales. Agent runtime at `engine/` (originally subtree'd from NanoClaw, now a permanent fork — see "Architecture" below), all CRM code at `crm/`. Salespeople chat with AI agents via WhatsApp. Each group has an isolated agent with role-appropriate CRM access.
 
 ## Key Files
 
@@ -54,9 +54,15 @@ Agentic CRM for media ad sales. NanoClaw engine at `engine/`, all CRM code at `c
 | `crm/groups/director.md`         | Director persona template (66 tools, incl. 7 relationship + 4 email)                                                        |
 | `crm/groups/vp.md`               | VP persona template (64 tools, incl. 7 relationship + 4 email)                                                              |
 
-### Engine Hook Points (DO NOT modify beyond these 7 files)
+### Engine Hook Points (current CRM-touching surface)
 
-| File                                         | Change                                                                      |
+These are the engine files that currently carry CRM-specific logic.
+As of 2026-04-26 the "do not touch beyond this list" constraint is
+**dropped** — `engine/` is our own fork now (see Architecture). Treat
+this table as a map of "where CRM hooks into the engine today," not
+a fence.
+
+| File                                         | CRM Hook                                                                    |
 | -------------------------------------------- | --------------------------------------------------------------------------- |
 | `engine/src/db.ts`                           | `getDatabase()` export                                                      |
 | `engine/src/index.ts`                        | `bootstrapCrm()` + schedulers + `startDashboardServer()` + credential proxy |
@@ -111,18 +117,16 @@ systemctl restart agentic-crm
 
 ## Architecture
 
-`engine/` is a **git subtree** of [NanoClaw](https://github.com/qwibitai/nanoclaw). DO NOT modify engine files beyond the 7 documented hook points above. All CRM logic lives in `crm/`.
+`engine/` was originally a `git subtree` of [NanoClaw](https://github.com/qwibitai/nanoclaw). As of 2026-04-26 it is a **permanent fork** — upstream has diverged into a v2 architecture incompatible with our CRM glue, and we deliberately stopped pulling. All `engine/` code is ours to refactor freely. CRM-specific logic still lives in `crm/`; the engine ↔ CRM hook surface is the table above.
 
-To pull upstream NanoClaw updates:
+The 3-phase evolution plan for `engine/` is at `docs/ENGINE-EVOLUTION-2026-04-26.md`. Phase 1 (vestigial-artifact cleanup) shipped in this commit; Phases 2 and 3 are queued.
 
-```bash
-git subtree pull --prefix=engine https://github.com/qwibitai/nanoclaw.git main --squash
-```
+If a future need arises to look at upstream for inspiration: clone shallow into `/tmp` and diff manually. Do **not** run `git subtree pull` — it would force-overwrite our fork.
 
 ### Message Flow
 
 ```
-WhatsApp → engine (NanoClaw) → Direct tools (71 CRM tools via inference adapter)
+WhatsApp → engine (forked from NanoClaw) → Direct tools (71 CRM tools via inference adapter)
                                     ├── Role-based tool filtering (AE:51, Ger:55, Dir:66, VP:64)
                                     ├── Google Workspace (Gmail, Drive, Calendar)
                                     ├── Hybrid RAG (vector + FTS5 keyword + RRF fusion)
