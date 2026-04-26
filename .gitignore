@@ -5,3 +5,17 @@ data/
 .env
 .DS_Store
 *.log
+
+# Runtime artifacts
+.backups/
+crm.db
+*.tmp
+*.db-journal
+
+# Per-group runtime state (templates in crm/groups/ stay tracked)
+groups/*/CLAUDE.md.tmp
+groups/*/.crm-sessions/
+groups/*/attachments/
+
+# Claude Code per-project state
+.claude/agent-memory/
