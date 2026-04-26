@@ -36,6 +36,7 @@ interface OvernightResult {
   template: number;
   total_generated: number;
   expired: number;
+  errors: string[];
 }
 
 function genId(): string {
@@ -716,5 +717,6 @@ export function runOvernightAnalysis(): OvernightResult {
     template,
     total_generated: total,
     expired,
+    errors,
   };
 }

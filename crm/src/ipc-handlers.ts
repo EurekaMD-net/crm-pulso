@@ -511,7 +511,10 @@ export async function processCrmIpc(
         const { runOvernightAnalysis } = await import("./overnight-engine.js");
         const result = runOvernightAnalysis();
         logger.info(result, "Overnight analysis completed");
-        return true;
+        // Per-analyzer crashes are caught inside the function and recorded in
+        // result.errors. Return false on any partial failure so the engine's
+        // retry logic can decide whether to re-fire instead of waiting +24h.
+        return result.errors.length === 0;
       } catch (err) {
         return handleIpcError(err, sourceGroup, data.type);
       }

@@ -375,8 +375,18 @@ async function parseSSEStream(
                 }
               }
             }
-          } catch {
-            /* skip malformed chunks */
+          } catch (err) {
+            // Skip malformed chunks but surface them so stream corruption is
+            // visible. Sample only the first 200 chars to bound log size.
+            const sample = data.length > 200 ? data.slice(0, 200) + "…" : data;
+            logger.warn(
+              {
+                err: err instanceof Error ? err.message : String(err),
+                sample,
+                bufferTail: buffer.length,
+              },
+              "SSE chunk parse failed",
+            );
           }
         }
       }
@@ -423,22 +433,23 @@ export async function infer(
   // overage. The monthly cap is the real cost-of-business ceiling.
   // Set BUDGET_ENFORCE=0 to disable (e.g. during incident response).
   if (process.env.BUDGET_ENFORCE !== "0") {
+    let status: ReturnType<typeof getThreeWindowStatus> | null = null;
     try {
-      const status = getThreeWindowStatus();
-      if (status.monthly.exceeded) {
-        throw new Error(
-          `Monthly budget exceeded ($${status.monthly.spend.toFixed(2)} / $${status.monthly.limit.toFixed(2)}). Set BUDGET_ENFORCE=0 to override.`,
-        );
-      }
+      status = getThreeWindowStatus();
     } catch (err) {
-      // Re-throw budget-exceeded; swallow DB/schema errors (e.g. test envs
-      // without ledger table) so the guard never breaks inference itself.
-      if (
-        err instanceof Error &&
-        err.message.startsWith("Monthly budget exceeded")
-      ) {
-        throw err;
-      }
+      // DB/schema errors (e.g. ledger table missing in test envs, or PG outage)
+      // must not break inference. Surface them so ops can see the guard is
+      // currently masked.
+      logger.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        "budget guard: ledger lookup failed — guard inactive this call",
+      );
+    }
+    if (status?.monthly.exceeded) {
+      // Always rethrows — never swallowed by the catch above.
+      throw new Error(
+        `Monthly budget exceeded ($${status.monthly.spend.toFixed(2)} / $${status.monthly.limit.toFixed(2)}). Set BUDGET_ENFORCE=0 to override.`,
+      );
     }
   }
 
@@ -719,9 +730,12 @@ export async function inferWithTools(
       return buildResult(content, response.provider);
     }
 
-    // Execute tool calls in parallel, with preflight + eviction + injection scanning
+    // Execute tool calls in parallel, with preflight + eviction + injection scanning.
+    // allSettled (not all): an unhandled throw in a sibling tool — e.g. from
+    // maybeEvict/analyzeInjection/toolMetrics outside the inner try — must not
+    // poison the whole round.
     const sanitizedToolCalls: typeof response.tool_calls = [];
-    const toolResults = await Promise.all(
+    const settled = await Promise.allSettled(
       response.tool_calls.map(async (toolCall) => {
         let result: string;
         const toolName = toolCall.function.name;
@@ -809,6 +823,25 @@ export async function inferWithTools(
         };
       }),
     );
+
+    // Map settled results to tool messages; rejections become a synthetic
+    // error tool_result so the conversation stays well-formed (every tool_call
+    // gets exactly one corresponding tool message).
+    const toolResults = settled.map((s, i) => {
+      if (s.status === "fulfilled") return s.value;
+      const toolCall = response.tool_calls![i];
+      const message =
+        s.reason instanceof Error ? s.reason.message : String(s.reason);
+      logger.error(
+        { tool: toolCall.function.name, error: message },
+        "tool wrapper rejected (post-execution)",
+      );
+      return {
+        role: "tool" as const,
+        content: JSON.stringify({ error: `Tool wrapper failed: ${message}` }),
+        tool_call_id: toolCall.id,
+      };
+    });
 
     // Append assistant message with sanitized tool calls + results
     conversation.push({
