@@ -337,6 +337,12 @@ async function parseSSEStream(
 
           try {
             const chunk = JSON.parse(data);
+
+            // Capture usage first — final SSE chunk has `usage` but empty
+            // `choices`, so it would be skipped by the `if (!delta) continue`
+            // guard below. Must run before the early-return.
+            if (chunk.usage) usage = chunk.usage;
+
             const delta = chunk.choices?.[0]?.delta;
             if (!delta) continue;
 
@@ -369,9 +375,6 @@ async function parseSSEStream(
                 }
               }
             }
-
-            // Capture usage from final chunk
-            if (chunk.usage) usage = chunk.usage;
           } catch {
             /* skip malformed chunks */
           }
