@@ -10,5 +10,6 @@ export default defineConfig({
       "engine/.claude/skills/**",
       "engine/skills-engine/**",
     ],
+    setupFiles: ["./crm/tests/setup.ts"],
   },
 });

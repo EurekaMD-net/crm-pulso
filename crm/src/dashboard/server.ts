@@ -12,6 +12,7 @@
  *   GET /api/v1/equipo      — Org tree (role-scoped)
  *   GET /api/v1/alertas     — Recent alerts (role-scoped)
  *   GET /api/v1/vp-glance   — VP glance aggregated view (VP only)
+ *   GET /api/v1/budget      — Inference cost windows (hourly/daily/monthly)
  *   GET /api/v1/token       — Generate token (internal CLI use)
  *   GET /health             — Health check (no auth)
  */
@@ -35,6 +36,7 @@ import {
   getEquipo,
   getAlertas,
   getVpGlance,
+  getBudget,
 } from "./api.js";
 import type { ToolContext } from "../tools/index.js";
 
@@ -55,6 +57,7 @@ const API_ROUTES: Record<string, ApiHandler> = {
   "/api/v1/equipo": getEquipo,
   "/api/v1/alertas": getAlertas,
   "/api/v1/vp-glance": getVpGlance,
+  "/api/v1/budget": getBudget,
 };
 
 // ---------------------------------------------------------------------------

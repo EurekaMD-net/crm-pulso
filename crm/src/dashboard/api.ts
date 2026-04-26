@@ -14,6 +14,7 @@ import {
   getMxDateStr,
   getMxYear,
 } from "../tools/helpers.js";
+import { getThreeWindowStatus } from "../budget.js";
 
 // Hard pagination cap for any dashboard query. Protects against unbounded
 // reads over a large org — shape of the data shouldn't exceed ~200 rows
@@ -741,5 +742,20 @@ export function getVpGlance(
     },
     active_alerts: activeAlerts,
     inventory,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/v1/budget — inference cost (hourly/daily/monthly windows)
+// ---------------------------------------------------------------------------
+
+export function getBudget(
+  _query: Record<string, string>,
+  _ctx: ToolContext,
+): unknown {
+  const status = getThreeWindowStatus();
+  return {
+    enforced: process.env.BUDGET_ENFORCE !== "0",
+    ...status,
   };
 }

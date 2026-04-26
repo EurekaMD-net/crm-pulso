@@ -26,7 +26,7 @@ import {
 } from "./injection-guard.js";
 import { toolMetrics } from "./tool-metrics.js";
 import { checkPreflight } from "./preflight.js";
-import { recordCost } from "./budget.js";
+import { recordCost, getThreeWindowStatus } from "./budget.js";
 
 const logger = parentLogger.child({ component: "inference" });
 
@@ -417,6 +417,31 @@ export async function infer(
     );
   }
 
+  // Hard budget guard: refuse new inference once the monthly window is
+  // exceeded. Hourly/daily are intentionally NOT enforced — they spike under
+  // legit bursty traffic and a hard fail mid-conversation is worse than the
+  // overage. The monthly cap is the real cost-of-business ceiling.
+  // Set BUDGET_ENFORCE=0 to disable (e.g. during incident response).
+  if (process.env.BUDGET_ENFORCE !== "0") {
+    try {
+      const status = getThreeWindowStatus();
+      if (status.monthly.exceeded) {
+        throw new Error(
+          `Monthly budget exceeded ($${status.monthly.spend.toFixed(2)} / $${status.monthly.limit.toFixed(2)}). Set BUDGET_ENFORCE=0 to override.`,
+        );
+      }
+    } catch (err) {
+      // Re-throw budget-exceeded; swallow DB/schema errors (e.g. test envs
+      // without ledger table) so the guard never breaks inference itself.
+      if (
+        err instanceof Error &&
+        err.message.startsWith("Monthly budget exceeded")
+      ) {
+        throw err;
+      }
+    }
+  }
+
   // Detect if request contains image content (multimodal)
   const hasImages = request.messages.some(
     (m) =>
@@ -465,6 +490,22 @@ export async function infer(
         const result = await callProvider(provider, request, onTextChunk);
         breaker.recordSuccess();
         providerSucceeded = true;
+        // Record cost per successful call so every infer() path is billed —
+        // not just inferWithTools (which used to be the only writer, leaving
+        // sentiment.ts and map-reduce-summarizer.ts invisible to the ledger).
+        try {
+          recordCost({
+            model: provider.model,
+            promptTokens: result.usage.prompt_tokens,
+            completionTokens: result.usage.completion_tokens,
+            provider: provider.name,
+          });
+        } catch (err) {
+          logger.warn(
+            { error: err instanceof Error ? err.message : String(err) },
+            "failed to record cost",
+          );
+        }
         return result;
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
@@ -540,7 +581,7 @@ export async function inferWithTools(
     process.env.INFERENCE_TOKEN_BUDGET ?? "25000",
     10,
   );
-  // Default sized for GLM-5 / Qwen3.5-plus (~128k tokens) with headroom for
+  // Default sized for GLM-5 / Qwen3.6-plus (~128k tokens) with headroom for
   // completion and tool-call JSON. Compression triggers at 0.8 × this (80k).
   // Override with INFERENCE_CONTEXT_LIMIT env var if using a smaller model.
   const contextLimit = parseInt(
@@ -550,36 +591,10 @@ export async function inferWithTools(
   const TOOL_CHAIN_WARNING = 8;
   const MIN_REMAINING_MS = 15_000;
 
-  // Cache providers once — avoid re-reading env vars on every exit path
-  const providers = loadProviders();
-  const primaryModel = providers[0]?.model ?? "unknown";
-
-  // Map provider name → model so cost attribution uses the actual model
-  // served (not always the primary). This matters when the fallback kicked
-  // in: previously every fallback call was billed to the primary in the
-  // cost_ledger, which made monthly reconciliation wrong.
-  const providerModelByName = new Map<string, string>();
-  for (const p of providers) {
-    providerModelByName.set(p.name, p.model);
-  }
-
-  /** Record cost and build return value. Non-fatal — logs on failure. */
-  function buildResult(content: string, lastProvider?: string) {
-    try {
-      const resolvedModel =
-        (lastProvider && providerModelByName.get(lastProvider)) || primaryModel;
-      recordCost({
-        model: resolvedModel,
-        promptTokens: totalPrompt,
-        completionTokens: totalCompletion,
-        provider: lastProvider,
-      });
-    } catch (err) {
-      logger.warn(
-        { error: err instanceof Error ? err.message : String(err) },
-        "failed to record cost",
-      );
-    }
+  // Per-call cost recording happens inside infer() now — every round writes
+  // its own ledger row with the actual provider that served it. buildResult
+  // only assembles the return value with the running totals.
+  function buildResult(content: string, _lastProvider?: string) {
     return {
       content,
       messages: conversation,
