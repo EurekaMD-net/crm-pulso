@@ -8,51 +8,52 @@ Agentic CRM for media ad sales. Agent runtime at `engine/` (originally subtree'd
 
 ## Key Files
 
-| File                             | Purpose                                                                                                                     |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `crm/src/bootstrap.ts`           | CRM init: creates schema, registers hooks                                                                                   |
-| `crm/src/schema.ts`              | 28 CRM tables (15 core + 3 search + 3 relationship + 5 intelligence + 2 template evolution)                                 |
-| `crm/src/hierarchy.ts`           | isManagerOf, isDirectorOf, isVp helpers                                                                                     |
-| `crm/src/ipc-handlers.ts`        | CRM IPC handler (crm_registrar_actividad, warmth_recompute, etc.)                                                           |
-| `crm/src/doc-sync.ts`            | Document sync + hybrid RAG (vector KNN + FTS5 keyword + RRF fusion)                                                         |
-| `crm/src/circuit-breaker.ts`     | Reusable circuit breaker (inference, embedding, Hindsight)                                                                  |
-| `crm/src/session-repair.ts`      | Conversation sanitization: orphaned tools, dedup, synthetic errors, merges                                                  |
-| `crm/src/doom-loop.ts`           | 4-layer loop detection: chanting, fingerprint, ping-pong cycle, Jaccard similarity                                          |
-| `crm/src/context-compressor.ts`  | Deterministic context compression L0 (truncate old results) + L1 (pair drain)                                               |
-| `crm/src/injection-guard.ts`     | CCP3 injection defense: 17 high + 9 medium patterns, homoglyphs, encoding, structural                                       |
-| `crm/src/tool-eviction.ts`       | Oversized tool results → temp file with TOC preview                                                                         |
-| `crm/src/tool-metrics.ts`        | Per-tool rolling metrics (call count, success rate, avg/p95 latency)                                                        |
-| `crm/src/preflight.ts`           | Pre-flight validation before tool execution (email, proposals, activities)                                                  |
-| `crm/src/budget.ts`              | Cost ledger with 3-window tracking (hourly/daily/monthly) + per-model pricing                                               |
-| `crm/src/warmth.ts`              | Executive relationship warmth scoring (recency + frequency + quality)                                                       |
-| `crm/src/warmth-scheduler.ts`    | Nightly warmth recomputation (4 AM MX via IPC)                                                                              |
-| `crm/src/memory/`                | Pluggable memory service (Hindsight sidecar or SQLite fallback)                                                             |
-| `crm/src/tools/index.ts`         | Tool registry: 71 tools, role-based filtering                                                                               |
-| `crm/src/tools/jarvis.ts`        | Jarvis strategic analysis pull tool (Google Doc output)                                                                     |
-| `crm/src/tools/perfil.ts`        | User profile tool (actualizar_perfil + getUserProfile + formatProfileSection)                                               |
-| `crm/src/package-builder.ts`     | Creative package composition (historical mix, peers, inventory, rate cards)                                                 |
-| `crm/src/tools/package-tools.ts` | 3 package tools (construir_paquete, consultar_oportunidades_inventario, comparar_paquetes)                                  |
-| `crm/src/tools/aprobaciones.ts`  | 6 approval workflow tools (solicitar, aprobar, rechazar, impugnar, pendientes)                                              |
-| `crm/src/tools/insight-tools.ts` | 5 insight/draft tools (consultar_insights, actuar_insight, consultar_insights_equipo, revisar_borrador, modificar_borrador) |
-| `crm/src/overnight-engine.ts`    | 6 overnight analyzers + cross-agent pattern detection                                                                       |
-| `crm/src/proposal-drafter.ts`    | Insight → borrador_agente propuesta (value/media derivation)                                                                |
-| `crm/src/cross-intelligence.ts`  | 5 cross-agent pattern detectors (vertical, holding, inventory, winloss, concentration)                                      |
-| `crm/src/feedback-engine.ts`     | Draft-vs-final delta tracking for system learning                                                                           |
-| `crm/src/analysis/`              | Shared analysis modules (peer-comparison.ts, media-mix.ts, map-reduce-summarizer.ts)                                        |
-| `crm/src/tools/relaciones.ts`    | 7 Dir/VP relationship tools (warmth, milestones, interactions)                                                              |
-| `crm/src/tools/memoria.ts`       | 3 memory tools (guardar, buscar, reflexionar)                                                                               |
-| `crm/src/tools/drive.ts`         | Drive tools: list, read, create docs/sheets/slides with content                                                             |
-| `crm/src/workspace/`             | WorkspaceProvider interface + Google implementation (mail, files, calendar)                                                 |
-| `crm/src/google-auth.ts`         | Re-export shim for workspace/google/auth.ts (backward compat)                                                               |
-| `crm/src/dashboard/server.ts`    | Dashboard HTTP server + router (7 API endpoints)                                                                            |
-| `crm/src/tools/helpers.ts`       | `scopeFilter`, `estadoFilter`, MX timezone helpers (`getMxDateStr`, `getMxYear`, `getMxDateTimeStr`)                        |
-| `docs/AUDIT-2026-04-14.md`       | Full 6-dimension audit report (58 fixes landed, 13 false positives excluded)                                                |
-| `docs/LEARNINGS-2026-04-14.md`   | Cross-cutting patterns distilled from the audit (MX timezone SQL, async port, scope check helpers, homoglyph coverage)      |
-| `crm/groups/global.md`           | Global CLAUDE.md template (schema, queries, rules, scope guard, disambiguation)                                             |
-| `crm/groups/ae.md`               | AE persona template (51 tools)                                                                                              |
-| `crm/groups/manager.md`          | Manager persona template (55 tools)                                                                                         |
-| `crm/groups/director.md`         | Director persona template (66 tools, incl. 7 relationship + 4 email)                                                        |
-| `crm/groups/vp.md`               | VP persona template (64 tools, incl. 7 relationship + 4 email)                                                              |
+| File                             | Purpose                                                                                                                                                |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `crm/src/bootstrap.ts`           | CRM init: creates schema, registers hooks                                                                                                              |
+| `crm/src/schema.ts`              | 28 CRM tables (15 core + 3 search + 3 relationship + 5 intelligence + 2 template evolution)                                                            |
+| `crm/src/hierarchy.ts`           | isManagerOf, isDirectorOf, isVp helpers                                                                                                                |
+| `crm/src/ipc-handlers.ts`        | CRM IPC handler (crm_registrar_actividad, warmth_recompute, etc.)                                                                                      |
+| `crm/src/doc-sync.ts`            | Document sync + hybrid RAG (vector KNN + FTS5 keyword + RRF fusion)                                                                                    |
+| `crm/src/circuit-breaker.ts`     | Reusable circuit breaker (inference, embedding, Hindsight)                                                                                             |
+| `crm/src/session-repair.ts`      | Conversation sanitization: orphaned tools, dedup, synthetic errors, merges                                                                             |
+| `crm/src/doom-loop.ts`           | 4-layer loop detection: chanting, fingerprint, ping-pong cycle, Jaccard similarity                                                                     |
+| `crm/src/context-compressor.ts`  | Deterministic context compression L0 (truncate old results) + L1 (pair drain)                                                                          |
+| `crm/src/injection-guard.ts`     | CCP3 injection defense: 17 high + 9 medium patterns, homoglyphs, encoding, structural                                                                  |
+| `crm/src/tool-eviction.ts`       | Oversized tool results → temp file with TOC preview                                                                                                    |
+| `crm/src/tool-metrics.ts`        | Per-tool rolling metrics (call count, success rate, avg/p95 latency)                                                                                   |
+| `crm/src/preflight.ts`           | Pre-flight validation before tool execution (email, proposals, activities)                                                                             |
+| `crm/src/budget.ts`              | Cost ledger with 3-window tracking (hourly/daily/monthly) + per-model pricing                                                                          |
+| `crm/src/warmth.ts`              | Executive relationship warmth scoring (recency + frequency + quality)                                                                                  |
+| `crm/src/warmth-scheduler.ts`    | Nightly warmth recomputation (4 AM MX via IPC)                                                                                                         |
+| `crm/src/memory/`                | Pluggable memory service (Hindsight sidecar or SQLite fallback) + `recall-hook.ts` injects role-appropriate digest into system prompt at session start |
+| `crm/src/tools/index.ts`         | Tool registry: 71 tools, role-based filtering                                                                                                          |
+| `crm/src/tools/jarvis.ts`        | Jarvis strategic analysis pull tool (Google Doc output)                                                                                                |
+| `crm/src/tools/perfil.ts`        | User profile tool (actualizar_perfil + getUserProfile + formatProfileSection)                                                                          |
+| `crm/src/package-builder.ts`     | Creative package composition (historical mix, peers, inventory, rate cards)                                                                            |
+| `crm/src/tools/package-tools.ts` | 3 package tools (construir_paquete, consultar_oportunidades_inventario, comparar_paquetes)                                                             |
+| `crm/src/tools/aprobaciones.ts`  | 6 approval workflow tools (solicitar, aprobar, rechazar, impugnar, pendientes)                                                                         |
+| `crm/src/tools/insight-tools.ts` | 5 insight/draft tools (consultar_insights, actuar_insight, consultar_insights_equipo, revisar_borrador, modificar_borrador)                            |
+| `crm/src/overnight-engine.ts`    | 6 overnight analyzers + cross-agent pattern detection                                                                                                  |
+| `crm/src/proposal-drafter.ts`    | Insight → borrador_agente propuesta (value/media derivation)                                                                                           |
+| `crm/src/cross-intelligence.ts`  | 5 cross-agent pattern detectors (vertical, holding, inventory, winloss, concentration)                                                                 |
+| `crm/src/feedback-engine.ts`     | Draft-vs-final delta tracking for system learning                                                                                                      |
+| `crm/src/analysis/`              | Shared analysis modules (peer-comparison.ts, media-mix.ts, map-reduce-summarizer.ts)                                                                   |
+| `crm/src/tools/relaciones.ts`    | 7 Dir/VP relationship tools (warmth, milestones, interactions)                                                                                         |
+| `crm/src/tools/memoria.ts`       | 3 memory tools (guardar, buscar, reflexionar). AE can read sales+accounts+usuario; team is manager+ only                                               |
+| `crm/src/tools/auto-memory.ts`   | Post-tool hook — auto-retains successful state-changing tool calls (registrar_actividad, cerrar_propuesta, registrar_interaccion_ejecutiva)            |
+| `crm/src/tools/drive.ts`         | Drive tools: list, read, create docs/sheets/slides with content                                                                                        |
+| `crm/src/workspace/`             | WorkspaceProvider interface + Google implementation (mail, files, calendar)                                                                            |
+| `crm/src/google-auth.ts`         | Re-export shim for workspace/google/auth.ts (backward compat)                                                                                          |
+| `crm/src/dashboard/server.ts`    | Dashboard HTTP server + router (7 API endpoints)                                                                                                       |
+| `crm/src/tools/helpers.ts`       | `scopeFilter`, `estadoFilter`, MX timezone helpers (`getMxDateStr`, `getMxYear`, `getMxDateTimeStr`)                                                   |
+| `docs/AUDIT-2026-04-14.md`       | Full 6-dimension audit report (58 fixes landed, 13 false positives excluded)                                                                           |
+| `docs/LEARNINGS-2026-04-14.md`   | Cross-cutting patterns distilled from the audit (MX timezone SQL, async port, scope check helpers, homoglyph coverage)                                 |
+| `crm/groups/global.md`           | Global CLAUDE.md template (schema, queries, rules, scope guard, disambiguation)                                                                        |
+| `crm/groups/ae.md`               | AE persona template (51 tools)                                                                                                                         |
+| `crm/groups/manager.md`          | Manager persona template (55 tools)                                                                                                                    |
+| `crm/groups/director.md`         | Director persona template (66 tools, incl. 7 relationship + 4 email)                                                                                   |
+| `crm/groups/vp.md`               | VP persona template (64 tools, incl. 7 relationship + 4 email)                                                                                         |
 
 ### Engine Hook Points (current CRM-touching surface)
 
