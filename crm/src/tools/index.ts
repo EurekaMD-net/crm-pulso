@@ -2563,7 +2563,14 @@ export async function executeTool(
   const start = Date.now();
   let success = true;
   try {
-    return await handler(args, ctx);
+    const result = await handler(args, ctx);
+    // Auto-memory: fire-and-forget on success only. maybeAutoRetain swallows
+    // its own errors, so no `.catch` here. Lazy import keeps the cost off
+    // the hot path for tools that don't have a rule.
+    void import("./auto-memory.js").then((m) =>
+      m.maybeAutoRetain(name, args, ctx),
+    );
+    return result;
   } catch (err) {
     success = false;
     throw err;

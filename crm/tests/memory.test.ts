@@ -231,7 +231,13 @@ describe("HindsightMemoryBackend", () => {
     );
     expect(retainReq).toBeDefined();
     expect(retainReq!.body).toMatchObject({
-      items: [{ content: "Test observation" }],
+      items: [
+        {
+          content: "Test observation",
+          tags: ["test"],
+          metadata: { persona_id: "ae1" },
+        },
+      ],
     });
 
     // upsertBank body must match Hindsight's modern CreateBankRequest schema:

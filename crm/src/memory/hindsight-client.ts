@@ -20,6 +20,7 @@ const DEFAULT_TIMEOUT_MS = 5000;
 export interface HindsightRetainRequest {
   observation: string;
   tags?: string[];
+  metadata?: Record<string, string>;
   async?: boolean;
 }
 
@@ -111,8 +112,13 @@ export class HindsightClient {
 
   /** Store an observation in a memory bank. */
   async retain(bankId: string, req: HindsightRetainRequest): Promise<void> {
+    const item: Record<string, unknown> = { content: req.observation };
+    if (req.tags && req.tags.length > 0) item.tags = req.tags;
+    if (req.metadata && Object.keys(req.metadata).length > 0) {
+      item.metadata = req.metadata;
+    }
     await this.request("POST", `/v1/default/banks/${bankId}/memories`, {
-      items: [{ content: req.observation }],
+      items: [item],
       async: req.async ?? true,
     });
   }

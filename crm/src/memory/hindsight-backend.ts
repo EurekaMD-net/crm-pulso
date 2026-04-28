@@ -49,6 +49,9 @@ export class HindsightMemoryBackend implements MemoryService {
       await this.client.retain(options.bank, {
         observation: content,
         tags: options.tags,
+        metadata: options.personaId
+          ? { persona_id: options.personaId }
+          : undefined,
         async: options.async ?? true,
       });
       this.breaker.recordSuccess();

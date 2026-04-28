@@ -269,6 +269,37 @@ describe("registrar_actividad", () => {
       .get("p1") as any;
     expect(prop.dias_sin_actividad).toBe(0);
   });
+
+  it("triggers auto-memory hook → SQLite backend writes to crm_memories", async () => {
+    // End-to-end wiring check: executeTool must fire-and-forget the
+    // auto-memory hook on success. Verifies the `void import().then(...)`
+    // call in executeTool actually reaches the rule + retain path.
+    const ctx = buildToolContext("ae1")!;
+    await executeTool(
+      "registrar_actividad",
+      {
+        cuenta_nombre: "Coca-Cola",
+        tipo: "comida",
+        resumen: "Cierre informal de presupuesto Q3",
+        sentimiento: "positivo",
+      },
+      ctx,
+    );
+
+    // Auto-memory is fire-and-forget — flush microtasks + dynamic import.
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+
+    const mem = testDb
+      .prepare(
+        "SELECT contenido, banco, persona_id FROM crm_memories WHERE persona_id = ? ORDER BY rowid DESC LIMIT 1",
+      )
+      .get("ae1") as any;
+    expect(mem).toBeDefined();
+    expect(mem.banco).toBe("crm-accounts");
+    expect(mem.contenido).toContain("comida con Coca-Cola");
+    expect(mem.contenido).toContain("positivo");
+  });
 });
 
 describe("crear_propuesta", () => {
