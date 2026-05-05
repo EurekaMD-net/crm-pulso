@@ -22,6 +22,7 @@ const INFERENCE_HOST_ALLOWLIST = new Set<string>([
   "dashscope-intl.aliyuncs.com",
   "coding-intl.dashscope.aliyuncs.com",
   "api.minimax.chat",
+  "api.fireworks.ai",
 ]);
 
 /** Private + link-local IPv4 ranges that an SSRF payload would target. */
