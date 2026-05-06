@@ -270,14 +270,24 @@ cmd_hindsight_start() {
   [ -z "$llm_key" ] && llm_key=$(grep '^INFERENCE_PRIMARY_KEY=' "${PROJECT_DIR}/.env" 2>/dev/null | cut -d'=' -f2- || true)
   llm_model=$(grep '^HINDSIGHT_LLM_MODEL=' "${PROJECT_DIR}/.env" 2>/dev/null | cut -d'=' -f2- || true)
   [ -z "$llm_model" ] && llm_model=$(grep '^INFERENCE_PRIMARY_MODEL=' "${PROJECT_DIR}/.env" 2>/dev/null | cut -d'=' -f2- || true)
+  # 2026-05-06: default to minimax-m2p7 (qwen3p6-plus deprecated → 443 timeouts/24h, $12 retry-storm)
+  [ -z "$llm_model" ] && llm_model="accounts/fireworks/models/minimax-m2p7"
   llm_base_url=$(grep '^HINDSIGHT_LLM_BASE_URL=' "${PROJECT_DIR}/.env" 2>/dev/null | cut -d'=' -f2- || true)
   [ -z "$llm_base_url" ] && llm_base_url=$(grep '^INFERENCE_PRIMARY_URL=' "${PROJECT_DIR}/.env" 2>/dev/null | cut -d'=' -f2- || true)
 
   # Reranker pool cap (Hindsight default = 300 → 30s CE-rerank time at p99).
   # Trace 2026-04-28 confirmed reranker = 99% of recall latency. Lower for speed.
   # 30 = ~3s, 15 = ~1.5s. Tune up as bank size grows past hundreds of memories.
-  local reranker_max
+  local reranker_max llm_timeout llm_max_retries llm_max_concurrent
   reranker_max=$(grep '^HINDSIGHT_RERANKER_MAX_CANDIDATES=' "${PROJECT_DIR}/.env" 2>/dev/null | cut -d'=' -f2- || true)
+
+  # 2026-05-06: cap retries + timeout. Defaults are unbounded → retry storms compound when provider is slow.
+  llm_timeout=$(grep '^HINDSIGHT_LLM_TIMEOUT=' "${PROJECT_DIR}/.env" 2>/dev/null | cut -d'=' -f2- || true)
+  [ -z "$llm_timeout" ] && llm_timeout=60
+  llm_max_retries=$(grep '^HINDSIGHT_LLM_MAX_RETRIES=' "${PROJECT_DIR}/.env" 2>/dev/null | cut -d'=' -f2- || true)
+  [ -z "$llm_max_retries" ] && llm_max_retries=3
+  llm_max_concurrent=$(grep '^HINDSIGHT_LLM_MAX_CONCURRENT=' "${PROJECT_DIR}/.env" 2>/dev/null | cut -d'=' -f2- || true)
+  [ -z "$llm_max_concurrent" ] && llm_max_concurrent=3
 
   mkdir -p "$HINDSIGHT_DATA_DIR"
 
@@ -296,6 +306,9 @@ cmd_hindsight_start() {
     -e "HINDSIGHT_API_LLM_MODEL=${llm_model}" \
     -e "HINDSIGHT_API_LLM_BASE_URL=${llm_base_url}" \
     -e "HINDSIGHT_API_MCP_ENABLED=true" \
+    -e "HINDSIGHT_API_LLM_TIMEOUT=${llm_timeout}" \
+    -e "HINDSIGHT_API_LLM_MAX_RETRIES=${llm_max_retries}" \
+    -e "HINDSIGHT_API_LLM_MAX_CONCURRENT=${llm_max_concurrent}" \
     ${reranker_max:+-e "HINDSIGHT_API_RERANKER_MAX_CANDIDATES=${reranker_max}"} \
     --health-cmd 'curl -sf http://localhost:8888/health || exit 1' \
     --health-interval 30s \
