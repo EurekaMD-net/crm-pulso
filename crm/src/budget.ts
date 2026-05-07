@@ -59,7 +59,7 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
 
 /** Strip known provider path prefixes so callers can pass either bare alias
  * or full path (e.g. "accounts/fireworks/models/minimax-m2p7"). */
-function normalizeModelName(model: string): string {
+function stripFireworksPrefix(model: string): string {
   return model.replace(/^accounts\/fireworks\/models\//, "");
 }
 
@@ -69,7 +69,7 @@ export function calculateCost(
   completionTokens: number,
 ): number {
   const pricing =
-    MODEL_PRICING[normalizeModelName(model)] ?? MODEL_PRICING._default;
+    MODEL_PRICING[stripFireworksPrefix(model)] ?? MODEL_PRICING._default;
   return (
     (promptTokens / 1_000_000) * pricing.input +
     (completionTokens / 1_000_000) * pricing.output
