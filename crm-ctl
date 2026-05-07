@@ -54,6 +54,7 @@ usage() {
   echo -e "  ${GREEN}hindsight-stop${NC}   Stop Hindsight memory server"
   echo -e "  ${GREEN}hindsight-status${NC} Show Hindsight status + health"
   echo -e "  ${GREEN}hindsight-logs${NC} [N] Show Hindsight logs"
+  echo -e "  ${GREEN}hindsight-reap${NC}  [IDS...] Release leases from dead workers (auto-detects from WORKER_STATS)"
   echo ""
 }
 
@@ -264,6 +265,17 @@ cmd_hindsight_start() {
   # Remove stopped container if exists
   docker rm "$HINDSIGHT_CONTAINER" 2>/dev/null || true
 
+  # 2026-05-07 (queue #9): clean up stale postmaster.pid that survives the
+  # bind-mounted volume across container recreates. Without this, the
+  # embedded Postgres refuses to boot with "Instance already running
+  # (pid: N)" even though pid N is dead. Safe because we only reach this
+  # branch after confirming the container is not running.
+  local postmaster_pid="${HINDSIGHT_DATA_DIR}/instances/hindsight/data/postmaster.pid"
+  if [[ -f "$postmaster_pid" ]]; then
+    echo "Removing stale postmaster.pid"
+    rm -f "$postmaster_pid"
+  fi
+
   # Read LLM config from .env
   local llm_key llm_model llm_base_url
   llm_key=$(grep '^HINDSIGHT_LLM_API_KEY=' "${PROJECT_DIR}/.env" 2>/dev/null | cut -d'=' -f2- || true)
@@ -339,6 +351,62 @@ cmd_hindsight_logs() {
   docker logs --tail "$n" "$HINDSIGHT_CONTAINER" 2>&1
 }
 
+# 2026-05-07 (queue #9): reap stale leases from dead workers. When a
+# Hindsight worker crashes or the container is recreated, its leased
+# tasks (status='processing', worker_id=<dead>) survive in async_operations
+# and block other workers. Symptom: WORKER_STATS shows `others: <id>:N`
+# while my_active=none and pending stays high.
+#
+# Detection: parse the most recent WORKER_STATS line, extract the active
+# worker_id and any `others:` references, decommission each.
+# Manual override: pass worker IDs as args to skip detection.
+cmd_hindsight_reap() {
+  if ! docker ps --format '{{.Names}}' | grep -q "^${HINDSIGHT_CONTAINER}$"; then
+    echo -e "${RED}Hindsight not running.${NC}"
+    return 1
+  fi
+
+  local stale_ids=()
+  if [[ $# -gt 0 ]]; then
+    stale_ids=("$@")
+  else
+    # Auto-detect from latest WORKER_STATS log line.
+    local stats
+    stats=$(docker logs --tail 200 "$HINDSIGHT_CONTAINER" 2>&1 \
+      | grep WORKER_STATS \
+      | tail -1)
+    if [[ -z "$stats" ]]; then
+      echo "No WORKER_STATS in recent logs — nothing to do."
+      return 0
+    fi
+    # Extract `others: ID:N | ID:N` segment (between "others:" and next "|" or EOL).
+    local others
+    others=$(echo "$stats" | sed -nE 's/.*others: ([^|]*).*/\1/p' | tr -d ' ')
+    if [[ -z "$others" || "$others" == "none" ]]; then
+      echo "No stale workers detected."
+      return 0
+    fi
+    # Format: id1:N1,id2:N2,... → extract IDs only.
+    while IFS=, read -ra parts; do
+      for p in "${parts[@]}"; do
+        local id="${p%%:*}"
+        [[ -n "$id" ]] && stale_ids+=("$id")
+      done
+    done <<< "$others"
+  fi
+
+  if [[ ${#stale_ids[@]} -eq 0 ]]; then
+    echo "No worker IDs to decommission."
+    return 0
+  fi
+
+  for id in "${stale_ids[@]}"; do
+    echo "Decommissioning $id..."
+    docker exec "$HINDSIGHT_CONTAINER" /app/api/.venv/bin/hindsight-admin \
+      decommission-worker --yes "$id" 2>&1
+  done
+}
+
 # --- Main ---
 if [ $# -eq 0 ]; then
   usage
@@ -365,5 +433,6 @@ case "$1" in
   hindsight-stop)    cmd_hindsight_stop ;;
   hindsight-status)  cmd_hindsight_status ;;
   hindsight-logs)    shift; cmd_hindsight_logs "$@" ;;
+  hindsight-reap)    shift; cmd_hindsight_reap "$@" ;;
   *)              echo -e "${RED}Unknown command: $1${NC}"; usage; exit 1 ;;
 esac
