@@ -45,15 +45,31 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   "glm-5": { input: 0.5, output: 1.5 },
   "kimi-k2.5": { input: 1.0, output: 3.0 },
   "MiniMax-M1": { input: 1.0, output: 3.0 },
+  // Fireworks-hosted aliases (post-2026-05-06 provider migration). p-notation
+  // is the Fireworks naming convention. Costs from 2026-05-06 live benchmark
+  // on this account; see feedback_fireworks_qwen3p6_retry_storm.md.
+  "minimax-m2p7": { input: 0.3, output: 1.2 },
+  "kimi-k2p5": { input: 0.6, output: 3.0 },
+  "kimi-k2p6": { input: 0.95, output: 4.0 },
+  "qwen3p6-plus": { input: 0.8, output: 2.0 },
+  "glm-5p1": { input: 1.4, output: 4.4 },
+  "deepseek-v4-pro": { input: 1.74, output: 3.48 },
   _default: { input: 1.0, output: 3.0 },
 };
+
+/** Strip known provider path prefixes so callers can pass either bare alias
+ * or full path (e.g. "accounts/fireworks/models/minimax-m2p7"). */
+function normalizeModelName(model: string): string {
+  return model.replace(/^accounts\/fireworks\/models\//, "");
+}
 
 export function calculateCost(
   model: string,
   promptTokens: number,
   completionTokens: number,
 ): number {
-  const pricing = MODEL_PRICING[model] ?? MODEL_PRICING._default;
+  const pricing =
+    MODEL_PRICING[normalizeModelName(model)] ?? MODEL_PRICING._default;
   return (
     (promptTokens / 1_000_000) * pricing.input +
     (completionTokens / 1_000_000) * pricing.output

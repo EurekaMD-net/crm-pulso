@@ -40,6 +40,34 @@ describe("budget", () => {
     it("returns 0 for zero tokens", () => {
       expect(calculateCost("qwen3.6-plus", 0, 0)).toBe(0);
     });
+
+    it("prices Fireworks p-notation aliases (bare)", () => {
+      // 1M in @ $0.30 + 1M out @ $1.20 = $1.50
+      expect(calculateCost("minimax-m2p7", 1_000_000, 1_000_000)).toBeCloseTo(
+        1.5,
+        4,
+      );
+      // 1M in @ $0.60 + 1M out @ $3.00 = $3.60
+      expect(calculateCost("kimi-k2p5", 1_000_000, 1_000_000)).toBeCloseTo(
+        3.6,
+        4,
+      );
+      // 1M in @ $0.80 + 1M out @ $2.00 = $2.80
+      expect(calculateCost("qwen3p6-plus", 1_000_000, 1_000_000)).toBeCloseTo(
+        2.8,
+        4,
+      );
+    });
+
+    it("strips Fireworks path prefix when looking up pricing", () => {
+      const bare = calculateCost("minimax-m2p7", 1_000_000, 1_000_000);
+      const full = calculateCost(
+        "accounts/fireworks/models/minimax-m2p7",
+        1_000_000,
+        1_000_000,
+      );
+      expect(full).toBeCloseTo(bare, 6);
+    });
   });
 
   describe("recordCost + getDailySpend", () => {
